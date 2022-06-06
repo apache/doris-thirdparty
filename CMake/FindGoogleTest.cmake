@@ -6,7 +6,8 @@ find_path(GTest_INCLUDE_DIR gtest/gtest.h
           "/opt/dependency/package/include"
           "${PROJECT_SOURCE_DIR}/../thirdparty/googletest/googletest/include"
           "/usr/local/include"
-          "/usr/include")
+          "/usr/include"
+          "$ENV{TP_INCLUDE_DIR}")
 
 find_path(GMock_INCLUDE_DIR gmock/gmock.h
           NO_DEFAULT_PATH
@@ -14,7 +15,8 @@ find_path(GMock_INCLUDE_DIR gmock/gmock.h
           "/opt/dependency/package/include"
           "${PROJECT_SOURCE_DIR}/../thirdparty/googletest/googlemock/include"
           "/usr/local/include"
-          "/usr/include")
+          "/usr/include"
+          "$ENV{TP_INCLUDE_DIR}")
 
 find_library(Gtest_LIBRARY
              NAMES libgtest.a
@@ -22,7 +24,8 @@ find_library(Gtest_LIBRARY
              "/opt/dependency/package/lib"
              "${PROJECT_SOURCE_DIR}/../thirdparty/googletest/build/googlemock/gtest"
              "/usr/local/lib"
-             "/usr/lib")
+             "/usr/lib"
+             "$ENV{TP_LIB_DIR}")
 
 find_library(Gmock_LIBRARY
              NAMES libgmock.a
@@ -30,7 +33,8 @@ find_library(Gmock_LIBRARY
              "/opt/dependency/package/lib"
              "${PROJECT_SOURCE_DIR}/../thirdparty/googletest/build/googlemock"
              "/usr/local/lib"
-             "/usr/lib")
+             "/usr/lib"
+             "$ENV{TP_LIB_DIR}")
 
 message(STATUS "Find GoogleTest include path: ${GTest_INCLUDE_DIR}")
 message(STATUS "Find GoogleMock include path: ${GMock_INCLUDE_DIR}")
