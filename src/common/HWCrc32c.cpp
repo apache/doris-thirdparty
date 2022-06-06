@@ -23,47 +23,7 @@
 #include <cstdlib>
 
 #include "HWCrc32c.h"
-
-#if ((defined(__X86__) || defined(__i386__) || defined(i386) || defined(_M_IX86) || defined(__386__) || defined(__x86_64__) || defined(_M_X64)))
-#include <cpuid.h>
-#endif
-
-#if ((defined(__X86__) || defined(__i386__) || defined(i386) || defined(_M_IX86) || defined(__386__) || defined(__x86_64__) || defined(_M_X64)))
-#if !defined(__SSE4_2__)
-
-namespace Hdfs {
-namespace Internal {
-
-#if defined(__LP64__)
-static inline uint64_t _mm_crc32_u64(uint64_t crc, uint64_t value) {
-    asm("crc32q %[value], %[crc]\n" : [crc] "+r"(crc) : [value] "rm"(value));
-    return crc;
-}
-#endif
-
-static inline uint32_t _mm_crc32_u16(uint32_t crc, uint16_t value) {
-    asm("crc32w %[value], %[crc]\n" : [crc] "+r"(crc) : [value] "rm"(value));
-    return crc;
-}
-
-static inline uint32_t _mm_crc32_u32(uint32_t crc, uint64_t value) {
-    asm("crc32l %[value], %[crc]\n" : [crc] "+r"(crc) : [value] "rm"(value));
-    return crc;
-}
-
-static inline uint32_t _mm_crc32_u8(uint32_t crc, uint8_t value) {
-    asm("crc32b %[value], %[crc]\n" : [crc] "+r"(crc) : [value] "rm"(value));
-    return crc;
-}
-
-}
-}
-
-#else
-
-#include <nmmintrin.h>
-
-#endif
+#include "sse2neon.h"
 
 namespace Hdfs {
 namespace Internal {
@@ -77,6 +37,8 @@ bool HWCrc32c::available() {
      */
     __get_cpuid(1, &eax, &ebx, &ecx, &edx);
     return (ecx & (1 << 20)) != 0;
+#elseif ((defined(__arm__) || defined(__aarch64__))) {
+    return true;
 #else
     return false;
 #endif
@@ -155,5 +117,3 @@ void HWCrc32c::updateInt64(const char * b, int len) {
 
 }
 }
-
-#endif /* _HDFS_LIBHDFS3_COMMON_HWCHECKSUM_H_ */
