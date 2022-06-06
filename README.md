@@ -11,7 +11,7 @@ HDFS is implemented in JAVA language and additionally provides a JNI based C lan
 
 **Libhdfs3**, designed as an alternative implementation of libhdfs, is implemented based on native Hadoop RPC protocol and HDFS data transfer protocol. It gets rid of the drawbacks of JNI, and it has a lightweight, small memory footprint code base. In addition, it is easy to use and deploy.
 
-Libhdfs3 is developed by [Pivotal](http://www.pivotal.io/) and used in HAWQ, which is a massive parallel database engine in [Pivotal Hadoop Distribution](http://www.pivotal.io/big-data/pivotal-hd).
+Libhdfs3 is developed by [Pivotal](http://www.pivotal.io/) and used in HAWQ, which is a massive parallel database engine in [Pivotal Hadoop Distribution](http://www.pivotal.io/big-data/pivotal-hd). The origin source is [HAWQ depends](https://github.com/apache/hawq/tree/master/depends/libhdfs3)
 
 ========================
 ## Installation
