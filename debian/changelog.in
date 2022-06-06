@@ -1,0 +1,3 @@
+libhdfs3 (@libhdfs3_VERSION_STRING@-1) unstable; urgency=low
+
+  * Initial release
