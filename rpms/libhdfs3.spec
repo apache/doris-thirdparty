@@ -31,7 +31,6 @@ BuildRoot:  %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 BuildRequires: gcc-c++
 BuildRequires: make
 BuildRequires: cmake
-BuildRequires: libuuid-devel
 BuildRequires: libxml2-devel
 BuildRequires: krb5-devel
 BuildRequires: libgsasl-devel
@@ -50,7 +49,7 @@ Summary: Native C/C++ HDFS Client - development files
 Requires: %{name} = %{version}-%{release}
 Group: Development/Libraries
 Requires: libhdfs3 = %{version}-%{release}
-Requires: libuuid-devel libxml2-devel krb5-devel libgsasl-devel protobuf-devel pkgconfig
+Requires: libxml2-devel krb5-devel libgsasl-devel protobuf-devel pkgconfig
 
 %description devel
 Libhdfs3, designed as an alternative implementation of libhdfs,
