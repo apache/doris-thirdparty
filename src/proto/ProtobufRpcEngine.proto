@@ -28,6 +28,9 @@
  * The messages are sent in addition to the normal RPC header as 
  * defined in RpcHeader.proto
  */
+
+syntax = "proto2";
+
 option java_package = "org.apache.hadoop.ipc.protobuf";
 option java_outer_classname = "ProtobufRpcEngineProtos";
 option java_generate_equals_and_hash = true;

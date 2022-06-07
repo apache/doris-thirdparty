@@ -25,7 +25,6 @@ To build libhdfs3, the following libraries are needed.
     google protobuf                 http://code.google.com/p/protobuf/
     libxml2                         http://www.xmlsoft.org/
     kerberos                        http://web.mit.edu/kerberos/
-    libuuid                         http://sourceforge.net/projects/libuuid/
     libgsasl                        http://www.gnu.org/software/gsasl/
 
 To run tests, the following libraries are needed.

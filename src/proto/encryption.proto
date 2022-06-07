@@ -26,6 +26,8 @@
  *  by the client, server, and data transfer protocols.
  */
 
+syntax = "proto2";
+
 option java_package = "org.apache.hadoop.hdfs.protocol.proto";
 option java_outer_classname = "EncryptionZonesProtos";
 option java_generate_equals_and_hash = true;

@@ -63,7 +63,6 @@ Dependencies:
     kerberos        http://web.mit.edu/kerberos/
     libgsasl        http://www.gnu.org/software/gsasl/
     libxml2         http://xmlsoft.org/
-    libuuid         http://sourceforge.net/projects/libuuid/
     boost 1.53+     http://www.boost.org/
                     [boost is not required if c++ compiler is g++ 4.6.0+ or clang++ with stdc++]
 

@@ -26,7 +26,7 @@
 #include "RpcClient.h"
 #include "Thread.h"
 
-#include <uuid/uuid.h>
+#include <boost/uuid/uuid_generators.hpp>
 
 namespace Hdfs {
 namespace Internal {
@@ -46,10 +46,9 @@ RpcClient & RpcClient::getClient() {
 
 RpcClientImpl::RpcClientImpl() :
     cleaning(false), running(true), count(0) {
-    uuid_t id;
-    uuid_generate(id);
-    clientId.resize(sizeof(uuid_t));
-    memcpy(&clientId[0], id, sizeof(uuid_t));
+    auto id = boost::uuids::random_generator()();
+    clientId.resize(boost::uuids::uuid::static_size());
+    memcpy(clientId.data(), id.begin(), boost::uuids::uuid::static_size());
 #ifdef MOCK
     stub = NULL;
 #endif
