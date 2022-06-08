@@ -204,6 +204,14 @@ void hdfsBuilderSetNameNodePort(struct hdfsBuilder * bld, tPort port);
 void hdfsBuilderSetUserName(struct hdfsBuilder * bld, const char * userName);
 
 /**
+ * Set the Kerberos principal to use when connecting to the HDFS cluster.
+ *
+ * @param bld The HDFS builder
+ * @param principal The Kerberos principal.  The string will be shallow-copied.
+ */
+void hdfsBuilderSetPrincipal(struct hdfsBuilder * bld, const char * principal);
+
+/**
  * Set the path to the Kerberos ticket cache to use when connecting to
  * the HDFS cluster.
  *

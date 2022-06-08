@@ -229,6 +229,7 @@ public:
     shared_ptr<Config> conf;
     std::string nn;
     std::string userName;
+    std::string principal;
     tPort port;
 };
 
@@ -479,6 +480,8 @@ hdfsFS hdfsBuilderConnect(struct hdfsBuilder * bld) {
 
         if (!bld->token.empty()) {
             fs->connect(uri.c_str(), NULL, bld->token.c_str());
+        } else if (!bld->principal.empty()) {
+            fs->connect(uri.c_str(), bld->principal.c_str(), NULL);
         } else {
             fs->connect(uri.c_str());
         }
@@ -532,6 +535,11 @@ void hdfsBuilderSetNameNodePort(struct hdfsBuilder * bld, tPort port) {
 void hdfsBuilderSetUserName(struct hdfsBuilder * bld, const char * userName) {
     assert(bld && userName && strlen(userName) > 0);
     bld->userName = userName;
+}
+
+void hdfsBuilderSetPrincipal(struct hdfsBuilder * bld, const char * principal) {
+    assert(bld && principal && strlen(principal) > 0);
+    bld->principal = principal;
 }
 
 void hdfsBuilderSetKerbTicketCachePath(struct hdfsBuilder * bld,
