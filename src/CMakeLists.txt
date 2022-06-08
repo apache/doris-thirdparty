@@ -45,38 +45,6 @@ SET(HEADER
     common/Exception.h
     common/XmlConfig.h)
 
-ADD_LIBRARY(libhdfs3-static STATIC ${libhdfs3_SOURCES} ${libhdfs3_PROTO_SOURCES} ${libhdfs3_PROTO_HEADERS})
-ADD_LIBRARY(libhdfs3-shared SHARED ${libhdfs3_SOURCES} ${libhdfs3_PROTO_SOURCES} ${libhdfs3_PROTO_HEADERS})
-
-ADD_CUSTOM_COMMAND(
-    TARGET libhdfs3-shared libhdfs3-static
-    PRE_BUILD
-    COMMAND echo ${libhdfs3_VERSION_STRING} > version
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-)
-
-TARGET_LINK_LIBRARIES(libhdfs3-static pthread)
-TARGET_LINK_LIBRARIES(libhdfs3-shared pthread)
-       
-IF(NEED_BOOST)
-    INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
-    TARGET_LINK_LIBRARIES(libhdfs3-static boost_thread)
-    TARGET_LINK_LIBRARIES(libhdfs3-static boost_chrono)
-    TARGET_LINK_LIBRARIES(libhdfs3-static boost_system)
-    TARGET_LINK_LIBRARIES(libhdfs3-static boost_atomic)
-    TARGET_LINK_LIBRARIES(libhdfs3-static boost_iostreams)
-    TARGET_LINK_LIBRARIES(libhdfs3-shared boost_thread)
-    TARGET_LINK_LIBRARIES(libhdfs3-shared boost_chrono)
-    TARGET_LINK_LIBRARIES(libhdfs3-shared boost_system)
-    TARGET_LINK_LIBRARIES(libhdfs3-shared boost_atomic)
-    TARGET_LINK_LIBRARIES(libhdfs3-shared boost_iostreams)
-ENDIF(NEED_BOOST)
-
-IF(NEED_GCCEH)
-    TARGET_LINK_LIBRARIES(libhdfs3-static gcc_eh)
-    TARGET_LINK_LIBRARIES(libhdfs3-shared gcc_eh)
-ENDIF(NEED_GCCEH)
-
 INCLUDE_DIRECTORIES(${libhdfs3_ROOT_SOURCES_DIR})
 INCLUDE_DIRECTORIES(${libhdfs3_COMMON_SOURCES_DIR})
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
@@ -86,31 +54,93 @@ INCLUDE_DIRECTORIES(${KERBEROS_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${GSASL_INCLUDE_DIR})
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/mock)
 
-TARGET_LINK_LIBRARIES(libhdfs3-static ${PROTOBUF_LIBRARIES})
-TARGET_LINK_LIBRARIES(libhdfs3-static ${LIBXML2_LIBRARIES})
-TARGET_LINK_LIBRARIES(libhdfs3-static ${KERBEROS_LIBRARIES})
-TARGET_LINK_LIBRARIES(libhdfs3-static ${GSASL_LIBRARIES})
+IF(BUILD_STATIC_LIBS)
+    ADD_LIBRARY(libhdfs3-static STATIC ${libhdfs3_SOURCES} ${libhdfs3_PROTO_SOURCES} ${libhdfs3_PROTO_HEADERS})
+    ADD_CUSTOM_COMMAND(
+        TARGET libhdfs3-static
+        PRE_BUILD
+        COMMAND echo ${libhdfs3_VERSION_STRING} > version
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
 
-TARGET_LINK_LIBRARIES(libhdfs3-shared ${PROTOBUF_LIBRARIES})
-TARGET_LINK_LIBRARIES(libhdfs3-shared ${LIBXML2_LIBRARIES})
-TARGET_LINK_LIBRARIES(libhdfs3-shared ${KERBEROS_LIBRARIES})
-TARGET_LINK_LIBRARIES(libhdfs3-shared ${GSASL_LIBRARIES})
+    TARGET_LINK_LIBRARIES(libhdfs3-static pthread)
+        
+    IF(NEED_BOOST)
+        INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
+        TARGET_LINK_LIBRARIES(libhdfs3-static boost_thread)
+        TARGET_LINK_LIBRARIES(libhdfs3-static boost_chrono)
+        TARGET_LINK_LIBRARIES(libhdfs3-static boost_system)
+        TARGET_LINK_LIBRARIES(libhdfs3-static boost_atomic)
+        TARGET_LINK_LIBRARIES(libhdfs3-static boost_iostreams)
+    ENDIF(NEED_BOOST)
 
-SET_TARGET_PROPERTIES(libhdfs3-static PROPERTIES OUTPUT_NAME "hdfs3")
-SET_TARGET_PROPERTIES(libhdfs3-shared PROPERTIES OUTPUT_NAME "hdfs3")
+    IF(NEED_GCCEH)
+        TARGET_LINK_LIBRARIES(libhdfs3-static gcc_eh)
+    ENDIF(NEED_GCCEH)
 
-IF(NEED_BOOST)
-    SET_TARGET_PROPERTIES(libhdfs3-shared libhdfs3-static PROPERTIES LINK_FLAGS "-L${Boost_LIBRARY_DIRS}")
-ENDIF(NEED_BOOST)
+    TARGET_LINK_LIBRARIES(libhdfs3-static ${PROTOBUF_LIBRARIES})
+    TARGET_LINK_LIBRARIES(libhdfs3-static ${LIBXML2_LIBRARIES})
+    TARGET_LINK_LIBRARIES(libhdfs3-static ${KERBEROS_LIBRARIES})
+    TARGET_LINK_LIBRARIES(libhdfs3-static ${GSASL_LIBRARIES})
 
-SET_TARGET_PROPERTIES(libhdfs3-shared PROPERTIES 
-    VERSION ${libhdfs3_VERSION_MAJOR}.${libhdfs3_VERSION_MINOR}.${libhdfs3_VERSION_PATCH} 
-    SOVERSION ${libhdfs3_VERSION_API})
+    SET_TARGET_PROPERTIES(libhdfs3-static PROPERTIES OUTPUT_NAME "hdfs3")
 
-INSTALL(TARGETS libhdfs3-static libhdfs3-shared
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib)
+    IF(NEED_BOOST)
+        SET_TARGET_PROPERTIES(libhdfs3-static PROPERTIES LINK_FLAGS "-L${Boost_LIBRARY_DIRS}")
+    ENDIF(NEED_BOOST)
+
+    INSTALL(TARGETS libhdfs3-static
+            RUNTIME DESTINATION bin
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib)
+ENDIF(BUILD_STATIC_LIBS)
+
+IF(BUILD_SHARED_LIBS) 
+    ADD_LIBRARY(libhdfs3-shared SHARED ${libhdfs3_SOURCES} ${libhdfs3_PROTO_SOURCES} ${libhdfs3_PROTO_HEADERS})
+    ADD_CUSTOM_COMMAND(
+        TARGET libhdfs3-shared
+        PRE_BUILD
+        COMMAND echo ${libhdfs3_VERSION_STRING} > version
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+
+    TARGET_LINK_LIBRARIES(libhdfs3-shared pthread)
+        
+    IF(NEED_BOOST)
+        INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
+        TARGET_LINK_LIBRARIES(libhdfs3-shared boost_thread)
+        TARGET_LINK_LIBRARIES(libhdfs3-shared boost_chrono)
+        TARGET_LINK_LIBRARIES(libhdfs3-shared boost_system)
+        TARGET_LINK_LIBRARIES(libhdfs3-shared boost_atomic)
+        TARGET_LINK_LIBRARIES(libhdfs3-shared boost_iostreams)
+    ENDIF(NEED_BOOST)
+
+    IF(NEED_GCCEH)
+        TARGET_LINK_LIBRARIES(libhdfs3-shared gcc_eh)
+    ENDIF(NEED_GCCEH)
+
+    TARGET_LINK_LIBRARIES(libhdfs3-shared ${PROTOBUF_LIBRARIES})
+    TARGET_LINK_LIBRARIES(libhdfs3-shared ${LIBXML2_LIBRARIES})
+    TARGET_LINK_LIBRARIES(libhdfs3-shared ${KERBEROS_LIBRARIES})
+    TARGET_LINK_LIBRARIES(libhdfs3-shared ${GSASL_LIBRARIES})
+
+    SET_TARGET_PROPERTIES(libhdfs3-shared PROPERTIES OUTPUT_NAME "hdfs3")
+
+    IF(NEED_BOOST)
+        SET_TARGET_PROPERTIES(libhdfs3-shared PROPERTIES LINK_FLAGS "-L${Boost_LIBRARY_DIRS}")
+    ENDIF(NEED_BOOST)
+
+    SET_TARGET_PROPERTIES(libhdfs3-shared PROPERTIES 
+        VERSION ${libhdfs3_VERSION_MAJOR}.${libhdfs3_VERSION_MINOR}.${libhdfs3_VERSION_PATCH} 
+        SOVERSION ${libhdfs3_VERSION_API})
+
+    INSTALL(TARGETS libhdfs3-shared
+            RUNTIME DESTINATION bin
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib)
+ENDIF(BUILD_SHARED_LIBS)
+
+
 INSTALL(FILES ${HEADER} DESTINATION include/hdfs)
 INSTALL(FILES libhdfs3.pc DESTINATION lib/pkgconfig)
             

@@ -5,6 +5,8 @@ OPTION(ENABLE_FRAME_POINTER "enable frame pointer on 64bit system with flag -fno
 OPTION(ENABLE_LIBCPP "using libc++ instead of libstdc++, only valid for clang compiler" OFF)
 OPTION(ENABLE_BOOST "using boost instead of native compiler c++0x support" OFF)
 OPTION(BUILD_TEST "build test files" OFF)
+OPTION(BUILD_SHARED_LIBS "build the shared lib" ON)
+OPTION(BUILD_STATIC_LIBS "build the static lib" ON)
 
 INCLUDE (CheckFunctionExists)
 CHECK_FUNCTION_EXISTS(dladdr HAVE_DLADDR)

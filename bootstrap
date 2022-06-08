@@ -54,7 +54,11 @@ Configuration:
     --enable-coverage               enable build with code coverage support
     --enable-libc++                 using libc++ instead of libstdc++, only valid for clang compiler
     --with-test                     enable build with test
-    
+    --disable-shared                disable shared library
+    --disable-static                disable static library
+    --enable-shared                 enable shared library
+    --enable-static                 enable static library
+
 Dependencies:
     c/c++ compiler
     GNU make
@@ -85,6 +89,8 @@ enable_coverage="OFF"
 enable_clang_lib="OFF"
 enable_sse="ON"
 build_test="OFF"
+build_shared="ON"
+build_static="ON"
 while test $# != 0; do
     case "$1" in
     --prefix=*) dir=`arg "$1"`
@@ -96,6 +102,10 @@ while test $# != 0; do
     --enable-coverage) enable_coverage="ON";;
     --enable-libc++) enable_clang_lib="ON";;
     --with-test) build_test="ON";;
+    --disable-shared) build_shared="OFF";;
+    --disable-static) build_static="OFF";;
+    --enable-shared) build_shared="ON";;
+    --enable-static) build_static="ON";;
     --help) usage ;;
     *) die "Unknown option: $1" ;;
     esac
@@ -140,6 +150,7 @@ ${cmake} -DENABLE_DEBUG=${enable_build} -DCMAKE_INSTALL_PREFIX=${prefix_dirs} \
     -DCMAKE_PREFIX_PATH=${dependency_dir} -DENABLE_BOOST=${enable_boost} \
     -DENABLE_COVERAGE=${enable_coverage} -DENABLE_LIBCPP=${enable_clang_lib} \
     -DENABLE_SSE=${enable_sse} ${source_dir} -DBUILD_TEST=${build_test} \
+    -DBUILD_SHARED_LIBS=${build_shared} -DBUILD_STATIC_LIBS=${build_static} \
     || die "failed to configure the project"
 
 echo 'bootstrap success. Run "make" to build.'
