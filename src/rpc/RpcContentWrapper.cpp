@@ -21,6 +21,8 @@
  */
 #include <google/protobuf/io/coded_stream.h>
 
+#include "Exception.h"
+#include "ExceptionInternal.h"
 #include "RpcContentWrapper.h"
 
 using namespace ::google::protobuf;
@@ -35,22 +37,55 @@ RpcContentWrapper::RpcContentWrapper(Message * header, Message * msg) :
 
 int RpcContentWrapper::getLength() {
     int headerLen, msgLen = 0;
-    headerLen = header->ByteSize();
+    #if GOOGLE_PROTOBUF_VERSION >= 3010000
+    size_t size_raw = header->ByteSizeLong();
+    if (size_raw > INT_MAX) {
+        THROW(HdfsIOException, "RpcContentWrapper::getLength: "
+              "header size is too large: %zu", size_raw);
+    }
+    headerLen = static_cast<int>(size_raw);
+    size_raw = msg == NULL ? 0 : msg->ByteSizeLong();;
+    if (size_raw > INT_MAX) {
+        THROW(HdfsIOException, "RpcContentWrapper::getLength: "
+              "msg size is too large: %zu", size_raw);
+    }
+    msgLen = static_cast<int>(size_raw);
+    #else
+    headerLen = header->ByteSize());
     msgLen = msg == NULL ? 0 : msg->ByteSize();
+    #endif
     return headerLen + CodedOutputStream::VarintSize32(headerLen)
            + (msg == NULL ?
               0 : msgLen + CodedOutputStream::VarintSize32(msgLen));
 }
 
 void RpcContentWrapper::writeTo(WriteBuffer & buffer) {
-    int size = header->ByteSize();
-    buffer.writeVarint32(size);
-    header->SerializeToArray(buffer.alloc(size), size);
+    #if GOOGLE_PROTOBUF_VERSION >= 3010000
+    size_t size_raw = header->ByteSizeLong();
+    if (size_raw > INT_MAX) {
+        THROW(HdfsIOException, "RpcContentWrapper::writeTo: "
+              "header size is too large: %zu", size_raw);
+    }
+    int headerLen = static_cast<int>(size_raw);
+    #else
+    int headerLen = header->ByteSize());
+    #endif
+    buffer.writeVarint32(headerLen);
+    header->SerializeToArray(buffer.alloc(headerLen), headerLen);
 
     if (msg != NULL) {
-        size = msg->ByteSize();
-        buffer.writeVarint32(size);
-        msg->SerializeToArray(buffer.alloc(size), size);
+        #if GOOGLE_PROTOBUF_VERSION >= 3010000
+        size_t size_raw = msg->ByteSizeLong();
+        if (size_raw > INT_MAX) {
+            THROW(HdfsIOException, "RpcContentWrapper::writeTo: "
+                "msg size is too large: %zu", size_raw);
+        }
+        int msgLen = static_cast<int>(size_raw);
+        #else
+        int msgLen = msg->ByteSize());
+        #endif
+        buffer.writeVarint32(msgLen);
+        msg->SerializeToArray(buffer.alloc(msgLen), msgLen);
     }
 }
 

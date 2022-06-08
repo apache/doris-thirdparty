@@ -863,6 +863,7 @@ bool NamenodeImpl::listEncryptionZones(const int64_t id, std::vector<EncryptionZ
                   UnresolvedLinkException, HdfsIOException > unwrapper(e);
         unwrapper.unwrap(__FILE__, __LINE__);
     }
+    THROW(HdfsException, "unreachable code!");
 }
 
 }

@@ -38,7 +38,15 @@ static inline void Send(Socket & sock, DataTransferOp op, Message * msg,
     WriteBuffer buffer;
     buffer.writeBigEndian(static_cast<int16_t>(DATA_TRANSFER_VERSION));
     buffer.write(static_cast<char>(op));
+    #if GOOGLE_PROTOBUF_VERSION >= 3010000
+    size_t size_raw = msg->ByteSizeLong();
+    if (size_raw > INT_MAX) {
+        THROW(HdfsIOException, "Hdfs::Internal::Send: msg message is too large: %zu", size_raw);
+    }
+    int msgSize = static_cast<int>(size_raw);
+    #else
     int msgSize = msg->ByteSize();
+    #endif
     buffer.writeVarint32(msgSize);
     char * b = buffer.alloc(msgSize);
 

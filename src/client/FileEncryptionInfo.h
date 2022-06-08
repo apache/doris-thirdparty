@@ -29,7 +29,7 @@ namespace Hdfs {
 class FileEncryptionInfo {
 public:
     FileEncryptionInfo() : 
-		cryptoProtocolVersion(0), suite(0){
+		suite(0), cryptoProtocolVersion(0){
     }
 
     int getSuite() const {

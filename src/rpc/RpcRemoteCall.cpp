@@ -19,6 +19,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#include "Exception.h"
 #include "Memory.h"
 #include "ProtobufRpcEngine.pb.h"
 #include "RpcCall.h"
@@ -49,7 +51,15 @@ void RpcRemoteCall::serialize(const RpcProtocolInfo & protocol,
     requestHeader.set_declaringclassprotocolname(protocol.getProtocol());
     requestHeader.set_clientprotocolversion(protocol.getVersion());
     RpcContentWrapper wrapper(&requestHeader, call.getRequest());
-    int rpcHeaderLen = rpcHeader.ByteSize();
+    #if GOOGLE_PROTOBUF_VERSION >= 3010000
+    size_t size_raw = rpcHeader.ByteSizeLong();
+    if (size_raw > INT_MAX) {
+        THROW(HdfsIOException, "RpcRemoteCall::serialize: rpcHeader message is too large: %zu", size_raw);
+    }
+    int rpcHeaderLen = static_cast<int>(size_raw);
+    #else
+    int rpcHeaderLen = rpcHeader.ByteSize());
+    #endif
     int size = CodedOutputStream::VarintSize32(rpcHeaderLen) + rpcHeaderLen + wrapper.getLength();
     buffer.writeBigEndian(size);
     buffer.writeVarint32(rpcHeaderLen);
@@ -66,11 +76,19 @@ std::vector<char> RpcRemoteCall::GetPingRequest(const std::string & clientid) {
     pingHeader.set_retrycount(INVALID_RETRY_COUNT);
     pingHeader.set_rpckind(RpcKindProto::RPC_PROTOCOL_BUFFER);
     pingHeader.set_rpcop(RpcRequestHeaderProto_OperationProto_RPC_FINAL_PACKET);
-    int rpcHeaderLen = pingHeader.ByteSize();
-    int size = CodedOutputStream::VarintSize32(rpcHeaderLen) + rpcHeaderLen;
+    #if GOOGLE_PROTOBUF_VERSION >= 3010000
+    size_t size_raw = pingHeader.ByteSizeLong();
+    if (size_raw > INT_MAX) {
+        THROW(HdfsIOException, "RpcRemoteCall::GetPingRequest: pingHeader message is too large: %zu", size_raw);
+    }
+    int pingHeaderLen = static_cast<int>(size_raw);
+    #else
+    int pingHeaderLen = pingHeader.ByteSize());
+    #endif
+    int size = CodedOutputStream::VarintSize32(pingHeaderLen) + pingHeaderLen;
     buffer.writeBigEndian(size);
-    buffer.writeVarint32(rpcHeaderLen);
-    pingHeader.SerializeWithCachedSizesToArray(reinterpret_cast<unsigned char *>(buffer.alloc(pingHeader.ByteSize())));
+    buffer.writeVarint32(pingHeaderLen);
+    pingHeader.SerializeWithCachedSizesToArray(reinterpret_cast<unsigned char *>(buffer.alloc(pingHeaderLen)));
     retval.resize(buffer.getDataSize(0));
     memcpy(&retval[0], buffer.getBuffer(0), retval.size());
     return retval;

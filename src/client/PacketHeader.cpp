@@ -35,7 +35,16 @@ int PacketHeader::CalcPkgHeaderSize() {
     header.set_datalen(0);
     header.set_lastpacketinblock(false);
     header.set_seqno(0);
-    return header.ByteSize() + sizeof(int32_t) /*packet length*/ + sizeof(int16_t)/* proto length */;
+    #if GOOGLE_PROTOBUF_VERSION >= 3010000
+    size_t size_raw = header.ByteSizeLong();
+    if (size_raw > INT_MAX) {
+        THROW(HdfsIOException, "PacketHeader::CalcPkgHeaderSize: header message is too large: %zu", size_raw);
+    }
+    int headerLen = static_cast<int>(size_raw);
+    #else
+    int headerLen = header.ByteSize());
+    #endif
+    return headerLen + sizeof(int32_t) /*packet length*/ + sizeof(int16_t)/* proto length */;
 }
 
 int PacketHeader::GetPkgHeaderSize() {
@@ -112,7 +121,16 @@ void PacketHeader::readFields(const char * buf, size_t size) {
 
 void PacketHeader::writeInBuffer(char * buf, size_t size) {
     buf = WriteBigEndian32ToArray(packetLen, buf);
-    buf = WriteBigEndian16ToArray(proto.ByteSize(), buf);
+    #if GOOGLE_PROTOBUF_VERSION >= 3010000
+    size_t size_raw = proto.ByteSizeLong();
+    if (size_raw > INT_MAX) {
+        THROW(HdfsIOException, "PacketHeader::writeInBuffer: proto message is too large: %zu", size_raw);
+    }
+    int protoLen = static_cast<int>(size_raw);
+    #else
+    int protoLen = proto.ByteSize();
+    #endif
+    buf = WriteBigEndian16ToArray(protoLen, buf);
     proto.SerializeToArray(buf, size - sizeof(int32_t) - sizeof(int16_t));
 }
 

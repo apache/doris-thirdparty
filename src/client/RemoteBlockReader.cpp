@@ -273,7 +273,15 @@ void RemoteBlockReader::sendStatus() {
     }
 
     WriteBuffer buffer;
-    int size = status.ByteSize();
+    #if GOOGLE_PROTOBUF_VERSION >= 3010000
+    size_t size_raw = status.ByteSizeLong();
+    if (size_raw > INT_MAX) {
+        THROW(HdfsIOException, "RemoteBlockReader: status message is too large: %zu", size_raw);
+    }
+    int size = static_cast<int>(size_raw);
+    #else
+    int size = status.ByteSize());
+    #endif
     buffer.writeVarint32(size);
     status.SerializeToArray(buffer.alloc(size), size);
     sock->writeFully(buffer.getBuffer(0), buffer.getDataSize(0), writeTimeout);
