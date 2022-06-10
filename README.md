@@ -13,6 +13,8 @@ HDFS is implemented in JAVA language and additionally provides a JNI based C lan
 
 Libhdfs3 is developed by [Pivotal](http://www.pivotal.io/) and used in HAWQ, which is a massive parallel database engine in [Pivotal Hadoop Distribution](http://www.pivotal.io/big-data/pivotal-hd). The origin source is [HAWQ depends](https://github.com/apache/hawq/tree/master/depends/libhdfs3)
 
+Use [sse2neon](https://github.com/DLTcollab/sse2neon) to convert Intel SSE intrinsics to Arm/Aarch64 NEON intrinsics.
+
 ========================
 ## Installation
 
