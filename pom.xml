@@ -67,13 +67,6 @@
             <version>3.22.2</version>
         </dependency>
         <dependency>
-            <groupId>sun.jdk</groupId>
-            <artifactId>jconsole</artifactId>
-            <version>jdk</version>
-            <scope>system</scope>
-            <systemPath>${java.home}/../lib/jconsole.jar</systemPath>
-        </dependency>
-        <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <version>4.12</version>
