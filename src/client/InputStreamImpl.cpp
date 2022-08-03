@@ -734,7 +734,7 @@ void InputStreamImpl::seekInternal(int64_t pos) {
     }
 
     try {
-        if (blockReader && pos > cursor && pos < endOfCurBlock) {
+        if (blockReader && pos > cursor && pos < endOfCurBlock && (pos - cursor) <= blockReader->available()) {
             blockReader->skip(pos - cursor);
             cursor = pos;
             return;
