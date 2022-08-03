@@ -3956,4 +3956,8 @@ public class EnvironmentImpl implements EnvConfigObserver {
                 this, restoreRequired.toString());
         }
     }
+
+    // only used for RepImpl
+    public void setReplicaLatestVLSNSeq(long seq) {
+    }
 }

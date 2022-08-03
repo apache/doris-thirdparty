@@ -568,6 +568,9 @@ public class LogManager {
                 vlsn = envImpl.assignVLSNs(params.entry);
             } else {
                 vlsn = params.repContext.getClientVLSN();
+                if (params.repContext.inReplicationStream()) {
+                    envImpl.setReplicaLatestVLSNSeq(vlsn.getSequence());
+                }
             }
         } else {
             vlsn = null;

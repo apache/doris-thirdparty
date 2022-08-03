@@ -2373,6 +2373,11 @@ public class RepImpl
         return false;
     }
 
+    @Override
+    public void setReplicaLatestVLSNSeq(long seq) {
+        vlsnIndex.setReplicaLatestVLSNSeq(seq);
+    }
+
     public void setAuthenticator(StreamAuthenticator authenticator) {
         this.authenticator = authenticator;
     }
