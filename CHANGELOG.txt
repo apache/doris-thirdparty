@@ -3,7 +3,7 @@
 ## v2.3.3
 
 1. Support CRC32 checksum
-2. Support old linux kernal
+2. Support old linux kernel
 
 ## v2.3.2
 
