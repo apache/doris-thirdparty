@@ -20,6 +20,7 @@
  * limitations under the License.
  */
 #include "BigEndian.h"
+#include "Crc32.h"
 #include "DataTransferProtocolSender.h"
 #include "Exception.h"
 #include "ExceptionInternal.h"
@@ -146,8 +147,8 @@ void RemoteBlockReader::checkResponse() {
         break;
 
     case ChecksumTypeProto::CHECKSUM_CRC32:
-        THROW(HdfsIOException, "RemoteBlockReader does not support CRC32 checksum, Block: %s, from Datanode: %s",
-              binfo.toString().c_str(), datanode.formatAddress().c_str());
+        checksum = std::make_shared<Crc32>();
+        checksumSize = sizeof(int32_t);
         break;
 
     case ChecksumTypeProto::CHECKSUM_CRC32C:
