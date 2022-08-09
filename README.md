@@ -23,7 +23,7 @@ This repository is used to manage third-party libraries used in Apache Doris. So
 
 # Current Libs
 
-| Lib Name | Branch   | Description                                                  | Base version | Source URL                                                   | Latest Tag |
-| -------- | -------- | ------------------------------------------------------------ | ------------ | ------------------------------------------------------------ | ---------- |
-| libhdfs3 | libhdfs3 | designed as an alternative implementation of libhdfs, is implemented based on native Hadoop RPC protocol and HDFS data transfer protocol. It gets rid of the drawbacks of JNI, and it has a lightweight, small memory footprint code base. In addition, it is easy to use and deploy. | Master       | [HAWQ_depends](https://github.com/apache/hawq/tree/master/depends/libhdfs3) | libhdfs3-v2.3.2     |
-| bdbje    | bdbje    | Berkley Database Java Edition - build and runtime support.   | 18.3.12      | [bdbje Maven src](https://search.maven.org/artifact/com.sleepycat/je/18.3.12/jar) | bdbje-18.3.13-doris-snapshot    |
+| Lib Name | Branch   | Description                                                  | Base version | Source URL                                                   | Latest Tag | CHANGELOG|
+| -------- | -------- | ------------------------------------------------------------ | ------------ | ------------------------------------------------------------ | ---------- | --- |
+| libhdfs3 | libhdfs3 | designed as an alternative implementation of libhdfs, is implemented based on native Hadoop RPC protocol and HDFS data transfer protocol. It gets rid of the drawbacks of JNI, and it has a lightweight, small memory footprint code base. In addition, it is easy to use and deploy. | Master       | [HAWQ_depends](https://github.com/apache/hawq/tree/master/depends/libhdfs3) | libhdfs3-v2.3.3     | [CHANGELOG](https://github.com/apache/doris-thirdparty/blob/libhdfs3/CHANGELOG.md) |
+| bdbje    | bdbje    | Berkley Database Java Edition - build and runtime support.   | 18.3.12      | [bdbje Maven src](https://search.maven.org/artifact/com.sleepycat/je/18.3.12/jar) | bdbje-18.3.13-doris-snapshot    | [CHANGELOG](https://github.com/apache/doris-thirdparty/blob/bdbje/CHANGELOG.md) |
