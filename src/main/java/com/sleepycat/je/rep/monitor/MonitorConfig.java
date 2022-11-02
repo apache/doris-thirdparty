@@ -268,7 +268,7 @@ public class MonitorConfig implements Cloneable {
      */
     public String getNodeHostname() {
         String hostAndPort = getNodeHostPort();
-        int colonToken = hostAndPort.indexOf(":");
+        int colonToken = hostAndPort.lastIndexOf(":");
 
         return (colonToken >= 0) ?
                hostAndPort.substring(0, colonToken) : hostAndPort;
@@ -281,7 +281,7 @@ public class MonitorConfig implements Cloneable {
      */
     public int getNodePort() {
         String hostAndPort = getNodeHostPort();
-        int colonToken = hostAndPort.indexOf(":");
+        int colonToken = hostAndPort.lastIndexOf(":");
 
         String portString = (colonToken >= 0) ?
             hostAndPort.substring(colonToken + 1) :

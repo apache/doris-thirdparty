@@ -119,7 +119,8 @@ public class RepParams {
             if (Character.isLetterOrDigit(c) ||
                 c == '-' ||
                 c == '_' ||
-                c == '.') {
+                c == '.' ||
+                c == ':' ) {
                 return true;
             }
             return false;
@@ -407,7 +408,7 @@ public class RepParams {
                 throw new IllegalArgumentException
                     ("The value cannot be null or zero length: " + name);
             }
-            int colonToken = hostAndPort.indexOf(":");
+            int colonToken = hostAndPort.lastIndexOf(":");
             String hostName = (colonToken >= 0) ?
                                hostAndPort.substring(0, colonToken) :
                                hostAndPort;
@@ -1072,7 +1073,7 @@ public class RepParams {
                                             boolean skipHostnameResolution)
         throws IllegalArgumentException {
 
-        int colonToken = hostAndPort.indexOf(":");
+        int colonToken = hostAndPort.lastIndexOf(":");
         String hostName = (colonToken >= 0) ?
             hostAndPort.substring(0, colonToken) :
             hostAndPort;
