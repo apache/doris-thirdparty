@@ -1766,7 +1766,7 @@ public class RepImpl
      */
     public String getHostName() {
         String hostAndPort = configManager.get(RepParams.NODE_HOST_PORT);
-        int colonToken = hostAndPort.indexOf(":");
+        int colonToken = hostAndPort.lastIndexOf(":");
         return (colonToken >= 0) ?
                hostAndPort.substring(0, colonToken) :
                hostAndPort;
@@ -1807,7 +1807,7 @@ public class RepImpl
      */
     public int getPort() {
         String hostAndPort = configManager.get(RepParams.NODE_HOST_PORT);
-        int colonToken = hostAndPort.indexOf(":");
+        int colonToken = hostAndPort.lastIndexOf(":");
         return (colonToken >= 0) ?
                 Integer.parseInt(hostAndPort.substring(colonToken + 1)) :
                 configManager.getInt(RepParams.DEFAULT_PORT);

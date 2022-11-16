@@ -749,7 +749,7 @@ public class ArbiterImpl extends StoppableThread {
     public String getHostName() {
         String hostAndPort =
             repImpl.getConfigManager().get(RepParams.NODE_HOST_PORT);
-        int colonToken = hostAndPort.indexOf(":");
+        int colonToken = hostAndPort.lastIndexOf(":");
         return (colonToken >= 0) ?
                hostAndPort.substring(0, colonToken) :
                hostAndPort;
@@ -764,7 +764,7 @@ public class ArbiterImpl extends StoppableThread {
 
         String hostAndPort =
             repImpl.getConfigManager().get(RepParams.NODE_HOST_PORT);
-        int colonToken = hostAndPort.indexOf(":");
+        int colonToken = hostAndPort.lastIndexOf(":");
 
         return (colonToken >= 0) ?
                 Integer.parseInt(hostAndPort.substring(colonToken + 1)) :

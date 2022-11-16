@@ -186,7 +186,7 @@ public class DbGroupAdmin {
 
                     if (argc < nArgs) {
                         String hostPort = argv[argc++];
-                        int index = hostPort.indexOf(":");
+                        int index = hostPort.lastIndexOf(":");
                         if (index < 0) {
                             printUsage("Host port pair format must be " +
                                        "<host name>:<port number>");

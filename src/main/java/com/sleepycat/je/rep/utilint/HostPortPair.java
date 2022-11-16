@@ -42,7 +42,7 @@ public class HostPortPair {
             throw new IllegalArgumentException
                 ("Host and port pair was missing");
         }
-        int portStartIndex = hostPortPair.indexOf(SEPARATOR);
+        int portStartIndex = hostPortPair.lastIndexOf(SEPARATOR);
         String hostName = hostPortPair;
         int port = -1;
         if (portStartIndex < 0) {
@@ -84,7 +84,7 @@ public class HostPortPair {
      * Parses and returns the hostname string of a hostport pair
      */
     public static String getHostname(String hostPortPair) {
-        int portStartIndex = hostPortPair.indexOf(SEPARATOR);
+        int portStartIndex = hostPortPair.lastIndexOf(SEPARATOR);
         return (portStartIndex < 0) ?
                 hostPortPair :
                 hostPortPair.substring(0, portStartIndex);
@@ -94,7 +94,7 @@ public class HostPortPair {
      * Parses and returns the port of a hostport pair
      */
     public static int getPort(String hostPortPair) {
-        int portStartIndex = hostPortPair.indexOf(SEPARATOR);
+        int portStartIndex = hostPortPair.lastIndexOf(SEPARATOR);
         return Integer.parseInt((portStartIndex < 0) ?
                                 RepParams.DEFAULT_PORT.getDefault() :
                                 hostPortPair.substring(portStartIndex+1));
