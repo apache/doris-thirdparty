@@ -32,3 +32,29 @@ Berkley Database Java Edition - build and runtime support.
 
 A fork of com.sleepycat:je:18.3.12 from [bdbje](https://repo1.maven.org/maven2/com/sleepycat/je/18.3.12/je-18.3.12-sources.jar), Applied patches from [StarRocks bdbje](https://github.com/StarRocks/bdb-je/).
 Because of  StarRocks bdbje based on version 7.x, Apache Doris use bdbje  base on version 18.x.  So cannot use StarRocks bdb-je directly.
+
+# Deploy maven snapshot
+
+1. Preparation
+
+    Following the instruction of [Maven Release Preparation](https://doris.apache.org/community/release-and-verify/release-prepare/#maven-release-preparation)
+
+2. Change the version in pom.xml
+
+    Change the version in `pom.xml` and create a tag.
+
+    Push the tag to the repo.
+
+3. Deploy
+
+    Run: `mvn deploy`
+
+    If you see error: `You need a passphrase to unlock the secret key`.
+
+    Run: `gpg -s aaa`
+
+    `aaa` can be a non-exist file, and a window will pop up to let you enter the passphase.
+
+    Run: `mvn deploy` again.
+
+    If success, you will see the snapshot in `https://repository.apache.org/content/repositories/snapshots/org/apache/doris/je/`.
