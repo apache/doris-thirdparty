@@ -66,8 +66,8 @@ jobs:
             fi
           fi
 
-          if [[ -z "${last_version}" ]]; then
-            echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*" >release_note.md
+          if "${should_release}"; then
+            echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*" >release_note.md
           else
             gh release view automation | sed -n '/--/,$p' | awk '{ if (NR > 1) print $0 }' | sed "{
               s/Update Time:.*/Update Time: *$(date)*/
@@ -157,7 +157,8 @@ jobs:
       - name: Download
         run: |
           cd thirdparty
-          gh release download automation
+          curl -L https://github.com/apache/doris-thirdparty/releases/download/automation/doris-thirdparty-source.tgz \
+            -o doris-thirdparty-source.tgz
           tar -zxvf doris-thirdparty-source.tgz
 
       - name: Prepare for ${{ matrix.config.os }}
@@ -194,8 +195,8 @@ jobs:
           tar -cf - installed | xz -z -T0 - >"doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
           gh release upload --clobber automation "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
 
-  checksums:
-    name: Checksums
+  success:
+    name: Success
     needs: [prerelease, build]
     if: needs.prerelease.outputs.should_release == 'true'
     runs-on: ubuntu-latest
@@ -210,5 +211,24 @@ jobs:
           gh release download automation
 
           content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
-          echo -ne "${content}\n\n## Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          echo -ne "${content}\nStatus: *SUCCESS*\n\n## Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          gh release edit -F release_note.md automation
+
+  failure:
+    name: Failure
+    needs: [build]
+    if: failure()
+    runs-on: ubuntu-latest
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+    steps:
+      - name: Update Checksums
+        run: |
+          gh release download automation
+
+          content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
+          echo -ne "${content}\nStatus: *FAILURE*\n\n## Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit -F release_note.md automation
