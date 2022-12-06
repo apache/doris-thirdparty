@@ -27,12 +27,6 @@
 namespace Hdfs {
 
 Permission::Permission(uint16_t mode) {
-    if (mode >> 10) {
-        THROW(InvalidParameter,
-              "Invalid parameter: cannot convert %u to \"Permission\"",
-              static_cast<unsigned int>(mode));
-    }
-
     userAction = (Action)((mode >> 6) & 7);
     groupAction = (Action)((mode >> 3) & 7);
     otherAction = (Action)(mode & 7);
