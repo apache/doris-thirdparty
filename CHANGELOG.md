@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 2.3.4
+1. Support hadoop2 server
+
 ## v2.3.3
 
 1. Support CRC32 checksum

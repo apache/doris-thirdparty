@@ -2,7 +2,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 
 SET(libhdfs3_VERSION_MAJOR 2)
 SET(libhdfs3_VERSION_MINOR 3)
-SET(libhdfs3_VERSION_PATCH 3)
+SET(libhdfs3_VERSION_PATCH 4)
 SET(libhdfs3_VERSION_STRING "${libhdfs3_VERSION_MAJOR}.${libhdfs3_VERSION_MINOR}.${libhdfs3_VERSION_PATCH}")
 SET(libhdfs3_VERSION_API 1)
 SET(libhdfs3_ROOT_SOURCES_DIR ${CMAKE_SOURCE_DIR}/src)
@@ -32,7 +32,7 @@ SET(libhdfs3_PROTO_FILES ${libhdfs3_PROTO_FILES} PARENT_SCOPE)
 
 PROTOBUF_GENERATE_CPP(libhdfs3_PROTO_SOURCES libhdfs3_PROTO_HEADERS ${libhdfs3_PROTO_FILES})
 
-SET(HEADER 
+SET(HEADER
     client/BlockLocation.h
     client/DirectoryIterator.h
     client/FileStatus.h
@@ -66,7 +66,7 @@ IF(BUILD_STATIC_LIBS)
     )
 
     TARGET_LINK_LIBRARIES(libhdfs3-static pthread)
-        
+
     IF(NEED_BOOST)
         INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
         TARGET_LINK_LIBRARIES(libhdfs3-static boost_thread)
@@ -97,7 +97,7 @@ IF(BUILD_STATIC_LIBS)
             ARCHIVE DESTINATION lib)
 ENDIF(BUILD_STATIC_LIBS)
 
-IF(BUILD_SHARED_LIBS) 
+IF(BUILD_SHARED_LIBS)
     ADD_LIBRARY(libhdfs3-shared SHARED ${libhdfs3_SOURCES} ${libhdfs3_PROTO_SOURCES} ${libhdfs3_PROTO_HEADERS})
     ADD_CUSTOM_COMMAND(
         TARGET libhdfs3-shared
@@ -107,7 +107,7 @@ IF(BUILD_SHARED_LIBS)
     )
 
     TARGET_LINK_LIBRARIES(libhdfs3-shared pthread)
-        
+
     IF(NEED_BOOST)
         INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
         TARGET_LINK_LIBRARIES(libhdfs3-shared boost_thread)
@@ -132,8 +132,8 @@ IF(BUILD_SHARED_LIBS)
         SET_TARGET_PROPERTIES(libhdfs3-shared PROPERTIES LINK_FLAGS "-L${Boost_LIBRARY_DIRS}")
     ENDIF(NEED_BOOST)
 
-    SET_TARGET_PROPERTIES(libhdfs3-shared PROPERTIES 
-        VERSION ${libhdfs3_VERSION_MAJOR}.${libhdfs3_VERSION_MINOR}.${libhdfs3_VERSION_PATCH} 
+    SET_TARGET_PROPERTIES(libhdfs3-shared PROPERTIES
+        VERSION ${libhdfs3_VERSION_MAJOR}.${libhdfs3_VERSION_MINOR}.${libhdfs3_VERSION_PATCH}
         SOVERSION ${libhdfs3_VERSION_API})
 
     INSTALL(TARGETS libhdfs3-shared
@@ -145,7 +145,7 @@ ENDIF(BUILD_SHARED_LIBS)
 
 INSTALL(FILES ${HEADER} DESTINATION include/hdfs)
 INSTALL(FILES libhdfs3.pc DESTINATION lib/pkgconfig)
-            
+
 SET(libhdfs3_SOURCES ${libhdfs3_SOURCES} PARENT_SCOPE)
 SET(libhdfs3_PLATFORM_HEADER_DIR ${CMAKE_CURRENT_BINARY_DIR} PARENT_SCOPE)
 SET(libhdfs3_ROOT_SOURCES_DIR ${libhdfs3_ROOT_SOURCES_DIR} PARENT_SCOPE)
