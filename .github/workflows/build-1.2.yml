@@ -225,7 +225,7 @@ jobs:
           gh release download "${tag_name}"
 
           content="$(gh release view "${tag_name}" | sed -n '/Update Time:/,/Doris Version:/p')"
-          echo -ne "${content}\nStatus: *SUCCESS*\n\n## Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          echo -ne "${content}\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit -F release_note.md "${tag_name}"
 
   failure:
@@ -245,6 +245,5 @@ jobs:
 
           gh release download "${tag_name}"
 
-          content="$(gh release view "${tag_name}"" | sed -n '/Update Time:/,/Doris Version:/p')"
-          echo -ne "${content}\nStatus: *FAILURE*\n\n## Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          echo -ne "Status: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit -F release_note.md "${tag_name}"

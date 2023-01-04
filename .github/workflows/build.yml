@@ -211,7 +211,7 @@ jobs:
           gh release download automation
 
           content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
-          echo -ne "${content}\nStatus: *SUCCESS*\n\n## Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          echo -ne "${content}\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit -F release_note.md automation
 
   failure:
@@ -229,6 +229,5 @@ jobs:
         run: |
           gh release download automation
 
-          content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
-          echo -ne "${content}\nStatus: *FAILURE*\n\n## Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          echo -ne "Status: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit -F release_note.md automation
