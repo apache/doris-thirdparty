@@ -212,7 +212,7 @@ jobs:
 
           content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
           echo -ne "${content}\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
-          gh release edit -F release_note.md automation
+          gh release edit --latest -F release_note.md automation
 
   failure:
     name: Failure
@@ -230,4 +230,4 @@ jobs:
           gh release download automation
 
           echo -ne "Status: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
-          gh release edit -F release_note.md automation
+          gh release edit --latest -F release_note.md automation
