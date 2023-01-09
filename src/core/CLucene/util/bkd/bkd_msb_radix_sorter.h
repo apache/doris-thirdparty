@@ -23,7 +23,7 @@ public:
             int dim, int32_t bytes);
 
 protected:
-    int byte_at(int i, int k) override;
+    int byteAt(int i, int k) override;
     void swap(int i, int j) override;
 };
 CL_NS_END2

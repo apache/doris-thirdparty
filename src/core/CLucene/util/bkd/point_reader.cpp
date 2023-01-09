@@ -27,15 +27,15 @@ int64_t point_reader::split(int64_t count,
         assert(result);
         const std::vector<uint8_t> &packedValue = packed_value();
         int64_t ordinal = ord();
-        int32_t docid = docid();
+        int32_t doc_id = docid();
         if (rightTree->Get(ordinal)) {
-            right->append(packedValue, ordinal, docid);
+            right->append(packedValue, ordinal, doc_id);
             rightCount++;
             if (doClearBits) {
                 rightTree->Clear(ordinal);
             }
         } else {
-            left->append(packedValue, ordinal, docid);
+            left->append(packedValue, ordinal, doc_id);
         }
     }
 

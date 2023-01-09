@@ -33,32 +33,32 @@ SET(clucene_core_Files
 	./CLucene/util/MD5Digester.cpp
 	./CLucene/util/StringIntern.cpp
 	./CLucene/util/BitSet.cpp
-		CLucene/util/bkd/bkd_writer.cpp
-        CLucene/util/bkd/bkd_reader.cpp
-		CLucene/util/bkd/index_tree.cpp
-		CLucene/util/bkd/packed_index_tree.cpp
-		CLucene/util/bkd/legacy_index_tree.cpp
-		CLucene/util/bkd/heap_point_writer.cpp
-		CLucene/util/bkd/heap_point_reader.cpp
-		CLucene/util/bkd/point_reader.cpp
-		CLucene/util/bkd/docIds_writer.cpp
-        CLucene/util/bkd/bkd_msb_radix_sorter.cpp
-		CLucene/util/croaring/roaring.c
-		CLucene/util/croaring/roaring.h
-		CLucene/util/croaring/roaring.hh
-		./CLucene/util/BitUtil.cpp
-		./CLucene/util/BytesRef.cpp
-		./CLucene/util/BytesRefBuilder.cpp
-		./CLucene/util/CodecUtil.cpp
-		./CLucene/util/LongBitSet.cpp
-		./CLucene/util/IntroSorter.cpp
-		./CLucene/util/Sorter.cpp
-		./CLucene/util/MSBRadixSorter.cpp
-		./CLucene/util/FixedBitSet.cpp
-		./CLucene/util/FutureArrays.cpp
-		./CLucene/util/NumericUtils.cpp
-		./CLucene/util/stringUtil.cpp
-		./CLucene/queryParser/FastCharStream.cpp
+	./CLucene/util/bkd/bkd_writer.cpp
+        ./CLucene/util/bkd/bkd_reader.cpp
+	./CLucene/util/bkd/index_tree.cpp
+	./CLucene/util/bkd/packed_index_tree.cpp
+	./CLucene/util/bkd/legacy_index_tree.cpp
+	./CLucene/util/bkd/heap_point_writer.cpp
+	./CLucene/util/bkd/heap_point_reader.cpp
+	./CLucene/util/bkd/point_reader.cpp
+	./CLucene/util/bkd/docids_writer.cpp
+        ./CLucene/util/bkd/bkd_msb_radix_sorter.cpp
+        ./CLucene/util/croaring/roaring.c
+	./CLucene/util/croaring/roaring.h
+	./CLucene/util/croaring/roaring.hh
+	./CLucene/util/BitUtil.cpp
+	./CLucene/util/BytesRef.cpp
+	./CLucene/util/BytesRefBuilder.cpp
+	./CLucene/util/CodecUtil.cpp
+	./CLucene/util/LongBitSet.cpp
+	./CLucene/util/IntroSorter.cpp
+	./CLucene/util/Sorter.cpp
+	./CLucene/util/MSBRadixSorter.cpp
+	./CLucene/util/FixedBitSet.cpp
+	./CLucene/util/FutureArrays.cpp
+	./CLucene/util/NumericUtils.cpp
+	./CLucene/util/stringUtil.cpp
+	./CLucene/queryParser/FastCharStream.cpp
 	./CLucene/queryParser/MultiFieldQueryParser.cpp
 	./CLucene/queryParser/QueryParser.cpp
 	./CLucene/queryParser/QueryParserTokenManager.cpp
@@ -69,25 +69,14 @@ SET(clucene_core_Files
 	./CLucene/queryParser/legacy/QueryParserBase.cpp
 	./CLucene/queryParser/legacy/QueryToken.cpp
 	./CLucene/queryParser/legacy/TokenList.cpp
-
-		#./CLucene/queryParser/QueryBuilder.cpp
-	#./CLucene/queryParser/classic/QueryParserBase.cpp
-	#./CLucene/queryParser/classic/QueryParser.cpp
-	#./CLucene/queryParser/classic/Token.cpp
-	#./CLucene/queryParser/classic/TokenMgrError.cpp
-	#./CLucene/queryParser/classic/CharStream.cpp
-	#./CLucene/queryParser/classic/ParseException.cpp
-	#./CLucene/queryParser/classic/QueryParserTokenManager.cpp
 	./CLucene/analysis/standard/StandardAnalyzer.cpp
 	./CLucene/analysis/standard/StandardFilter.cpp
 	./CLucene/analysis/standard/StandardTokenizer.cpp
-	#./CLucene/analysis/mmseg/MMsegAnalyzer.cpp
-	#./CLucene/analysis/mmseg/MmsegTokenizer.cpp
 	./CLucene/analysis/Analyzers.cpp
 	./CLucene/analysis/AnalysisHeader.cpp
 	./CLucene/store/MMapInput.cpp
 	./CLucene/store/IndexInput.cpp
-		./CLucene/store/ByteArrayDataInput.cpp
+	./CLucene/store/ByteArrayDataInput.cpp
 	./CLucene/store/Lock.cpp
 	./CLucene/store/LockFactory.cpp
 	./CLucene/store/IndexOutput.cpp
@@ -113,10 +102,10 @@ SET(clucene_core_Files
 	./CLucene/index/Terms.cpp
 	./CLucene/index/MergePolicy.cpp
 	./CLucene/index/DocumentsWriter.cpp
-		./CLucene/index/SDocumentWriter.cpp
-		./CLucene/index/SDocumentWriter.h
-		./CLucene/index/DocumentsWriterThreadState.cpp
-		./CLucene/index/SegmentTermVector.cpp
+	./CLucene/index/SDocumentWriter.cpp
+	./CLucene/index/SDocumentWriter.h
+	./CLucene/index/DocumentsWriterThreadState.cpp
+	./CLucene/index/SegmentTermVector.cpp
 	./CLucene/index/TermVectorReader.cpp
 	./CLucene/index/FieldInfos.cpp
 	./CLucene/index/CompoundFile.cpp
@@ -212,21 +201,6 @@ SET(clucene_core_Files
 	./CLucene/search/spans/SpanWeight.h
 	./CLucene/search/spans/TermSpans.cpp
 )
-
-#if (CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
-#	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=haswell -DAVX2_ON -fstrict-aliasing")
-	#ADD_DEFINITIONS(-DAVX2_ON)
-	#ADD_DEFINITIONS(-DSSE2_ON)
-#endif()
-
-#SET(pfor_Files_SSE
-#		${clucene-ext_SOURCE_DIR}/for/transpose.c
-#		${clucene-ext_SOURCE_DIR}/for/bitunpack.c
-#		${clucene-ext_SOURCE_DIR}/for/bitpack.c
-#		${clucene-ext_SOURCE_DIR}/for/bitutil.c
-#		${clucene-ext_SOURCE_DIR}/for/vp4d.c
-#		${clucene-ext_SOURCE_DIR}/for/vp4c.c
-#		)
 
 #if USE_SHARED_OBJECT_FILES then we link directly to the object files (means rebuilding them for the core)
 IF ( USE_SHARED_OBJECT_FILES )
