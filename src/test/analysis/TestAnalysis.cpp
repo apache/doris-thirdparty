@@ -87,7 +87,7 @@ void testChar(CuTest *tc) {
     while (stream->next(&t) != NULL) {
         count++;
     }
-    printf("count = %d\n", count);
+    //printf("count = %d\n", count);
     _CLDELETE(stream);
 }
 

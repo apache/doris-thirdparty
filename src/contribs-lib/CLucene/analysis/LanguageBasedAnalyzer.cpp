@@ -37,6 +37,11 @@ void LanguageBasedAnalyzer::setLanguage(const TCHAR *language) {
 void LanguageBasedAnalyzer::setStem(bool stem) {
     this->stem = stem;
 }
+void LanguageBasedAnalyzer::initDict(const std::string& dictPath) {
+    if (_tcscmp(lang, _T("chinese")) == 0) {
+        CL_NS2(analysis, jieba)::ChineseTokenizer::init(dictPath);
+    }
+}
 TokenStream *LanguageBasedAnalyzer::tokenStream(const TCHAR *fieldName, Reader *reader) {
     TokenStream *ret = NULL;
     if (_tcscmp(lang, _T("cjk")) == 0) {

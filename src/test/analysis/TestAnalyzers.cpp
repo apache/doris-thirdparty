@@ -486,7 +486,7 @@
       _CLLDELETE(reader);
   }
 
-CuSuite *testanalyzers(void)
+CuSuite *testanalyzers()
 {
 	CuSuite *suite = CuSuiteNew(_T("CLucene Analyzers Test"));
 

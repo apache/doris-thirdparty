@@ -33,7 +33,7 @@ public:
     }
     void visit(Roaring *docID, std::vector<uint8_t> &packedValue) override;
     void visit(int docID, std::vector<uint8_t> &packedValue) override;
-    void visit(lucene::util::bkd::bkd_docID_set_iterator *iter, std::vector<uint8_t> &packedValue) override;
+    void visit(lucene::util::bkd::bkd_docid_set_iterator *iter, std::vector<uint8_t> &packedValue) override;
 
     bool matches(uint8_t *packedValue);
 
@@ -91,14 +91,14 @@ public:
         }
         visit(*docID);
     };
-    void visit(lucene::util::bkd::bkd_docID_set_iterator *iter, std::vector<uint8_t> &packedValue) override {
+    void visit(lucene::util::bkd::bkd_docid_set_iterator *iter, std::vector<uint8_t> &packedValue) override {
         if (!matches(packedValue.data())) {
             return;
         }
-        int32_t docID = iter->docID_set->nextDoc();
-        while (docID != lucene::util::bkd::bkd_docID_set::NO_MORE_DOCS) {
+        int32_t docID = iter->docid_set->nextDoc();
+        while (docID != lucene::util::bkd::bkd_docid_set::NO_MORE_DOCS) {
             hits->set(docID);
-            docID = iter->docID_set->nextDoc();
+            docID = iter->docid_set->nextDoc();
         }
     };
     bool matches(uint8_t *packedValue);

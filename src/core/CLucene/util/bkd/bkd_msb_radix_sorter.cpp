@@ -9,7 +9,7 @@ bkd_msb_radix_sorter::bkd_msb_radix_sorter(
         int dim, int32_t bytes) : MSBRadixSorter(bytes), dim(dim), writer(writer), heap_writer(heap_writer) {
 }
 
-int bkd_msb_radix_sorter::byte_at(int i, int k) {
+int bkd_msb_radix_sorter::byteAt(int i, int k) {
     assert(k >= 0);
     if (k < writer->bytes_per_dim_) {
         // dim bytes

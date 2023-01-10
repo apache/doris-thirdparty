@@ -72,7 +72,8 @@ namespace limonp {
 #endif
             std::cerr << stream_.str() << std::endl;
             if (level_ == LL_FATAL) {
-                abort();
+                _CLTHROWA (CL_ERR_UNKNOWN, "failed in chinese tokenizer");
+                //abort();
             }
         }
 
