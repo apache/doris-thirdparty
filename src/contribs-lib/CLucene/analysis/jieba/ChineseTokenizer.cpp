@@ -2,27 +2,30 @@
 #include "ChineseTokenizer.h"
 #include "CLucene/util/CLStreams.h"
 #include <filesystem>
+#include <memory>
 namespace fs = std::filesystem;
 
 CL_NS_DEF2(analysis,jieba)
 CL_NS_USE(analysis)
 CL_NS_USE(util)
 
-std::string get_dict_path() {
-    if(const char* env_p = std::getenv("DICT_PATH")) {
-        return env_p;
-    }
-    return "";
+std::unique_ptr<cppjieba::Jieba> ChineseTokenizer::cppjieba = nullptr;
+ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader) : Tokenizer(reader) {
+    buffer[0] = 0;
 }
 
-static unique_ptr<cppjieba::Jieba> cppjieba = std::make_unique<cppjieba::Jieba>(
-        get_dict_path() + "dict/jieba.dict.utf8",
-        get_dict_path() + "dict/hmm_model.utf8",
-        get_dict_path() + "dict/user.dict.utf8",
-        get_dict_path() + "dict/idf.utf8",
-        get_dict_path() + "dict/stop_words.utf8");
+void ChineseTokenizer::init(const std::string &dictPath) {
+    if(cppjieba == nullptr) {
+        cppjieba = std::make_unique<cppjieba::Jieba>(
+                dictPath + "/" + "dict/jieba.dict.utf8",
+                dictPath + "/" + "dict/hmm_model.utf8",
+                dictPath + "/" + "dict/user.dict.utf8",
+                dictPath + "/" + "dict/idf.utf8",
+                dictPath + "/" + "dict/stop_words.utf8");
+    }
+}
 
-CL_NS(analysis)::Token* ChineseTokenizer::next(lucene::analysis::Token* token) {
+CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
     // try to read all words
     if (dataLen == 0) {
         auto bufferLen = input->read((const void **) &ioBuffer, 1, 0);
@@ -32,6 +35,7 @@ CL_NS(analysis)::Token* ChineseTokenizer::next(lucene::analysis::Token* token) {
         }
         char tmp_buffer[4 * bufferLen];
         lucene_wcsntoutf8(tmp_buffer, ioBuffer, bufferLen, 4 * bufferLen);
+        init();
         cppjieba->Cut(tmp_buffer, tokens_text, true);
         dataLen = tokens_text.size();
     }

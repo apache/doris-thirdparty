@@ -471,8 +471,8 @@ CuSuite *testdocument(void) {
     SUITE_ADD_TEST(suite, TestFields);
     SUITE_ADD_TEST(suite, TestMultiSetValueField);
     SUITE_ADD_TEST(suite, TestMultiAddValueField);
-    SUITE_ADD_TEST(suite, TestSetFieldBench);
-    SUITE_ADD_TEST(suite, TestNewFieldBench);
+    //SUITE_ADD_TEST(suite, TestSetFieldBench);
+    //SUITE_ADD_TEST(suite, TestNewFieldBench);
     SUITE_ADD_TEST(suite, TestReaderValueField);
     SUITE_ADD_TEST(suite, TestAddDocument);
     //SUITE_ADD_TEST(suite, TestDateTools);

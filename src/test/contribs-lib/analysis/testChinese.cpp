@@ -142,6 +142,13 @@ void testCJK(CuTest *tc) {
     _testCJK(tc, "a\xe5\x95\xa4\xe9\x85\x92\xe5\x95\xa4x", exp2);
 }
 
+std::string get_dict_path() {
+    if(const char* env_p = std::getenv("DICT_PATH")) {
+        return env_p;
+    }
+    return "";
+}
+
 void testSimpleJiebaTokenizer(CuTest* tc) {
     LanguageBasedAnalyzer a;
     CL_NS(util)::StringReader reader(_T("我爱你中国"));
@@ -152,6 +159,7 @@ void testSimpleJiebaTokenizer(CuTest* tc) {
     //test with chinese
     a.setLanguage(_T("chinese"));
     a.setStem(false);
+    a.initDict(get_dict_path());
     ts = a.tokenStream(_T("contents"), &reader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -574,7 +582,7 @@ void testLanguageBasedAnalyzer(CuTest* tc) {
 }
 
 CuSuite *testchinese(void) {
-    CuSuite *suite = CuSuiteNew(_T("CLucene Analysis Test"));
+    CuSuite *suite = CuSuiteNew(_T("CLucene chinese tokenizer Test"));
 
     SUITE_ADD_TEST(suite, testFile);
     SUITE_ADD_TEST(suite, testCJK);

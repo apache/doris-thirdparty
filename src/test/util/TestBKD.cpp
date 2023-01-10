@@ -53,14 +53,14 @@ void TestVisitor1::visit(Roaring *docID, std::vector<uint8_t> &packedValue) {
     visit(*docID);
 }
 
-void TestVisitor1::visit(bkd::bkd_docID_set_iterator *iter, std::vector<uint8_t> &packedValue) {
+void TestVisitor1::visit(bkd::bkd_docid_set_iterator *iter, std::vector<uint8_t> &packedValue) {
     if (!matches(packedValue.data())) {
         return;
     }
-    int32_t docID = iter->docID_set->nextDoc();
-    while (docID != lucene::util::bkd::bkd_docID_set::NO_MORE_DOCS) {
+    int32_t docID = iter->docid_set->nextDoc();
+    while (docID != lucene::util::bkd::bkd_docid_set::NO_MORE_DOCS) {
         hits->set(docID);
-        docID = iter->docID_set->nextDoc();
+        docID = iter->docid_set->nextDoc();
     }
 }
 
@@ -376,9 +376,9 @@ void testBug1Read(CuTest *tc) {
             //printf("something wrong in read\n");
             printf("clucene error: %s\n", r.what());
         }
-        printf("hits count=%d\n", result->count());
+        //printf("hits count=%d\n", result->count());
         CuAssertEquals(tc, result->count(), 6);
-        printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
+        //printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
     }
 }
 
@@ -444,9 +444,9 @@ void testLowCardinalInts1DRead2(CuTest *tc) {
             //printf("something wrong in read\n");
             printf("clucene error: %s\n", r.what());
         }
-        printf("hits count=%d\n", hits->count());
+        //printf("hits count=%d\n", hits->count());
         CuAssertEquals(tc, hits->count(), 12928);
-        printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
+        //printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
     }
 }
 
@@ -475,9 +475,9 @@ void testLowCardinalInts1DRead(CuTest *tc) {
             //printf("something wrong in read\n");
             printf("clucene error: %s\n", r.what());
         }
-        printf("hits count=%d\n", hits->count());
+        //printf("hits count=%d\n", hits->count());
         CuAssertEquals(tc, hits->count(), 256);
-        printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
+        //printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
     }
 }
 
@@ -551,7 +551,7 @@ void testBasicsInts1DRead(CuTest *tc) {
 
             //assertEquals(L"docID=" + to_wstring(docID), expected, actual);
         }
-        printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
+        //printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
         auto hits1 = std::make_shared<BitSet>(N);
         auto v1 = std::make_unique<TestVisitor1>(queryMin, queryMax, hits1);
         str = Misc::currentTimeMillis();
@@ -566,7 +566,7 @@ void testBasicsInts1DRead(CuTest *tc) {
             CuAssertEquals(tc, expected, actual);
             //assertEquals(L"docID=" + to_wstring(docID), expected, actual);
         }
-        printf("\nSecond search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
+        //printf("\nSecond search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
     }
     dir->close();
     _CLDECDELETE(dir);
@@ -604,15 +604,15 @@ void testHttplogsRead(CuTest *tc) {
             //CuAssertEquals(tc, 0, type);
             r->read_index(index_in_);
             r->intersect(v.get());
-            printf("\ntry query result:%ld\n", r->estimate_point_count(v.get()));
-            printf("\nsearch time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
+            //printf("\ntry query result:%ld\n", r->estimate_point_count(v.get()));
+            //printf("\nsearch time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
         } catch (CLuceneError &r) {
             //printf("something wrong in read\n");
             printf("clucene error: %s\n", r.what());
         }
-        printf("result size = %d\n", result->count());
+        //printf("result size = %d\n", result->count());
         CuAssertEquals(tc, result->count(), 8445);
-        printf("stats=%s\n", r->stats.to_string().c_str());
+        //printf("stats=%s\n", r->stats.to_string().c_str());
     }
     dir->close();
     _CLDECDELETE(dir);

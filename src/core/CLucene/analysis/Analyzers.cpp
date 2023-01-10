@@ -507,13 +507,13 @@ Token* KeywordTokenizer::next(Token* token){
       if (rd == -1)
 		    break;
       if ( upto == token->bufferLength() ){
-        termBuffer = (TCHAR*)token->resizeTermBuffer<TCHAR>(token->bufferLength() + 8);
+        termBuffer = (TCHAR*)token->resizeTermBuffer<TCHAR>(token->bufferLength() + rd);
       }
 	    _tcsncpy(termBuffer + upto, readBuffer, rd);
       upto += rd;
     }
     if ( token->bufferLength() < upto + 1 ){
-      termBuffer=(TCHAR *)token->resizeTermBuffer<TCHAR>(token->bufferLength() + 8);
+      termBuffer=(TCHAR *)token->resizeTermBuffer<TCHAR>(token->bufferLength() + upto);
     }
     termBuffer[upto]=0;
     token->setTermLength<TCHAR>(upto);

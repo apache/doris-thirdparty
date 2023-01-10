@@ -32,16 +32,14 @@ private:
      * members of Tokenizer)
      */
     const TCHAR* ioBuffer{};
-    //std::unique_ptr<cppjieba::Jieba> cppjieba;
     std::vector<std::string> tokens_text;
     std::vector<std::unique_ptr<Token>> tokens;
 
 public:
+    static std::unique_ptr<cppjieba::Jieba> cppjieba;
     // Constructor
-    explicit ChineseTokenizer(lucene::util::Reader *reader) : Tokenizer(reader) {
-
-        buffer[0]=0;
-    }
+    explicit ChineseTokenizer(lucene::util::Reader *reader);
+    static void init(const std::string& dictPath="");
 
     // Destructor
     ~ChineseTokenizer() override {}
