@@ -220,7 +220,7 @@ public:
             return -1;
         *(const T**)start = this->value + pos;
         auto tmp = std::max(min, max);
-        int32_t r = (int32_t) std::min((size_t) tmp, m_size - pos);
+        int32_t r = (int32_t) std::min(tmp, static_cast<int32_t>(m_size - pos));
         pos += r;
         return r;
     }
