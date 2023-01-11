@@ -1638,7 +1638,7 @@ void IndexWriter::mergeTerms() {
         }
 
         if (infoStream != NULL) {
-            message(string("bitmap list size: ") + Misc::toString(dest_idx_bitmap.size()));
+            message(string("bitmap list size: ") + Misc::toString((int64_t)dest_idx_bitmap.size()));
         }
 
         // 3. append term data
@@ -1656,7 +1656,7 @@ void IndexWriter::mergeTerms() {
             }
 
             if (infoStream != NULL) {
-                message(string("the [") + Misc::toString(i) + string("] bitmap doc number: ") + Misc::toString(docNums));
+                message(string("the [") + Misc::toString((int32_t)i) + string("] bitmap doc number: ") + Misc::toString(docNums));
             }
 
             // Get the file pointer of the IndexOutput to the Frequency File

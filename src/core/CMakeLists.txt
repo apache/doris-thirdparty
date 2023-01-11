@@ -226,6 +226,7 @@ SET_TARGET_PROPERTIES(clucene-core PROPERTIES
 #link the clucene-core library against the releavent clucene-shared library (if we aren't using the object files)
 IF ( NOT USE_SHARED_OBJECT_FILES )
     TARGET_LINK_LIBRARIES(clucene-core clucene-shared ${EXTRA_LIBS})
+    TARGET_LINK_LIBRARIES(clucene-core clucene-shared ic)
 ENDIF ( NOT USE_SHARED_OBJECT_FILES )
 
 
@@ -234,9 +235,6 @@ IF ( BUILD_STATIC_LIBRARIES )
 	add_library(clucene-core-static STATIC
 			${clucene_core_Files} ${clucene_shared_Files} ${HEADERS}
 	)
-
-	#target_link_libraries(clucene-core-static PRIVATE clucene-mmseg-static)
-	#target_include_directories(clucene-core-static PUBLIC ${clucene-mmseg_SOURCE_DIR}/include)
 
 	SET_TARGET_PROPERTIES(clucene-core-static PROPERTIES
 	    VERSION ${CLUCENE_VERSION}
