@@ -117,12 +117,12 @@ CHECK_OPTIONAL_FUNCTIONS( wcsupr wcscasecmp wcsicmp wcstoll wprintf lltow
 )
 
 #make decisions about which functions to use...
-CHOOSE_FUNCTION(fileHandleStat "fstati64;_fstati64;fstat64;fstat;_fstat")
-IF ( _CL_HAVE_FUNCTION_FSTATI64 OR _CL_HAVE_FUNCTION__FSTATI64 OR _CL_HAVE_FUNCTION_FSTAT64 )
-    SET ( USE_STAT64 1 )
-ENDIF ( _CL_HAVE_FUNCTION_FSTATI64 OR _CL_HAVE_FUNCTION__FSTATI64 OR _CL_HAVE_FUNCTION_FSTAT64 )
+#IF ( _CL_HAVE_FUNCTION_FSTATI64 OR _CL_HAVE_FUNCTION__FSTATI64 OR _CL_HAVE_FUNCTION_FSTAT64 )
+#    SET ( USE_STAT64 1 )
+#ENDIF ( _CL_HAVE_FUNCTION_FSTATI64 OR _CL_HAVE_FUNCTION__FSTATI64 OR _CL_HAVE_FUNCTION_FSTAT64 )
 
 IF ( USE_STAT64 )
+    CHOOSE_FUNCTION(fileHandleStat "fstati64;_fstati64;fstat64;fstat;_fstat")
     CHOOSE_FUNCTION(fileStat "stati64;_stati64;stat64;stat;_stat")
     CHOOSE_FUNCTION(fileSize "filelengthi64;_filelengthi64;filelength;_filelength" "#define fileSize CL_NS(util)::Misc::filelength")
     CHOOSE_FUNCTION(fileSeek "lseeki64;_lseeki64;lseek64;lseek;_lseek")
@@ -136,6 +136,7 @@ IF ( USE_STAT64 )
                  )
 ELSE( USE_STAT64 )
     #borland doesn't have a fstat64, so we have to fallback to non 64 bit everything...
+    CHOOSE_FUNCTION(fileHandleStat "fstat;_fstat")
     CHOOSE_FUNCTION(fileStat "stat;_stat")
     CHOOSE_FUNCTION(fileSize "filelength;_filelength" "#define fileSize CL_NS(util)::Misc::filelength")
     CHOOSE_FUNCTION(fileSeek "lseek;_lseek")
@@ -338,25 +339,25 @@ GET_SHARED_FILES(clucene_shared_Files ".")
 
 #find our headers
 file(GLOB_RECURSE HEADERS ${clucene-shared_SOURCE_DIR}/*.h)
+IF ( BUILD_SHARED_LIBRARIES )
+    add_library(clucene-shared SHARED
+        ${clucene_shared_Files} ${HEADERS}
+    )
+    #set properties on the libraries
+    SET_TARGET_PROPERTIES(clucene-shared PROPERTIES
+        VERSION ${CLUCENE_VERSION}
+        SOVERSION ${CLUCENE_SOVERSION}
+        COMPILE_DEFINITIONS_DEBUG _DEBUG
+    )
+    TARGET_LINK_LIBRARIES(clucene-shared ${CMAKE_THREAD_LIBS_INIT})
+    IF ( EXTRA_LIBS )
+      TARGET_LINK_LIBRARIES(clucene-shared ${EXTRA_LIBS})
+    ENDIF ( EXTRA_LIBS )
 
-add_library(clucene-shared SHARED
-	${clucene_shared_Files} ${HEADERS}
-)
-
-#set properties on the libraries
-SET_TARGET_PROPERTIES(clucene-shared PROPERTIES
-    VERSION ${CLUCENE_VERSION}
-    SOVERSION ${CLUCENE_SOVERSION}
-    COMPILE_DEFINITIONS_DEBUG _DEBUG
-)
-TARGET_LINK_LIBRARIES(clucene-shared ${CMAKE_THREAD_LIBS_INIT})
-IF ( EXTRA_LIBS )
-  TARGET_LINK_LIBRARIES(clucene-shared ${EXTRA_LIBS})
-ENDIF ( EXTRA_LIBS )
-
-install(TARGETS clucene-shared 
-        DESTINATION ${LIB_DESTINATION} 
-        COMPONENT development )
+    install(TARGETS clucene-shared
+            DESTINATION ${LIB_DESTINATION}
+            COMPONENT development )
+ENDIF ( BUILD_SHARED_LIBRARIES )
 
 IF ( BUILD_STATIC_LIBRARIES )
 	add_library(clucene-shared-static STATIC
