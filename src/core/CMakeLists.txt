@@ -212,22 +212,21 @@ file(GLOB_RECURSE HEADERS ${clucene-core_SOURCE_DIR}/*.h ${clucene-ext_SOURCE_DI
 
 #create the libraries
 INCLUDE_DIRECTORIES( ${clucene_SOURCE_DIR}/src/core )
-add_library(clucene-core SHARED
-		${clucene_core_Files} ${clucene_shared_Files} ${HEADERS}
-)
-
-#set properties on the libraries
-SET_TARGET_PROPERTIES(clucene-core PROPERTIES
-    VERSION ${CLUCENE_VERSION}
-    SOVERSION ${CLUCENE_SOVERSION}
-    COMPILE_DEFINITIONS_DEBUG _DEBUG
-)
-
-#link the clucene-core library against the releavent clucene-shared library (if we aren't using the object files)
-IF ( NOT USE_SHARED_OBJECT_FILES )
-    TARGET_LINK_LIBRARIES(clucene-core clucene-shared ${EXTRA_LIBS})
-    TARGET_LINK_LIBRARIES(clucene-core clucene-shared ic)
-ENDIF ( NOT USE_SHARED_OBJECT_FILES )
+IF ( BUILD_SHARED_LIBRARIES )
+    add_library(clucene-core SHARED
+        ${clucene_core_Files} ${clucene_shared_Files} ${HEADERS}
+    )
+    #set properties on the libraries
+    SET_TARGET_PROPERTIES(clucene-core PROPERTIES
+        VERSION ${CLUCENE_VERSION}
+        SOVERSION ${CLUCENE_SOVERSION}
+        COMPILE_DEFINITIONS_DEBUG _DEBUG
+    )
+    #link the clucene-core library against the releavent clucene-shared library (if we aren't using the object files)
+    IF ( NOT USE_SHARED_OBJECT_FILES )
+        TARGET_LINK_LIBRARIES(clucene-core clucene-shared ${EXTRA_LIBS})
+    ENDIF ( NOT USE_SHARED_OBJECT_FILES )
+ENDIF ( BUILD_SHARED_LIBRARIES )
 
 
 IF ( BUILD_STATIC_LIBRARIES )
@@ -314,7 +313,9 @@ ELSE ( LUCENE_SYS_INCLUDES )
 ENDIF ( LUCENE_SYS_INCLUDES )
 
 
+IF ( BUILD_SHARED_LIBRARIES )
 #and install library
 install(TARGETS clucene-core 
         DESTINATION ${LIB_DESTINATION}  
         COMPONENT runtime )
+ENDIF ( BUILD_SHARED_LIBRARIES )
