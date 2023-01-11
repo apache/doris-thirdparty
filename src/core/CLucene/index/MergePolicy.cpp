@@ -12,10 +12,12 @@
 #include <assert.h>
 
 #if defined(__i386__) || defined(__x86_64__)
+#ifdef __linux__
 __asm__(".symver log,log@GLIBC_2.2.5");
 __asm__(".symver pow,pow@GLIBC_2.2.5");
 __asm__(".symver logf,logf@GLIBC_2.2.5");
 __asm__(".symver powf,powf@GLIBC_2.2.5");
+#endif
 #endif
 
 CL_NS_USE(util)
