@@ -1,5 +1,5 @@
 PROJECT(turbo-pfor)
-set(PFOR_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/ext/for)
+set(PFOR_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/ext/for)
 
 add_custom_target(build_ic ALL
 	COMMAND make USE_AVX2=${USE_AVX2} libic.a -j 8

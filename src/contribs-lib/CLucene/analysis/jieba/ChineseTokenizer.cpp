@@ -1,9 +1,7 @@
 #include "CLucene/_ApiHeader.h"
 #include "ChineseTokenizer.h"
 #include "CLucene/util/CLStreams.h"
-#include <filesystem>
 #include <memory>
-namespace fs = std::filesystem;
 
 CL_NS_DEF2(analysis,jieba)
 CL_NS_USE(analysis)
@@ -17,11 +15,11 @@ ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader) : Tokenizer(rea
 void ChineseTokenizer::init(const std::string &dictPath) {
     if(cppjieba == nullptr) {
         cppjieba = std::make_unique<cppjieba::Jieba>(
-                dictPath + "/" + "dict/jieba.dict.utf8",
-                dictPath + "/" + "dict/hmm_model.utf8",
-                dictPath + "/" + "dict/user.dict.utf8",
-                dictPath + "/" + "dict/idf.utf8",
-                dictPath + "/" + "dict/stop_words.utf8");
+                dictPath + "/" + "jieba.dict.utf8",
+                dictPath + "/" + "hmm_model.utf8",
+                dictPath + "/" + "user.dict.utf8",
+                dictPath + "/" + "idf.utf8",
+                dictPath + "/" + "stop_words.utf8");
     }
 }
 
