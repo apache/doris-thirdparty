@@ -117,11 +117,11 @@ OPTION(ENABLE_COMPILE_TESTS
   ${ENABLE_COMPILE_TESTS_VALUE})
 
 if (__COMPILER_CLANG)
-    SET(CXX_FLAGS_ASAN "${CXX_GCC_FLAGS} -O0 -fsanitize=address -DADDRESS_SANITIZER")
-    SET(CXX_FLAGS_LSAN "${CXX_GCC_FLAGS} -O0 -fsanitize=leak -DLEAK_SANITIZER")
+    SET(CXX_FLAGS_ASAN "${CXX_GCC_FLAGS} -O0 -g -fsanitize=address -DADDRESS_SANITIZER")
+    SET(CXX_FLAGS_LSAN "${CXX_GCC_FLAGS} -O0 -g -fsanitize=leak -DLEAK_SANITIZER")
 else ()
-    SET(CXX_FLAGS_ASAN "${CXX_GCC_FLAGS} -O0 -fsanitize=address -DADDRESS_SANITIZER -static-libasan")
-    SET(CXX_FLAGS_LSAN "${CXX_GCC_FLAGS} -O0 -fsanitize=leak -DLEAK_SANITIZER -static-liblsan")
+    SET(CXX_FLAGS_ASAN "${CXX_GCC_FLAGS} -O0 -g -fsanitize=address -DADDRESS_SANITIZER -static-libasan")
+    SET(CXX_FLAGS_LSAN "${CXX_GCC_FLAGS} -O0 -g -fsanitize=leak -DLEAK_SANITIZER -static-liblsan")
 endif ()
 
 # Set compile flags based on the build type.
