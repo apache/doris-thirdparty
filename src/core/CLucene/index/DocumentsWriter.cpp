@@ -30,7 +30,7 @@
 #include "_FieldsWriter.h"
 #include "_IndexFileNames.h"
 #include "_SkipListWriter.h"
-#include "for/vp4.h"
+#include "vp4.h"
 
 #include <algorithm>
 #include <assert.h>

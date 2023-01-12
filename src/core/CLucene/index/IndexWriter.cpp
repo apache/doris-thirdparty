@@ -34,7 +34,7 @@
 #include "_SkipListWriter.h"
 #include "_Term.h"
 #include "_TermInfo.h"
-#include "for/vp4.h"
+#include "vp4.h"
 #include <algorithm>
 #include <assert.h>
 #include <iostream>

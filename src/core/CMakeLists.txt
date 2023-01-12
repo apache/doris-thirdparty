@@ -212,6 +212,7 @@ file(GLOB_RECURSE HEADERS ${clucene-core_SOURCE_DIR}/*.h )
 
 #create the libraries
 INCLUDE_DIRECTORIES(${clucene_SOURCE_DIR}/src/core)
+INCLUDE_DIRECTORIES(${clucene_SOURCE_DIR}/src/ext/for)
 IF (BUILD_SHARED_LIBRARIES)
   add_library(clucene-core SHARED
       ${clucene_core_Files} ${clucene_shared_Files} ${HEADERS}

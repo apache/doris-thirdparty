@@ -17,7 +17,7 @@
 #include "_SkipListWriter.h"
 #include "_IndexFileNames.h"
 #include "_SegmentMerger.h"
-#include "for/vp4.h"
+#include "vp4.h"
 
 #include <algorithm>
 #include <vector>
