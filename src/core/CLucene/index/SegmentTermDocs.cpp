@@ -9,7 +9,7 @@
 
 #include "CLucene/store/IndexInput.h"
 #include "Term.h"
-#include "vp4.h"
+#include "for/vp4.h"
 
 #include <assert.h>
 #include <memory>
