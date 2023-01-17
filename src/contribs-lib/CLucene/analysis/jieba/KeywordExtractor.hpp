@@ -94,7 +94,11 @@ class KeywordExtractor {
  private:
   void LoadIdfDict(const string& idfPath) {
     ifstream ifs(idfPath.c_str());
-    XCHECK(ifs.is_open()) << "open " << idfPath << " failed";
+    auto result = ifs.is_open();
+    XCHECK(result) << "open " << idfPath << " failed.";
+    if(!result) {
+      _CLTHROWA (CL_ERR_UNKNOWN, "failed in chinese tokenizer");
+    }
     string line ;
     vector<string> buf;
     double idf = 0.0;
@@ -123,7 +127,11 @@ class KeywordExtractor {
   }
   void LoadStopWordDict(const string& filePath) {
     ifstream ifs(filePath.c_str());
-    XCHECK(ifs.is_open()) << "open " << filePath << " failed";
+    auto result = ifs.is_open();
+    XCHECK(result) << "open " << filePath << " failed.";
+    if(!result) {
+      _CLTHROWA (CL_ERR_UNKNOWN, "failed in chinese tokenizer");
+    }
     string line ;
     while (getline(ifs, line)) {
       stopWords_.insert(line);

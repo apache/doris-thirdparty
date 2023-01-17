@@ -33,7 +33,7 @@ CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
         }
         char tmp_buffer[4 * bufferLen];
         lucene_wcsntoutf8(tmp_buffer, ioBuffer, bufferLen, 4 * bufferLen);
-        init();
+        init("./dict");
         cppjieba->Cut(tmp_buffer, tokens_text, true);
         dataLen = tokens_text.size();
     }

@@ -150,13 +150,17 @@ class DictTrie {
   void LoadUserDict(const string& filePaths) {
     vector<string> files = limonp::Split(filePaths, "|;");
     size_t lineno = 0;
-    for (size_t i = 0; i < files.size(); i++) {
-      ifstream ifs(files[i].c_str());
-      XCHECK(ifs.is_open()) << "open " << files[i] << " failed"; 
+    for (const auto & file : files) {
+      ifstream ifs(file.c_str());
+      auto result = ifs.is_open();
+      XCHECK(result) << "open " << file << " failed.";
+      if(!result) {
+          _CLTHROWA (CL_ERR_UNKNOWN, "failed in chinese tokenizer");
+      }
       string line;
       
       for (; getline(ifs, line); lineno++) {
-        if (line.size() == 0) {
+        if (line.empty()) {
           continue;
         }
         InserUserDictNode(line);
@@ -209,7 +213,11 @@ class DictTrie {
 
   void LoadDict(const string& filePath) {
     ifstream ifs(filePath.c_str());
-    XCHECK(ifs.is_open()) << "open " << filePath << " failed.";
+    auto result = ifs.is_open();
+    XCHECK(result) << "open " << filePath << " failed.";
+    if(!result) {
+      _CLTHROWA (CL_ERR_UNKNOWN, "failed in chinese tokenizer");
+    }
     string line;
     vector<string> buf;
 
@@ -217,9 +225,9 @@ class DictTrie {
     for (size_t lineno = 0; getline(ifs, line); lineno++) {
       Split(line, buf, " ");
       XCHECK(buf.size() == DICT_COLUMN_NUM) << "split result illegal, line:" << line;
-      MakeNodeInfo(node_info, 
-            buf[0], 
-            atof(buf[1].c_str()), 
+      MakeNodeInfo(node_info,
+            buf[0],
+            atof(buf[1].c_str()),
             buf[2]);
       static_node_infos_.push_back(node_info);
     }
