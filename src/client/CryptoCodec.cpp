@@ -138,8 +138,9 @@ namespace Hdfs {
 		// Calculate new IV when appending an existed file.
 		std::string iv = encryptionInfo->getIv();
 		if (stream_offset > 0) {
-			counter = stream_offset / AlgorithmBlockSize;
-			padding = stream_offset % AlgorithmBlockSize;
+                        // For AES, the algorithm block is fixed size of 128 bits.
+			counter = stream_offset / 16;
+			padding = stream_offset % 16;
 			iv = this->calculateIV(iv, counter);
 		}
 
