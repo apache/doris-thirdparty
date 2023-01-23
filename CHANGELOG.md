@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v2.3.6
+1. Fix kms AES 256 support
+
 ## v2.3.5
 1. Support hadoop kms
 
