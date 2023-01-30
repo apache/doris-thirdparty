@@ -23,6 +23,8 @@
 #include "CryptoCodec.h"
 #include "Logger.h"
 
+#include <inttypes.h>
+
 using namespace Hdfs::Internal;
 
 
@@ -142,7 +144,14 @@ namespace Hdfs {
 			counter = stream_offset / 16;
 			padding = stream_offset % 16;
 			iv = this->calculateIV(iv, counter);
-		}
+		} else if (stream_offset == 0) {
+                        counter = 0;
+                        padding = 0;
+                } else {
+                        LOG(WARNING, "CryptoCodec : Invalid stream_offset %" PRId64, stream_offset);
+                        return -1;
+                
+                }
 
 		// Judge the crypto method is encrypt or decrypt.
 		int enc = (method == CryptoMethod::ENCRYPT) ? 1 : 0;
