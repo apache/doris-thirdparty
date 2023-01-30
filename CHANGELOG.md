@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v2.3.7
+1. Fix kms seek bug
+
 ## v2.3.6
 1. Fix kms AES 256 support
 
