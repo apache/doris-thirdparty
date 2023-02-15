@@ -251,21 +251,23 @@ void OutputStreamImpl::openInternal(shared_ptr<FileSystemInter> fs, const char *
 
     try {
         if (flag & Append) {
-            fileStatus = fs->getFileStatus(this->path.c_str());
-            FileEncryptionInfo *fileEnInfo = fileStatus.getFileEncryption();
-            if (fileStatus.isFileEncrypted()) {
-                if (cryptoCodec == NULL) {
-                    auth = shared_ptr<RpcAuth> (
-                            new RpcAuth(fs->getUserInfo(), RpcAuth::ParseMethod(conf->getKmsMethod())));
-                    kcp = shared_ptr<KmsClientProvider> (
-                            new KmsClientProvider(auth, conf));
-                    cryptoCodec = shared_ptr<CryptoCodec> (
-                            new CryptoCodec(fileEnInfo, kcp, conf->getCryptoBufferSize()));
+            if (!conf->getKmsUrl().empty()) {
+                fileStatus = fs->getFileStatus(this->path.c_str());
+                FileEncryptionInfo *fileEnInfo = fileStatus.getFileEncryption();
+                if (fileStatus.isFileEncrypted()) {
+                    if (cryptoCodec == NULL) {
+                        auth = shared_ptr<RpcAuth> (
+                                new RpcAuth(fs->getUserInfo(), RpcAuth::ParseMethod(conf->getKmsMethod())));
+                        kcp = shared_ptr<KmsClientProvider> (
+                                new KmsClientProvider(auth, conf));
+                        cryptoCodec = shared_ptr<CryptoCodec> (
+                                new CryptoCodec(fileEnInfo, kcp, conf->getCryptoBufferSize()));
 
-                    int64_t file_length = fileStatus.getLength();
-                    int ret = cryptoCodec->init(CryptoMethod::ENCRYPT, file_length);
-                    if (ret < 0) {
-                        THROW(HdfsIOException, "init CryptoCodec failed, file:%s", this->path.c_str());
+                        int64_t file_length = fileStatus.getLength();
+                        int ret = cryptoCodec->init(CryptoMethod::ENCRYPT, file_length);
+                        if (ret < 0) {
+                            THROW(HdfsIOException, "init CryptoCodec failed, file:%s", this->path.c_str());
+                        }
                     }
                 }
             }
@@ -282,22 +284,24 @@ void OutputStreamImpl::openInternal(shared_ptr<FileSystemInter> fs, const char *
     assert((flag & Create) || (flag & Overwrite));
     fs->create(this->path, permission, flag, createParent, this->replication,
             this->blockSize);
-    fileStatus = fs->getFileStatus(this->path.c_str());
-    FileEncryptionInfo *fileEnInfo = fileStatus.getFileEncryption();
-    if (fileStatus.isFileEncrypted()) {
-        if (cryptoCodec == NULL) {
-            auth = shared_ptr<RpcAuth>(
-                    new RpcAuth(fs->getUserInfo(), RpcAuth::ParseMethod(conf->getKmsMethod())));
-            kcp = shared_ptr<KmsClientProvider>(
-                    new KmsClientProvider(auth, conf));
-            cryptoCodec = shared_ptr<CryptoCodec>(
-                    new CryptoCodec(fileEnInfo, kcp, conf->getCryptoBufferSize()));
+    if (!conf->getKmsUrl().empty()) {
+        fileStatus = fs->getFileStatus(this->path.c_str());
+        FileEncryptionInfo *fileEnInfo = fileStatus.getFileEncryption();
+        if (fileStatus.isFileEncrypted()) {
+            if (cryptoCodec == NULL) {
+                auth = shared_ptr<RpcAuth>(
+                        new RpcAuth(fs->getUserInfo(), RpcAuth::ParseMethod(conf->getKmsMethod())));
+                kcp = shared_ptr<KmsClientProvider>(
+                        new KmsClientProvider(auth, conf));
+                cryptoCodec = shared_ptr<CryptoCodec>(
+                        new CryptoCodec(fileEnInfo, kcp, conf->getCryptoBufferSize()));
 
-            int64_t file_length = fileStatus.getLength();
-            assert(file_length == 0);
-            int ret = cryptoCodec->init(CryptoMethod::ENCRYPT, file_length);
-            if (ret < 0) {
-                THROW(HdfsIOException, "init CryptoCodec failed, file:%s", this->path.c_str());
+                int64_t file_length = fileStatus.getLength();
+                assert(file_length == 0);
+                int ret = cryptoCodec->init(CryptoMethod::ENCRYPT, file_length);
+                if (ret < 0) {
+                    THROW(HdfsIOException, "init CryptoCodec failed, file:%s", this->path.c_str());
+                }
             }
         }
     }
