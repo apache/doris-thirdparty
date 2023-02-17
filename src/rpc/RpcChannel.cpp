@@ -112,19 +112,26 @@ const RpcSaslProto_SaslAuth * RpcChannelImpl::createSaslClient(
 
     for (int i = 0; i < auths->size(); ++i) {
         auth = &auths->Get(i);
-        RpcAuth method(RpcAuth::ParseMethod(auth->method()));
-
-        if (method.getMethod() == AuthMethod::TOKEN && key.hasToken()) {
-            token = key.getToken();
-            break;
-        } else if (method.getMethod() == AuthMethod::KERBEROS) {
-            break;
-        } else if (method.getMethod() == AuthMethod::SIMPLE) {
-            return auth;
-        } else if (method.getMethod() == AuthMethod::UNSURENESS) {
-            return auth;
-        } else {
-            auth = NULL;
+        try {
+            RpcAuth method(RpcAuth::ParseMethod(auth->method()));
+            if (method.getMethod() == AuthMethod::TOKEN && key.hasToken()) {
+                token = key.getToken();
+                break;
+            } else if (method.getMethod() == AuthMethod::KERBEROS) {
+                break;
+            } else if (method.getMethod() == AuthMethod::SIMPLE) {
+                return auth;
+            } else if (method.getMethod() == AuthMethod::UNSURENESS) {
+                return auth;
+            } else {
+                auth = NULL;
+            }
+        } catch (const HdfsException & e) {
+            // sometimes the auths may contain unsupported auth method,
+            // such as OAUTHBEARER. should skip it and try next method.
+            LOG(LOG_ERROR,
+                "Failed to parse auth method \"%s\", skip it",
+                auth->method().c_str());
         }
     }
 
