@@ -433,24 +433,26 @@ void InputStreamImpl::openInternal(shared_ptr<FileSystemInter> fs, const char * 
         updateBlockInfos();
         closed = false;
         /* If file is encrypted , then initialize CryptoCodec. */
-        fileStatus = fs->getFileStatus(this->path.c_str());
-        FileEncryptionInfo *fileEnInfo = fileStatus.getFileEncryption();
-        if (fileStatus.isFileEncrypted()) {
-            if (cryptoCodec == NULL) {
-                enAuth = shared_ptr<RpcAuth> (
-                        new RpcAuth(fs->getUserInfo(), RpcAuth::ParseMethod(conf->getKmsMethod())));
-                kcp = shared_ptr<KmsClientProvider> (
-                        new KmsClientProvider(enAuth, conf));
-                cryptoCodec = shared_ptr<CryptoCodec> (
-                        new CryptoCodec(fileEnInfo, kcp, conf->getCryptoBufferSize()));
+        if (!conf->getKmsUrl().empty()) {
+            fileStatus = fs->getFileStatus(this->path.c_str());
+            FileEncryptionInfo *fileEnInfo = fileStatus.getFileEncryption();
+            if (fileStatus.isFileEncrypted()) {
+                if (cryptoCodec == NULL) {
+                    enAuth = shared_ptr<RpcAuth> (
+                            new RpcAuth(fs->getUserInfo(), RpcAuth::ParseMethod(conf->getKmsMethod())));
+                    kcp = shared_ptr<KmsClientProvider> (
+                            new KmsClientProvider(enAuth, conf));
+                    cryptoCodec = shared_ptr<CryptoCodec> (
+                            new CryptoCodec(fileEnInfo, kcp, conf->getCryptoBufferSize()));
 
-                int64_t file_length = 0;
-                int ret = cryptoCodec->init(CryptoMethod::DECRYPT, file_length);
-                if (ret < 0) {
-                    THROW(HdfsIOException, "init CryptoCodec failed, file:%s", this->path.c_str());
+                    int64_t file_length = 0;
+                    int ret = cryptoCodec->init(CryptoMethod::DECRYPT, file_length);
+                    if (ret < 0) {
+                        THROW(HdfsIOException, "init CryptoCodec failed, file:%s", this->path.c_str());
+                    }
                 }
             }
-         }
+        }
     } catch (const HdfsCanceled & e) {
         throw;
     } catch (const FileNotFoundException & e) {
