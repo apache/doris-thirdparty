@@ -78,7 +78,11 @@ SET(clucene_contribs_Files
     ./CLucene/snowball/src_c/stem_UTF_8_swedish.c
     ./CLucene/analysis/jieba/ChineseTokenizer.cpp
 )
-SET ( clucene_contrib_extra_libs clucene-core clucene-shared ${EXTRA_LIBS})
+IF (BUILD_STATIC_LIBRARIES)
+	SET ( clucene_contrib_extra_libs clucene-core-static clucene-shared-static ${EXTRA_LIBS})
+ELSE()
+	SET ( clucene_contrib_extra_libs clucene-core clucene-shared ${EXTRA_LIBS})
+ENDIF()
 
 #find our headers
 file(GLOB_RECURSE HEADERS ${clucene-contribs-lib_SOURCE_DIR}/*.h)

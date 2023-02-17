@@ -206,7 +206,7 @@ string SegmentInfo::segString(Directory* dir) {
     if (useCompoundFile) {
       _files.push_back( string(name) + "." + IndexFileNames::COMPOUND_FILE_EXTENSION);
     } else {
-      ConstValueArray<const char*>& exts = IndexFileNames::NON_STORE_INDEX_EXTENSIONS();
+      const ConstValueArray<const char*>& exts = IndexFileNames::GetInstance().NON_STORE_INDEX_EXTENSIONS();
       for(size_t i=0;i<exts.length;i++){
         addIfExists(_files, name + "." + exts[i]);
       }
@@ -220,14 +220,14 @@ string SegmentInfo::segString(Directory* dir) {
             if (docStoreIsCompoundFile) {
                 _files.push_back(docStoreSegment + "." + IndexFileNames::COMPOUND_FILE_STORE_EXTENSION);
             } else {
-                ConstValueArray<const char *> &exts = IndexFileNames::STORE_INDEX_EXTENSIONS();
+                const ConstValueArray<const char *> &exts = IndexFileNames::GetInstance().STORE_INDEX_EXTENSIONS();
                 for (size_t i = 0; i < exts.length; i++)
                     addIfExists(_files, docStoreSegment + "." + exts[i]);
             }
         } else if (!useCompoundFile) {
             // We are not sharing, and, these files were not
             // included in the compound file
-            ConstValueArray<const char *> &exts = IndexFileNames::STORE_INDEX_EXTENSIONS();
+            const ConstValueArray<const char *> &exts = IndexFileNames::GetInstance().STORE_INDEX_EXTENSIONS();
             for (size_t i = 0; i < exts.length; i++)
                 addIfExists(_files, name + "." + exts[i]);
         }

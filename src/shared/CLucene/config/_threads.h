@@ -94,7 +94,7 @@ CL_NS_DEF(util)
     		min_buckets = 8
     	};	// min_buckets = 2 ^^ N, 0 < N
     
-    	bool operator()( pthread_t t1, pthread_t t2 ) const{
+    	bool operator()( uint64_t t1, uint64_t t2 ) const{
     	    //pthread_equal should be used, but it returns only non-zero if equal, so we can't use it for order compare
     		return t1 < t2;
     	}

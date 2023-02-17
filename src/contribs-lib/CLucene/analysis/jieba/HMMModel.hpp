@@ -33,11 +33,7 @@ struct HMMModel {
   }
   void LoadModel(const string& filePath) {
     ifstream ifile(filePath.c_str());
-    auto result = ifile.is_open();
-    XCHECK(result) << "open " << filePath << " failed.";
-    if(!result) {
-        _CLTHROWA (CL_ERR_UNKNOWN, "failed in chinese tokenizer");
-    }
+    XCHECK(ifile.is_open()) << "open " << filePath << " failed";
     string line;
     vector<string> tmp;
     vector<string> tmp2;

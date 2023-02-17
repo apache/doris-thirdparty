@@ -11,6 +11,9 @@
 #include "_ThreadLocal.h"
 #include "CLucene/config/_threads.h"
 #include <assert.h>
+#if defined(USE_BTHREAD)
+#include <bthread/bthread.h>
+#endif
 
 CL_NS_DEF ( util )
 
@@ -22,6 +25,12 @@ CL_NS_DEF ( util )
 * The thread->datas mapping is in ThreadData.
 */
 
+
+#if defined(USE_BTHREAD)
+#define IS_BTHREAD (bthread_self() != 0)
+#else
+#define IS_BTHREAD 0
+#endif
 
 //predefine for the shared code...
 #if defined(_CL_HAVE_WIN32_THREADS)
@@ -40,6 +49,25 @@ CL_NS_DEF ( util )
         }
     }
 #elif defined(_CL_HAVE_PTHREAD)
+
+#if defined(USE_BTHREAD)
+    bthread_key_t bthread_threadlocal_key;
+    pthread_once_t bthread_threadlocal_key_once = PTHREAD_ONCE_INIT;
+    #define INIT_BTHREAD(ret) \
+	pthread_once(&bthread_threadlocal_key_once, bthread_threadlocal_make_key); \
+	if (bthread_getspecific(bthread_threadlocal_key) == NULL) { bthread_setspecific(bthread_threadlocal_key, (void*)1); } \
+	ret = true;
+
+    //the function that is called when the thread shutsdown
+    void bthread_threadlocal_destructor(void* /*_holder*/){
+        _ThreadLocal::UnregisterCurrentThread();
+    }
+    //the key initialiser function
+    void bthread_threadlocal_make_key()
+    {
+        (void) bthread_key_create(&bthread_threadlocal_key, &bthread_threadlocal_destructor);
+    }
+#endif
     pthread_key_t pthread_threadlocal_key;
     pthread_once_t pthread_threadlocal_key_once = PTHREAD_ONCE_INIT;
     #define INIT_THREAD(ret) \
@@ -135,14 +163,31 @@ _ThreadLocal::~_ThreadLocal()
 void* _ThreadLocal::get()
 {
 	SCOPED_LOCK_MUTEX(_internal->locals_LOCK)
-	return _internal->locals.get ( _LUCENE_CURRTHREADID );
+#if defined(USE_BTHREAD)
+    if (IS_BTHREAD) {
+            return _internal->locals.get ( _LUCENE_CURRBTHREADID );
+    } else {
+            return _internal->locals.get ( _LUCENE_CURRTHREADID );
+    }
+#else
+    return _internal->locals.get ( _LUCENE_CURRTHREADID );
+#endif
 }
 
 void _ThreadLocal::setNull()
 {
 	//just delete this thread from the locals list
-	_LUCENE_THREADID_TYPE id = _LUCENE_CURRTHREADID;
-	SCOPED_LOCK_MUTEX(_internal->locals_LOCK)
+	_LUCENE_THREADID_TYPE id;
+#if defined(USE_BTHREAD)
+    if (IS_BTHREAD) {
+            id = _LUCENE_CURRBTHREADID;
+    } else {
+            id = _LUCENE_CURRTHREADID;
+    }
+#else
+    id = _LUCENE_CURRTHREADID;
+#endif
+    SCOPED_LOCK_MUTEX(_internal->locals_LOCK)
 	Internal::LocalsType::iterator itr = _internal->locals.find ( id );
 	if ( itr != _internal->locals.end() )
 	{
@@ -160,11 +205,27 @@ void _ThreadLocal::set ( void* t )
 	}
 	//make sure we have a threadlocal context (for cleanup)
 	bool ret;
-	INIT_THREAD(ret);
-	assert(ret);
+#if defined(USE_BTHREAD)
+    if (IS_BTHREAD) {
+        INIT_BTHREAD(ret);
+    } else {
+        INIT_THREAD(ret);
+    }
+#else
+    INIT_THREAD(ret);
+#endif
+    assert(ret);
 
-	_LUCENE_THREADID_TYPE id = _LUCENE_CURRTHREADID;
-
+    _LUCENE_THREADID_TYPE id;
+#if defined(USE_BTHREAD)
+    if (IS_BTHREAD) {
+        id = _LUCENE_CURRBTHREADID;
+    } else {
+        id = _LUCENE_CURRTHREADID;
+    }
+#else
+    id = _LUCENE_CURRTHREADID;
+#endif
 	//drop a reference to this ThreadLocal in ThreadData
 	{
 #ifndef _CL_DISABLE_MULTITHREADING
@@ -206,8 +267,17 @@ void _ThreadLocal::UnregisterCurrentThread()
 {
 	if ( threadData == NULL )
 		return;
-	_LUCENE_THREADID_TYPE id = _LUCENE_CURRTHREADID;
-	SCOPED_LOCK_MUTEX ( *threadData_LOCK );
+    _LUCENE_THREADID_TYPE id;
+#if defined(USE_BTHREAD)
+    if (IS_BTHREAD) {
+        id = _LUCENE_CURRBTHREADID;
+    } else {
+        id = _LUCENE_CURRTHREADID;
+    }
+#else
+    id = _LUCENE_CURRTHREADID;
+#endif
+    SCOPED_LOCK_MUTEX ( *threadData_LOCK );
 
 	ThreadDataType::iterator itr = threadData->find(id);
 	if ( itr != threadData->end() ){

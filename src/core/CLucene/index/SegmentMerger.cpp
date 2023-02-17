@@ -150,13 +150,13 @@ void SegmentMerger::createCompoundFile(const char* filename, std::vector<std::st
   bool ownFiles = false;
   if ( files == NULL ){
     files = new vector<string>;
-    files->reserve(IndexFileNames::COMPOUND_EXTENSIONS().length + 1);
+    files->reserve(IndexFileNames::GetInstance().COMPOUND_EXTENSIONS().length + 1);
     ownFiles = true;
   }
 
 	// Basic files
-  for (int32_t i = 0; i < IndexFileNames::COMPOUND_EXTENSIONS().length; i++) {
-    const char* ext = IndexFileNames::COMPOUND_EXTENSIONS()[i];
+  for (int32_t i = 0; i < IndexFileNames::GetInstance().COMPOUND_EXTENSIONS().length; i++) {
+    const char* ext = IndexFileNames::GetInstance().COMPOUND_EXTENSIONS()[i];
     if (mergeDocStores || (strcmp(ext,IndexFileNames::FIELDS_EXTENSION) != 0 &&
         strcmp(ext,IndexFileNames::FIELDS_INDEX_EXTENSION) != 0 ) ){
 		  files->push_back ( string(segment) + "." + ext );
@@ -174,8 +174,8 @@ void SegmentMerger::createCompoundFile(const char* filename, std::vector<std::st
 
   // Vector files
   if ( mergeDocStores && fieldInfos->hasVectors()) {
-    for (int32_t i = 0; i < IndexFileNames::VECTOR_EXTENSIONS().length; i++) {
-	      files->push_back ( segment + "." + IndexFileNames::VECTOR_EXTENSIONS()[i] );
+    for (int32_t i = 0; i < IndexFileNames::GetInstance().VECTOR_EXTENSIONS().length; i++) {
+	      files->push_back ( segment + "." + IndexFileNames::GetInstance().VECTOR_EXTENSIONS()[i] );
       }
   }
 

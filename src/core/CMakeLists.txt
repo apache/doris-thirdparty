@@ -217,6 +217,12 @@ IF (BUILD_SHARED_LIBRARIES)
   add_library(clucene-core SHARED
       ${clucene_core_Files} ${clucene_shared_Files} ${HEADERS}
       )
+  IF (USE_BTHREAD)
+    target_include_directories(clucene-core PUBLIC
+          $<BUILD_INTERFACE:${BRPC_DIR}>
+          )
+    TARGET_LINK_LIBRARIES(clucene-core ssl crypto ${BRPC_LIB} ${GLOG_LIB} ${GFLAG_LIB} ${PROTOBUF_LIB})
+  ENDIF (USE_BTHREAD)
   #set properties on the libraries
   SET_TARGET_PROPERTIES(clucene-core PROPERTIES
       VERSION ${CLUCENE_VERSION}
@@ -234,13 +240,17 @@ IF (BUILD_STATIC_LIBRARIES)
   add_library(clucene-core-static STATIC
       ${clucene_core_Files} ${clucene_shared_Files} ${HEADERS}
       )
-
+  IF (USE_BTHREAD)
+    target_include_directories(clucene-core-static PUBLIC
+            $<BUILD_INTERFACE:${BRPC_DIR}>
+            )
+    TARGET_LINK_LIBRARIES(clucene-core-static ssl crypto ${BRPC_LIB} ${GLOG_LIB} ${GFLAG_LIB} ${PROTOBUF_LIB})
+  ENDIF (USE_BTHREAD)
   SET_TARGET_PROPERTIES(clucene-core-static PROPERTIES
       VERSION ${CLUCENE_VERSION}
       SOVERSION ${CLUCENE_SOVERSION}
       COMPILE_DEFINITIONS_DEBUG _DEBUG
       )
-
   #and install library
   install(TARGETS clucene-core-static
       DESTINATION ${LIB_DESTINATION}

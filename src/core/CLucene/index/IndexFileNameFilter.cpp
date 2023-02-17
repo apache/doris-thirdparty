@@ -13,24 +13,25 @@ CL_NS_DEF(index)
 FilenameFilter::~FilenameFilter(){
 }
 
-IndexFileNameFilter* IndexFileNameFilter::_singleton = NULL;
-IndexFileNameFilter* IndexFileNameFilter::singleton(){
-  if ( _singleton == NULL )
-    _singleton = _CLNEW IndexFileNameFilter();
-  return _singleton;
+//IndexFileNameFilter* IndexFileNameFilter::_singleton = NULL;
+IndexFileNameFilter *IndexFileNameFilter::singleton() {
+    static IndexFileNameFilter _singleton = IndexFileNameFilter();
+    //if ( _singleton == NULL )
+    //  _singleton = _CLNEW IndexFileNameFilter();
+    return &_singleton;
 }
 
 void IndexFileNameFilter::_shutdown(){
-  _CLDELETE(_singleton);
+  //_CLDELETE(_singleton);
 }
 
 IndexFileNameFilter::IndexFileNameFilter() {
 	size_t i;
-	for ( i = 0; i < IndexFileNames::INDEX_EXTENSIONS().length; ++i) {
-	  extensions.insert(IndexFileNames::INDEX_EXTENSIONS()[i]);
+	for ( i = 0; i < IndexFileNames::GetInstance().INDEX_EXTENSIONS().length; ++i) {
+	  extensions.insert(IndexFileNames::GetInstance().INDEX_EXTENSIONS()[i]);
 	}
-	for ( i = 0; i < IndexFileNames::INDEX_EXTENSIONS_IN_COMPOUND_FILE().length; ++i) {
-	  extensionsInCFS.insert(IndexFileNames::INDEX_EXTENSIONS_IN_COMPOUND_FILE()[i]);
+	for ( i = 0; i < IndexFileNames::GetInstance().INDEX_EXTENSIONS_IN_COMPOUND_FILE().length; ++i) {
+	  extensionsInCFS.insert(IndexFileNames::GetInstance().INDEX_EXTENSIONS_IN_COMPOUND_FILE()[i]);
 	}
 }
 IndexFileNameFilter::~IndexFileNameFilter(){

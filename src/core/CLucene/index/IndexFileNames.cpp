@@ -54,7 +54,7 @@ CL_NS_DEF(index)
 		};
   
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_INDEX_EXTENSIONS;
-  CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::INDEX_EXTENSIONS(){
+    const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::INDEX_EXTENSIONS(){
     if ( _INDEX_EXTENSIONS.length == 0 ){
       _INDEX_EXTENSIONS.values = IndexFileNames_INDEX_EXTENSIONS_s;
       _INDEX_EXTENSIONS.length = 15;
@@ -76,7 +76,7 @@ CL_NS_DEF(index)
 		IndexFileNames::NORMS_EXTENSION
 	};
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_INDEX_EXTENSIONS_IN_COMPOUND_FILE;
-  CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::INDEX_EXTENSIONS_IN_COMPOUND_FILE(){
+    const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::INDEX_EXTENSIONS_IN_COMPOUND_FILE(){
     if ( _INDEX_EXTENSIONS_IN_COMPOUND_FILE.length == 0 ){
       _INDEX_EXTENSIONS_IN_COMPOUND_FILE.values = IndexFileNames_INDEX_EXTENSIONS_IN_COMPOUND_FILE_s;
       _INDEX_EXTENSIONS_IN_COMPOUND_FILE.length = 11;
@@ -92,7 +92,7 @@ CL_NS_DEF(index)
 		IndexFileNames::FIELDS_EXTENSION
 	};
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_STORE_INDEX_EXTENSIONS;
-  CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::STORE_INDEX_EXTENSIONS(){
+    const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::STORE_INDEX_EXTENSIONS(){
     if ( _STORE_INDEX_EXTENSIONS.length == 0 ){
       _STORE_INDEX_EXTENSIONS.values = IndexFileNames_STORE_INDEX_EXTENSIONS_s;
       _STORE_INDEX_EXTENSIONS.length = 5;
@@ -109,7 +109,7 @@ CL_NS_DEF(index)
 		IndexFileNames::NORMS_EXTENSION
 	};
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_NON_STORE_INDEX_EXTENSIONS;
-  CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::NON_STORE_INDEX_EXTENSIONS(){
+    const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::NON_STORE_INDEX_EXTENSIONS(){
     if ( _NON_STORE_INDEX_EXTENSIONS.length == 0 ){
       _NON_STORE_INDEX_EXTENSIONS.values = IndexFileNames_NON_STORE_INDEX_EXTENSIONS_s;
       _NON_STORE_INDEX_EXTENSIONS.length = 6;
@@ -127,7 +127,7 @@ CL_NS_DEF(index)
 		IndexFileNames::TERMS_EXTENSION
 	};
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_COMPOUND_EXTENSIONS;
-  CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::COMPOUND_EXTENSIONS(){
+    const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::COMPOUND_EXTENSIONS(){
     if ( _COMPOUND_EXTENSIONS.length == 0 ){
       _COMPOUND_EXTENSIONS.values = IndexFileNames_COMPOUND_EXTENSIONS_s;
       _COMPOUND_EXTENSIONS.length = 7;
@@ -141,7 +141,7 @@ CL_NS_DEF(index)
 		IndexFileNames::VECTORS_FIELDS_EXTENSION
 	};
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_VECTOR_EXTENSIONS;
-  CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::VECTOR_EXTENSIONS(){
+    const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::VECTOR_EXTENSIONS(){
     if ( _VECTOR_EXTENSIONS.length == 0 ){
       _VECTOR_EXTENSIONS.values = IndexFileNames_VECTOR_EXTENSIONS_s;
       _VECTOR_EXTENSIONS.length = 3;
@@ -168,8 +168,8 @@ CL_NS_DEF(index)
 		if ( p != NULL && strcmp( p+1, COMPOUND_FILE_STORE_EXTENSION ) == 0 ) {
 			return true;
 		}
-		for ( int32_t i = 0; i < STORE_INDEX_EXTENSIONS().length; i++ ) {
-			if ( p != NULL && strcmp( p+1, STORE_INDEX_EXTENSIONS()[i] ) == 0 ) {
+		for ( int32_t i = 0; i < GetInstance().STORE_INDEX_EXTENSIONS().length; i++ ) {
+			if ( p != NULL && strcmp( p+1, GetInstance().STORE_INDEX_EXTENSIONS()[i] ) == 0 ) {
 				return true;
 			}
 		}

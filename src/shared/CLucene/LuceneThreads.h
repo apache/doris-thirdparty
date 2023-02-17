@@ -37,7 +37,7 @@ class CLuceneThreadIdCompare;
        class mutexGuard;
 
     	 #if defined(_CL_HAVE_PTHREAD)
-          #define _LUCENE_THREADID_TYPE pthread_t
+          #define _LUCENE_THREADID_TYPE uint64_t
         	#define _LUCENE_THREAD_FUNC(name, argName) void* name(void* argName) //< use this macro to correctly define the thread start routine
         	#define _LUCENE_THREAD_FUNC_RETURN(val) return (void*)val;
           typedef void* (luceneThreadStartRoutine)(void* lpThreadParameter );
@@ -53,13 +53,16 @@ class CLuceneThreadIdCompare;
           	~mutex_thread();
           	void lock();
           	void unlock();
+#if defined(USE_BTHREAD)
+            static _LUCENE_THREADID_TYPE _GetCurrentBThreadId();
+#endif
           	static _LUCENE_THREADID_TYPE _GetCurrentThreadId();
         		static _LUCENE_THREADID_TYPE CreateThread(luceneThreadStartRoutine* func, void* arg);
         		static void JoinThread(_LUCENE_THREADID_TYPE id);
         		void Wait(mutex_thread* shared_lock);
         		void NotifyAll();
           };
-					class CLUCENE_SHARED_EXPORT shared_condition{
+          class CLUCENE_SHARED_EXPORT shared_condition{
         	private:
         		class Internal;
         		Internal* _internal;
@@ -123,6 +126,9 @@ class CLuceneThreadIdCompare;
         		void unlock();
 						static void _exitThread(int ret);
         		static _LUCENE_THREADID_TYPE _GetCurrentThreadId();
+#if defined(USE_BTHREAD)
+#define _LUCENE_CURRBTHREADID CL_NS(util)::mutex_thread::_GetCurrentBThreadId()
+#endif
         		static _LUCENE_THREADID_TYPE CreateThread(luceneThreadStartRoutine* func, void* arg);
         		static void JoinThread(_LUCENE_THREADID_TYPE id);
 
@@ -145,6 +151,9 @@ class CLuceneThreadIdCompare;
     	
     	#define _LUCENE_THREAD_CREATE(func, arg) CL_NS(util)::mutex_thread::CreateThread(func,arg)
     	#define _LUCENE_THREAD_JOIN(id) CL_NS(util)::mutex_thread::JoinThread(id)
+#if defined(USE_BTHREAD)
+    #define _LUCENE_CURRBTHREADID CL_NS(util)::mutex_thread::_GetCurrentBThreadId()
+#endif
       #define _LUCENE_CURRTHREADID CL_NS(util)::mutex_thread::_GetCurrentThreadId()
       #define _LUCENE_THREADMUTEX CL_NS(util)::mutex_thread
       #define _LUCENE_THREADCOND CL_NS(util)::shared_condition
