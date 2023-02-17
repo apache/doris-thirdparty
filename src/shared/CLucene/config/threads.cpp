@@ -8,7 +8,9 @@
 #include "CLucene/LuceneThreads.h"
 #include "_threads.h"
 #include <assert.h>
-
+#if defined(USE_BTHREAD)
+#include <bthread/bthread.h>
+#endif
 CL_NS_DEF(util)
 
 #ifndef _CL_DISABLE_MULTITHREADING
@@ -179,6 +181,12 @@ CL_NS_DEF(util)
 		_CLPTHREAD_CHECK(pthread_mutex_destroy(&_internal->mtx), "~mutex_thread destructor failed")
 		delete _internal;
 	}
+
+#if defined(USE_BTHREAD)
+    bthread_t mutex_thread::_GetCurrentBThreadId(){
+        return bthread_self();
+    }
+#endif
 
     _LUCENE_THREADID_TYPE mutex_thread::_GetCurrentThreadId(){
         return pthread_self();
