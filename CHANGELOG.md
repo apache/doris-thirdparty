@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## v2.3.8
+1. Fix supported auth method
+
 ## v2.3.7
 1. Fix kms seek bug
 
