@@ -7,7 +7,9 @@
 #ifndef _LuceneThreads_h
 #define  _LuceneThreads_h
 
-
+#if defined(USE_BTHREAD)
+#include <bthread/bthread.h>
+#endif
 CL_NS_DEF(util)
 class CLuceneThreadIdCompare;
 
@@ -37,9 +39,13 @@ class CLuceneThreadIdCompare;
        class mutexGuard;
 
     	 #if defined(_CL_HAVE_PTHREAD)
-          #define _LUCENE_THREADID_TYPE uint64_t
-        	#define _LUCENE_THREAD_FUNC(name, argName) void* name(void* argName) //< use this macro to correctly define the thread start routine
-        	#define _LUCENE_THREAD_FUNC_RETURN(val) return (void*)val;
+#if defined(USE_BTHREAD)
+#define _LUCENE_THREADID_TYPE bthread_t
+#else
+#define _LUCENE_THREADID_TYPE pthread_t
+#endif
+#define _LUCENE_THREAD_FUNC(name, argName) void *name(void *argName)//< use this macro to correctly define the thread start routine
+#define _LUCENE_THREAD_FUNC_RETURN(val) return (void*)val;
           typedef void* (luceneThreadStartRoutine)(void* lpThreadParameter );
           
           class CLUCENE_SHARED_EXPORT mutex_thread
