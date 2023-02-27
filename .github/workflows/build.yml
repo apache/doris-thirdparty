@@ -170,7 +170,6 @@ jobs:
             export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
 
             sudo apt update
-            sudo apt upgrade --yes
             sudo DEBIAN_FRONTEND=noninteractive apt install --yes ${{ matrix.config.packages }}
 
             mkdir -p "${DEFAULT_DIR}"
