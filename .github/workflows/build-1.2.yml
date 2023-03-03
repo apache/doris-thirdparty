@@ -123,6 +123,7 @@ jobs:
               'openjdk@11'
               'maven'
               'node'
+              'llvm'
 
           - name: Linux
             os: ubuntu-22.04
