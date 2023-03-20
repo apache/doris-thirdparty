@@ -734,9 +734,11 @@ public:
     void setInfoStream(std::ostream *infoStream) override {}
     void setRAMBufferSizeMB(float_t mb) override {}
     void close() override {}
-    const std::vector<std::string> &files() override {
-        auto EMPTY = _CLNEW std::vector<string>;
-        return *EMPTY;
+    const std::vector<std::string>& files() override {
+        if (_files != nullptr)
+            return *_files;
+        _files = _CLNEW std::vector<string>;
+        return *_files;
     }
     void setMaxBufferedDeleteTerms(int32_t _maxBufferedDeleteTerms) override {_CLTHROW_NOT_IMPLEMENT}
     int32_t getMaxBufferedDeleteTerms() override {_CLTHROW_NOT_IMPLEMENT}
@@ -752,6 +754,9 @@ public:
     bool bufferDeleteTerms(const CL_NS(util)::ArrayBase<Term *> *terms) override {_CLTHROW_NOT_IMPLEMENT}
     int64_t getRAMUsed() override {_CLTHROW_NOT_IMPLEMENT}
     const std::vector<int32_t> *getBufferedDeleteDocIDs() override {_CLTHROW_NOT_IMPLEMENT}
+
+private:
+    std::vector<std::string>* _files = nullptr;
 
 public:
     ThreadState *threadState;

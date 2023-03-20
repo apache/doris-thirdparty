@@ -79,8 +79,6 @@ DocumentsWriter::ThreadState::ThreadState(DocumentsWriter *__parent) : postingsF
     this->pos = NULL;
     this->freq = NULL;
     this->doFlushAfter = false;
-
-    analyzer_chs = _CLNEW lucene::analysis::SimpleAnalyzer<TCHAR>();
 }
 
 DocumentsWriter::ThreadState::~ThreadState() {
@@ -91,10 +89,12 @@ DocumentsWriter::ThreadState::~ThreadState() {
     _CLDELETE(tvfLocal);
     _CLDELETE(fdtLocal);
 
+    if (maxTermPrefix != nullptr) {
+        _CLDELETE_ARRAY(maxTermPrefix);
+    }
+
     for (size_t i = 0; i < allFieldDataArray.length; i++)
         _CLDELETE(allFieldDataArray.values[i]);
-
-    _CLDELETE(analyzer_chs);
 }
 
 void DocumentsWriter::ThreadState::resetPostings() {
@@ -187,7 +187,6 @@ void DocumentsWriter::ThreadState::init(Document *doc, int32_t docID) {
     numStoredFields = 0;
     numFieldData = 0;
     numVectorFields = 0;
-    maxTermPrefix = NULL;
 
     assert(0 == fdtLocal->length());
     assert(0 == fdtLocal->getFilePointer());
@@ -798,12 +797,7 @@ void DocumentsWriter::ThreadState::FieldData::processField(Analyzer *analyzer) {
             Field *field = docFieldsFinal[j];
 
             if (field->isIndexed()) {
-                //Oney: get the CHN if needed
-                if (field->isTokenizedCHS()) {
-                    invertField(field, threadState->analyzer_chs, maxFieldLength);
-                } else {
-                    invertField(field, analyzer, maxFieldLength);
-                }
+                invertField(field, analyzer, maxFieldLength);
             }
 
             if (field->isStored()) {
@@ -1117,9 +1111,10 @@ void DocumentsWriter::ThreadState::FieldData::addPosition(Token *token) {
                     // to a prefix, throwing an exception, etc).
                     if (threadState->maxTermPrefix == NULL) {
                         threadState->maxTermPrefix = _CL_NEWARRAY(TCHAR, 31);
-                        _tcsncpy(threadState->maxTermPrefix, tokenText, 30);
-                        threadState->maxTermPrefix[30] = 0;
                     }
+
+                    _tcsncpy(threadState->maxTermPrefix, tokenText, 30);
+                    threadState->maxTermPrefix[30] = 0;
 
                     // Still increment position:
                     position++;

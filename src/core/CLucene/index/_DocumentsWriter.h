@@ -601,8 +601,6 @@ private:
 
     DocumentsWriter* _parent;
 
-    CL_NS(analysis)::Analyzer* analyzer_chs;
-
     ThreadState(DocumentsWriter* _parent);
     virtual ~ThreadState();
 
