@@ -13,7 +13,7 @@
 CL_NS_DEF(index)
 
 
-class Term_Equals:public CL_NS_STD(binary_function)<const Term*,const Term*,bool>
+class Term_Equals
 {
 public:
 	bool operator()( const Term* val1, const Term* val2 ) const{
