@@ -21,7 +21,6 @@ on: ['push', 'pull_request']
 
 jobs:
   build:
-    name: Build
     strategy:
       matrix:
         config:
@@ -75,6 +74,7 @@ jobs:
               'openjdk-11-jdk-headless'
               'maven'
 
+    name: Build (${{ matrix.config.name }})
     runs-on: ${{ matrix.config.os }}
     steps:
       - name: Prepare for ${{ matrix.config.os }}
