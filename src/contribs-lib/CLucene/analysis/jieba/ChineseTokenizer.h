@@ -10,6 +10,21 @@
 
 CL_NS_DEF2(analysis,jieba)
 
+class JiebaSingleton {
+public:
+    static cppjieba::Jieba& getInstance(const std::string& dictPath = "") {
+        static cppjieba::Jieba instance(dictPath + "/" + "jieba.dict.utf8",
+                                        dictPath + "/" + "hmm_model.utf8",
+                                        dictPath + "/" + "user.dict.utf8",
+                                        dictPath + "/" + "idf.utf8",
+                                        dictPath + "/" + "stop_words.utf8");
+        return instance;
+    }
+
+private:
+    JiebaSingleton() = default;
+};
+
 class ChineseTokenizer : public lucene::analysis::Tokenizer {
 private:
     /** word offset, used to imply which character(in ) is parsed */
@@ -33,19 +48,18 @@ private:
      */
     const TCHAR* ioBuffer{};
     std::vector<std::string> tokens_text;
-    std::vector<std::unique_ptr<Token>> tokens;
+    //std::vector<std::unique_ptr<Token>> tokens;
 
 public:
-    static std::unique_ptr<cppjieba::Jieba> cppjieba;
     // Constructor
     explicit ChineseTokenizer(lucene::util::Reader *reader);
     static void init(const std::string& dictPath="");
 
     // Destructor
-    ~ChineseTokenizer() override {}
+    ~ChineseTokenizer() override = default;
 
     // Override the next method to tokenize Chinese text using Jieba
-    lucene::analysis::Token* next(lucene::analysis::Token* token);
+    lucene::analysis::Token* next(lucene::analysis::Token* token) override;
 };
 
 CL_NS_END2
