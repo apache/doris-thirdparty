@@ -53,8 +53,9 @@ namespace bkd {
             bytes_per_doc_ = packed_bytes_length_ + 4 + 4;
         }
 
-        max_points_sort_in_heap_ = (int32_t) (0.5 * (maxMBSortInHeap * 1024 * 1024) / (bytes_per_doc_ * numDataDims));
-
+        // because offline sort is not implemented yet, we just use heap for all points
+        max_points_sort_in_heap_ = totalPointCount;
+        //max_points_sort_in_heap_ = (int32_t) (0.5 * (maxMBSortInHeap * 1024 * 1024) / (bytes_per_doc_ * numDataDims));
         // Finally, we must be able to hold at least the leaf node in heap during build:
         if (max_points_sort_in_heap_ < maxPointsInLeafNode) {
             auto msg = "maxMBSortInHeap=" + std::to_string(maxMBSortInHeap) + " only allows for maxPointsSortInHeap=" + std::to_string(max_points_sort_in_heap_) + ", but this is less than maxPointsInLeafNode=" + std::to_string(maxPointsInLeafNode) + "; either increase maxMBSortInHeap or decrease maxPointsInLeafNode";
