@@ -147,7 +147,7 @@ CL_NS_DEF(search)
 			return NULL;
 
 		return _CLNEW TermScorer(this, termDocs, similarity,
-								reader->norms(_term->field()));
+								nullptr);
 	}
 
 	Explanation* TermWeight::explain(IndexReader* reader, int32_t doc){

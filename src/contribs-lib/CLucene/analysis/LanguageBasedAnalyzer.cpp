@@ -6,13 +6,13 @@
 ------------------------------------------------------------------------------*/
 #include "CLucene/_ApiHeader.h"
 
-#include "LanguageBasedAnalyzer.h"
 #include "CLucene/analysis/Analyzers.h"
 #include "CLucene/analysis/cjk/CJKAnalyzer.h"
 #include "CLucene/analysis/jieba/ChineseTokenizer.h"
 #include "CLucene/analysis/standard/StandardFilter.h"
 #include "CLucene/analysis/standard/StandardTokenizer.h"
 #include "CLucene/snowball/SnowballFilter.h"
+#include "LanguageBasedAnalyzer.h"
 
 CL_NS_USE(util)
 CL_NS_USE2(analysis, cjk)
@@ -29,19 +29,57 @@ LanguageBasedAnalyzer::LanguageBasedAnalyzer(const TCHAR *language, bool stem) {
         _tcsncpy(lang, language, 100);
     this->stem = stem;
 }
-LanguageBasedAnalyzer::~LanguageBasedAnalyzer() {
-}
+
+LanguageBasedAnalyzer::~LanguageBasedAnalyzer() = default;
 void LanguageBasedAnalyzer::setLanguage(const TCHAR *language) {
     _tcsncpy(lang, language, 100);
 }
-void LanguageBasedAnalyzer::setStem(bool stem) {
-    this->stem = stem;
+
+void LanguageBasedAnalyzer::setStem(bool s) {
+    this->stem = s;
 }
-void LanguageBasedAnalyzer::initDict(const std::string& dictPath) {
+
+void LanguageBasedAnalyzer::initDict(const std::string &dictPath) {
     if (_tcscmp(lang, _T("chinese")) == 0) {
         CL_NS2(analysis, jieba)::ChineseTokenizer::init(dictPath);
     }
 }
+
+TokenStream *LanguageBasedAnalyzer::reusableTokenStream(const TCHAR * /*fieldName*/, CL_NS(util)::Reader *reader) {
+    TokenStream *tokenizer = getPreviousTokenStream();
+    if (tokenizer == nullptr) {
+        if (_tcscmp(lang, _T("cjk")) == 0) {
+            tokenizer = _CLNEW CL_NS2(analysis, cjk)::CJKTokenizer(reader);
+        } else if (_tcscmp(lang, _T("chinese")) == 0) {
+            tokenizer = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader);
+        } else {
+            BufferedReader *bufferedReader = reader->__asBufferedReader();
+            if (bufferedReader == NULL)
+                tokenizer = _CLNEW StandardTokenizer(_CLNEW FilteredBufferedReader(reader, false), true);
+            else
+                tokenizer = _CLNEW StandardTokenizer(bufferedReader);
+
+            tokenizer = _CLNEW StandardFilter(tokenizer, true);
+
+            if (stem)
+                tokenizer = _CLNEW SnowballFilter(tokenizer, lang, true);//todo: should check whether snowball supports the language
+
+            if (stem)                                                     //hmm... this could be configured seperately from stem
+                tokenizer = _CLNEW ISOLatin1AccentFilter(tokenizer, true);//todo: this should really only be applied to latin languages...
+
+            //lower case after the latin1 filter
+            tokenizer = _CLNEW LowerCaseFilter(tokenizer, true);
+        }
+        setPreviousTokenStream(tokenizer);
+    } else {
+        auto t = dynamic_cast<Tokenizer *>(tokenizer);
+        if (t != nullptr) {
+            t->reset(reader);
+        }
+    }
+    return tokenizer;
+}
+
 TokenStream *LanguageBasedAnalyzer::tokenStream(const TCHAR *fieldName, Reader *reader) {
     TokenStream *ret = NULL;
     if (_tcscmp(lang, _T("cjk")) == 0) {

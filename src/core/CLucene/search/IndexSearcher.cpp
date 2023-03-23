@@ -378,8 +378,8 @@ CL_NS_DEF(search)
       Scorer* scorer = NULL;
       try
       {
-        Weight* weight = query->weight(this);
-        Scorer* scorer = weight->scorer(reader);
+        weight = query->weight(this);
+        scorer = weight->scorer(reader);
         if (scorer == NULL) {
           Query* wq = weight->getQuery();
           if (wq != query) // query was rewritten
