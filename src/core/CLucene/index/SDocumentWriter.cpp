@@ -107,6 +107,9 @@ SDocumentsWriter<T>::~SDocumentsWriter() {
     if (threadState != nullptr) {
         _CLDELETE(threadState);
     }
+    if (_files != nullptr) {
+        _CLDELETE(_files);
+    }
 
     // Make sure unused posting slots aren't attempted delete on
     if (this->postingsFreeListDW.values) {
