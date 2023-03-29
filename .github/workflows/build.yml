@@ -46,7 +46,7 @@ jobs:
               'openjdk@11'
               'maven'
               'node'
-              'llvm@15'
+              'llvm@16'
 
           - name: Linux
             os: ubuntu-22.04
@@ -82,9 +82,15 @@ jobs:
           cd /tmp
 
           curl -L https://sourceforge.net/projects/libpng/files/zlib/1.2.11/zlib-1.2.11.tar.gz | tar -zxf -
-          curl -L https://boostorg.jfrog.io/artifactory/main/release/1.73.0/source/boost_1_73_0.tar.gz -o - | tar -zxf -
+          curl -L https://boostorg.jfrog.io/artifactory/main/release/1.81.0/source/boost_1_81_0.tar.gz -o - | tar -zxf -
 
           if [[ "${{ matrix.config.name }}" == 'macOS' ]]; then
+            pushd "$(brew --repo)"
+            git fetch
+            git reset --hard origin/master
+            brew update
+            popd
+
             brew install ${{ matrix.config.packages }}
 
             CELLARS=(${{ matrix.config.packages }})
@@ -93,8 +99,8 @@ jobs:
             done
             export PATH="${EXPORT_CELLARS}:/usr/bin:${PATH}"
 
-            export CC="$(brew --prefix)/opt/llvm@15/bin/clang"
-            export CXX="$(brew --prefix)/opt/llvm@15/bin/clang++"
+            export CC="$(brew --prefix)/opt/llvm@16/bin/clang"
+            export CXX="$(brew --prefix)/opt/llvm@16/bin/clang++"
             boost_toolset=clang
           else
             sudo apt update
@@ -133,12 +139,12 @@ jobs:
           popd
 
           # Install Boost
-          pushd boost_1_73_0
+          pushd boost_1_81_0
           CXXFLAGS="${cxxflags}" ./bootstrap.sh --prefix="${INSTALLED_DIR}" --with-toolset="${boost_toolset}"
           # -q: Fail at first error
           sudo ./b2 -q link=static runtime-link=static -j "$(nproc)" --without-mpi --without-graph \
             --without-graph_parallel --without-python \
-            cxxflags="-std=c++11 -g -I${INSTALLED_DIR}/include -L${INSTALLED_DIR}/lib" install
+            cxxflags="-std=c++17 -g -I${INSTALLED_DIR}/include -L${INSTALLED_DIR}/lib" install
           popd
 
       - name: Checkout ${{ github.ref }}
@@ -155,8 +161,8 @@ jobs:
             done
             export PATH="${EXPORT_CELLARS}:/usr/bin:${PATH}"
 
-            export CC="$(brew --prefix)/opt/llvm@15/bin/clang"
-            export CXX="$(brew --prefix)/opt/llvm@15/bin/clang++"
+            export CC="$(brew --prefix)/opt/llvm@16/bin/clang"
+            export CXX="$(brew --prefix)/opt/llvm@16/bin/clang++"
             warning_narrowing='-Wno-c++11-narrowing'
           else
             export DEFAULT_DIR='/opt'
