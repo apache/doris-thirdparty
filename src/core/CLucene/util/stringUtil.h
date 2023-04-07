@@ -5,7 +5,6 @@
 #ifndef _lucene_util__stringutil_H
 #define _lucene_util__stringutil_H
 
-#include "CLucene/_ApiHeader.h"
 #ifdef __SSE2__
 #include <emmintrin.h>
 #elif __aarch64__
