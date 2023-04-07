@@ -13,6 +13,52 @@
 CL_NS_USE(util)
 CL_NS_DEF(analysis)
 
+template<>
+void CharTokenizer<char>::normalize(const char *src, int64_t len, char *dst) {
+    to_lower((const uint8_t *) src, len, (uint8_t *) dst);
+}
+
+template<>
+Token *CharTokenizer<char>::next(Token *token) {
+    int32_t length = 0;
+    int32_t start = offset;
+    while (true) {
+        char c;
+        offset++;
+        if (bufferIndex >= dataLen) {
+            dataLen = input->read((const void **) &ioBuffer, 1, LUCENE_IO_BUFFER_SIZE);
+            if (dataLen == -1)
+                dataLen = 0;
+            bufferIndex = 0;
+        }
+        if (dataLen <= 0) {
+            if (length > 0)
+                break;
+            else
+                return NULL;
+        } else
+            c = ioBuffer[bufferIndex++];
+        if (isTokenChar(c)) {// if it's a token TCHAR
+
+            if (length == 0)// start of token
+                start = offset - 1;
+
+            //buffer[length++] = normalize(c);          // buffer it, normalized
+            buffer[length++] = c;
+            if (length == LUCENE_MAX_WORD_LEN)// buffer overflow!
+                break;
+
+        } else if (length > 0)// at non-Letter w/ chars
+            break;            // return 'em
+    }
+    char buffer_copy[LUCENE_MAX_WORD_LEN + 1];
+    normalize(buffer, length, buffer_copy);
+    buffer_copy[length] = 0;
+    token->set(buffer_copy, start, start + length);
+
+    return token;
+};
+
 template<typename T>
 LetterTokenizer<T>::LetterTokenizer(CL_NS(util)::Reader* in):
     CharTokenizer<T>(in) {
