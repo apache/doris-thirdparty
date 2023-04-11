@@ -616,6 +616,8 @@ void SDocumentsWriter<T>::ThreadState::processDocument(Analyzer *sanalyzer) {
     // We process the document one field at a time
     for (int32_t i = 0; i < numFields; i++)
         fieldDataArray[i]->processField(sanalyzer);
+    if (_parent->ramBufferSize != -1 && _parent->numBytesUsed > 0.95 * _parent->ramBufferSize)
+        _parent->balanceRAM();
 }
 
 template<typename T>
@@ -834,6 +836,7 @@ char *SDocumentsWriter<char>::getSCharBlock() {
     char *c;
     if (0 == size) {
         numBytesAlloc += CHAR_BLOCK_SIZE * SCHAR_NUM_BYTE;
+        balanceRAM();
         c = _CL_NEWARRAY(char, CHAR_BLOCK_SIZE);
         memset(c, 0, sizeof(char) * CHAR_BLOCK_SIZE);
     } else {
@@ -874,6 +877,7 @@ void SDocumentsWriter<T>::getPostings(ValueArray<Posting *> &postings) {
         if (newPostingsAllocCount > this->postingsFreeListDW.length)
             this->postingsFreeListDW.resize((int32_t) (1.25 * newPostingsAllocCount));
 
+        balanceRAM();
         for (size_t i = numToCopy; i < postings.length; i++) {
             postings.values[i] = _CLNEW Posting();
             numBytesAlloc += POSTING_NUM_BYTE;
@@ -1248,6 +1252,7 @@ uint8_t *SDocumentsWriter<T>::getByteBlock(bool trackAllocations) {
     uint8_t *b;
     if (0 == size) {
         numBytesAlloc += BYTE_BLOCK_SIZE;
+        balanceRAM();
         b = _CL_NEWARRAY(uint8_t, BYTE_BLOCK_SIZE);
         memset(b, 0, sizeof(uint8_t) * BYTE_BLOCK_SIZE);
     } else {
@@ -1340,6 +1345,96 @@ void SDocumentsWriter<T>::BufferedNorms::fill(int32_t docID) {
         upto = docID;
     }
 }
+
+template<typename T>
+void SDocumentsWriter<T>::balanceRAM() {
+    if (ramBufferSize == IndexWriter::DISABLE_AUTO_FLUSH || bufferIsFull)
+        return;
+
+    // We free our allocations if we've allocated 5% over
+    // our allowed RAM buffer
+    const int64_t freeTrigger = (int64_t) (1.05 * ramBufferSize);
+    const int64_t freeLevel = (int64_t) (0.95 * ramBufferSize);
+
+    // We flush when we've used our target usage
+    const int64_t flushTrigger = (int64_t) ramBufferSize;
+
+    if (numBytesAlloc > freeTrigger) {
+        if (infoStream != NULL)
+            (*infoStream) << string("  RAM: now balance allocations: usedMB=") << toMB(numBytesUsed) + string(" vs trigger=") << toMB(flushTrigger) << string(" allocMB=") << toMB(numBytesAlloc) << string(" vs trigger=") << toMB(freeTrigger) << string(" postingsFree=") << toMB(this->postingsFreeCountDW * POSTING_NUM_BYTE) << string(" byteBlockFree=") << toMB(freeByteBlocks.size() * BYTE_BLOCK_SIZE) << string(" charBlockFree=") << toMB(freeSCharBlocks.size() * CHAR_BLOCK_SIZE * CHAR_NUM_BYTE) << string("\n");
+
+        // When we've crossed 100% of our target Postings
+        // RAM usage, try to free up until we're back down
+        // to 95%
+        const int64_t startBytesAlloc = numBytesAlloc;
+
+        const int32_t postingsFreeChunk = (int32_t) (BYTE_BLOCK_SIZE / POSTING_NUM_BYTE);
+
+        int32_t iter = 0;
+
+        // We free equally from each pool in 64 KB
+        // chunks until we are below our threshold
+        // (freeLevel)
+
+        while (numBytesAlloc > freeLevel) {
+            if (0 == freeByteBlocks.size() && 0 == freeSCharBlocks.size() && 0 == this->postingsFreeCountDW) {
+                // Nothing else to free -- must flush now.
+                bufferIsFull = true;
+                if (infoStream != NULL)
+                    (*infoStream) << string("    nothing to free; now set bufferIsFull\n");
+                break;
+            }
+
+            if ((0 == iter % 3) && freeByteBlocks.size() > 0) {
+                freeByteBlocks.remove(freeByteBlocks.size() - 1);
+                numBytesAlloc -= BYTE_BLOCK_SIZE;
+            }
+
+            if ((1 == iter % 3) && freeSCharBlocks.size() > 0) {
+                freeSCharBlocks.remove(freeSCharBlocks.size() - 1);
+                numBytesAlloc -= CHAR_BLOCK_SIZE * CHAR_NUM_BYTE;
+            }
+
+            if ((2 == iter % 3) && this->postingsFreeCountDW > 0) {
+                int32_t numToFree;
+                if (this->postingsFreeCountDW >= postingsFreeChunk)
+                    numToFree = postingsFreeChunk;
+                else
+                    numToFree = this->postingsFreeCountDW;
+                for (size_t i = this->postingsFreeCountDW - numToFree; i < this->postingsFreeCountDW; i++) {
+                    _CLDELETE(this->postingsFreeListDW.values[i]);
+                }
+                this->postingsFreeCountDW -= numToFree;
+                this->postingsAllocCountDW -= numToFree;
+                numBytesAlloc -= numToFree * POSTING_NUM_BYTE;
+            }
+
+            iter++;
+        }
+
+        if (infoStream != NULL) {
+            (*infoStream) << "    after free: freedMB=" + Misc::toString((float_t) ((startBytesAlloc - numBytesAlloc) / 1024.0 / 1024.0)) +
+                                     " usedMB=" + Misc::toString((float_t) (numBytesUsed / 1024.0 / 1024.0)) +
+                                     " allocMB=" + Misc::toString((float_t) (numBytesAlloc / 1024.0 / 1024.0))
+                          << string("\n");
+        }
+
+    } else {
+        // If we have not crossed the 100% mark, but have
+        // crossed the 95% mark of RAM we are actually
+        // using, go ahead and flush.  This prevents
+        // over-allocating and then freeing, with every
+        // flush.
+        if (numBytesUsed > flushTrigger) {
+            if (infoStream != NULL) {
+                (*infoStream) << string("  RAM: now flush @ usedMB=") << Misc::toString((float_t) (numBytesUsed / 1024.0 / 1024.0)) << string(" allocMB=") << Misc::toString((float_t) (numBytesAlloc / 1024.0 / 1024.0)) << string(" triggerMB=") << Misc::toString((float_t) (flushTrigger / 1024.0 / 1024.0)) << string("\n");
+            }
+
+            bufferIsFull = true;
+        }
+    }
+}
+
 template class SDocumentsWriter<char>;
 template class SDocumentsWriter<TCHAR>;
 CL_NS_END
