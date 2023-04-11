@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v2.3.9
+1. Fix compile warnings and openssl deprecated api
+
+## v2.3.8
+1. skip unsupported auth method
+
 ## v2.3.7
 1. Fix kms seek bug
 
