@@ -51,13 +51,17 @@ namespace Hdfs {
 	}
 
 	CryptoCodec::CryptoCodec(FileEncryptionInfo *encryptionInfo, shared_ptr<KmsClientProvider> kcp, int32_t bufSize) :
-		encryptionInfo(encryptionInfo), kcp(kcp), bufSize(bufSize)
+		kcp(kcp), encryptionInfo(encryptionInfo), bufSize(bufSize)
 	{
 
 		// Init global status
 		ERR_load_crypto_strings();
 		OpenSSL_add_all_algorithms();
+		#if OPENSSL_VERSION_NUMBER < 0x10100000L
 		OPENSSL_config(NULL);
+		#else
+		OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, NULL);
+		#endif
 
 		// Create cipher context
 		cipherCtx = EVP_CIPHER_CTX_new();
@@ -128,7 +132,7 @@ namespace Hdfs {
 			return -1;
 		}
 
-		LOG(DEBUG3, "CryptoCodec init success, length of the decrypted key is : %llu, crypto method is : %d", AlgorithmBlockSize, crypto_method);
+		LOG(DEBUG3, "CryptoCodec init success, length of the decrypted key is : %lu, crypto method is : %d", AlgorithmBlockSize, crypto_method);
 		return 1;
 
 	}
@@ -150,7 +154,6 @@ namespace Hdfs {
                 } else {
                         LOG(WARNING, "CryptoCodec : Invalid stream_offset %" PRId64, stream_offset);
                         return -1;
-                
                 }
 
 		// Judge the crypto method is encrypt or decrypt.
@@ -190,7 +193,7 @@ namespace Hdfs {
 
 		// If the encode/decode buffer size larger than crypto buffer size, encode/decode buffer one by one
 		while (remaining > bufSize) {
-			ret = EVP_CipherUpdate(cipherCtx, (unsigned char *) &out_buf[offset], &len, 
+			ret = EVP_CipherUpdate(cipherCtx, (unsigned char *) &out_buf[offset], &len,
 				(const unsigned char *)in_buf.data() + offset, bufSize);
 
 			if (!ret) {
