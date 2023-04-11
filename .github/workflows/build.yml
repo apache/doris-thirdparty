@@ -91,7 +91,7 @@ jobs:
             brew update
             popd
 
-            brew install ${{ matrix.config.packages }}
+            brew install ${{ matrix.config.packages }} || true
 
             CELLARS=(${{ matrix.config.packages }})
             for cellar in "${CELLARS[@]}"; do
