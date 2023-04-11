@@ -50,7 +50,7 @@ private:
     bool closed{};
     std::string segment;// Current segment we are working on
     std::vector<uint32_t> docDeltaBuffer;
-    std::ostream* infoStream;
+    std::ostream* infoStream{};
     int64_t ramBufferSize;
 
 public:
@@ -660,6 +660,7 @@ public:
 
         this->closed = this->flushPending = false;
         this->threadState = nullptr;
+        this->infoStream = nullptr;
         fieldInfos = _CLNEW FieldInfos();
 
 
