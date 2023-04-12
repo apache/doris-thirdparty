@@ -109,21 +109,30 @@ namespace orc {
   class ColumnReader {
    protected:
     std::unique_ptr<ByteRleDecoder> notNullDecoder;
+    const Type& type;
     uint64_t columnId;
     MemoryPool& memoryPool;
     ReaderMetrics* metrics;
+
+    static bool shouldProcessChild(ReaderCategory readerCategory, const ReadPhase& readPhase) {
+      return readPhase.contains(readerCategory) || readerCategory == ReaderCategory::FILTER_PARENT;
+    }
 
    public:
     ColumnReader(const Type& type, StripeStreams& stipe);
 
     virtual ~ColumnReader();
 
+    const Type& getType() const {
+      return type;
+    }
+
     /**
      * Skip number of specified rows.
      * @param numValues the number of values to skip
      * @return the number of non-null values skipped
      */
-    virtual uint64_t skip(uint64_t numValues);
+    virtual uint64_t skip(uint64_t numValues, const ReadPhase& readPhase = ReadPhase::ALL);
 
     /**
      * Read the next group of values into this rowBatch.
@@ -133,7 +142,7 @@ namespace orc {
      *           a mask (with at least numValues bytes) for which values to
      *           set.
      */
-    virtual void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
+    virtual void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase = ReadPhase::ALL);
 
     /**
      * Read the next group of values without decoding
@@ -143,16 +152,16 @@ namespace orc {
      *           a mask (with at least numValues bytes) for which values to
      *           set.
      */
-    virtual void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    virtual void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase = ReadPhase::ALL) {
       rowBatch.isEncoded = false;
-      next(rowBatch, numValues, notNull);
+      next(rowBatch, numValues, notNull, readPhase);
     }
 
     /**
      * Seek to beginning of a row group in the current stripe
      * @param positions a list of PositionProviders storing the positions
      */
-    virtual void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions);
+    virtual void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase = ReadPhase::ALL);
   };
 
   /**

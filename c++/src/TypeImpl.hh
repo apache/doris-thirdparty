@@ -41,6 +41,7 @@ namespace orc {
     uint64_t precision;
     uint64_t scale;
     std::map<std::string, std::string> attributes;
+    ReaderCategory readerCategory;
 
    public:
     /**
@@ -66,7 +67,11 @@ namespace orc {
 
     uint64_t getSubtypeCount() const override;
 
+    Type* getParent() const override;
+
     const Type* getSubtype(uint64_t i) const override;
+
+    Type* getSubtype(uint64_t i) override;
 
     const std::string& getFieldName(uint64_t i) const override;
 
@@ -85,6 +90,10 @@ namespace orc {
     std::vector<std::string> getAttributeKeys() const override;
 
     std::string getAttributeValue(const std::string& key) const override;
+
+    ReaderCategory getReaderCategory() const override;
+
+    void setReaderCategory(ReaderCategory _readerCategory) override;
 
     std::string toString() const override;
 

@@ -34,6 +34,13 @@ namespace orc {
     ColumnSelection_TYPE_IDS = 3,
   };
 
+  enum ColumnFilter {
+    ColumnFilter_NONE = 0,
+    ColumnFilter_NAMES = 1,
+    ColumnFilter_FIELD_IDS = 2,
+    ColumnFilter_TYPE_IDS = 3,
+  };
+
   /**
    * ReaderOptions Implementation
    */
@@ -130,6 +137,9 @@ namespace orc {
     ColumnSelection selection;
     std::list<uint64_t> includedColumnIndexes;
     std::list<std::string> includedColumnNames;
+    ColumnFilter filter;
+    std::list<uint64_t> filterColumnIndexes;
+    std::list<std::string> filterColumnNames;
     uint64_t dataStart;
     uint64_t dataLength;
     bool throwOnHive11DecimalOverflow;
@@ -214,6 +224,20 @@ namespace orc {
     return *this;
   }
 
+  RowReaderOptions& RowReaderOptions::filter(const std::list<uint64_t>& filterColIndexes) {
+    privateBits->filter = ColumnFilter_FIELD_IDS;
+    privateBits->filterColumnIndexes.assign(filterColIndexes.begin(), filterColIndexes.end());
+    privateBits->filterColumnNames.clear();
+    return *this;
+  }
+
+  RowReaderOptions& RowReaderOptions::filter(const std::list<std::string>& filterColNames) {
+    privateBits->filter = ColumnFilter_NAMES;
+    privateBits->filterColumnNames.assign(filterColNames.begin(), filterColNames.end());
+    privateBits->filterColumnIndexes.clear();
+    return *this;
+  }
+
   RowReaderOptions& RowReaderOptions::range(uint64_t offset, uint64_t length) {
     privateBits->dataStart = offset;
     privateBits->dataLength = length;
@@ -238,6 +262,10 @@ namespace orc {
 
   const std::list<std::string>& RowReaderOptions::getIncludeNames() const {
     return privateBits->includedColumnNames;
+  }
+
+  const std::list<std::string>& RowReaderOptions::getFilterColNames() const {
+    return privateBits->filterColumnNames;
   }
 
   uint64_t RowReaderOptions::getOffset() const {

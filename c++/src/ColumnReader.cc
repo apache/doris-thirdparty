@@ -46,8 +46,9 @@ namespace orc {
     }
   }
 
-  ColumnReader::ColumnReader(const Type& type, StripeStreams& stripe)
-      : columnId(type.getColumnId()),
+  ColumnReader::ColumnReader(const Type& _type, StripeStreams& stripe)
+      : type(_type),
+        columnId(type.getColumnId()),
         memoryPool(stripe.getMemoryPool()),
         metrics(stripe.getReaderMetrics()) {
     std::unique_ptr<SeekableInputStream> stream =
@@ -61,7 +62,7 @@ namespace orc {
     // PASS
   }
 
-  uint64_t ColumnReader::skip(uint64_t numValues) {
+  uint64_t ColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
     ByteRleDecoder* decoder = notNullDecoder.get();
     if (decoder) {
       // page through the values that we want to skip
@@ -84,7 +85,7 @@ namespace orc {
     return numValues;
   }
 
-  void ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* incomingMask) {
+  void ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* incomingMask, const ReadPhase& readPhase) {
     if (numValues > rowBatch.capacity) {
       rowBatch.resize(numValues);
     }
@@ -100,16 +101,19 @@ namespace orc {
           return;
         }
       }
+      rowBatch.hasNulls = false;
     } else if (incomingMask) {
       // If we don't have a notNull stream, copy the incomingMask
       rowBatch.hasNulls = true;
       memcpy(rowBatch.notNull.data(), incomingMask, numValues);
       return;
+    } else {
+      rowBatch.hasNulls = false;
+      memset(rowBatch.notNull.data(), 1, numValues);
     }
-    rowBatch.hasNulls = false;
   }
 
-  void ColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) {
+  void ColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
     if (notNullDecoder.get()) {
       notNullDecoder->seek(positions.at(columnId));
     }
@@ -142,11 +146,11 @@ namespace orc {
     BooleanColumnReader(const Type& type, StripeStreams& stipe);
     ~BooleanColumnReader() override;
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
   };
 
   template <typename BatchType>
@@ -164,16 +168,16 @@ namespace orc {
   }
 
   template <typename BatchType>
-  uint64_t BooleanColumnReader<BatchType>::skip(uint64_t numValues) {
-    numValues = ColumnReader::skip(numValues);
+  uint64_t BooleanColumnReader<BatchType>::skip(uint64_t numValues, const ReadPhase& readPhase) {
+    numValues = ColumnReader::skip(numValues, readPhase);
     rle->skip(numValues);
     return numValues;
   }
 
   template <typename BatchType>
   void BooleanColumnReader<BatchType>::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                            char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                            char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     // Since the byte rle places the output in a char* and BatchType here may be
     // LongVectorBatch with long*. We cheat here in that case and use the long*
     // and then expand it in a second pass..
@@ -185,8 +189,8 @@ namespace orc {
 
   template <typename BatchType>
   void BooleanColumnReader<BatchType>::seekToRowGroup(
-      std::unordered_map<uint64_t, PositionProvider>& positions) {
-    ColumnReader::seekToRowGroup(positions);
+      std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+    ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
   }
 
@@ -205,14 +209,14 @@ namespace orc {
 
     ~ByteColumnReader() override = default;
 
-    uint64_t skip(uint64_t numValues) override {
-      numValues = ColumnReader::skip(numValues);
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override {
+      numValues = ColumnReader::skip(numValues, readPhase);
       rle->skip(numValues);
       return numValues;
     }
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override {
-      ColumnReader::next(rowBatch, numValues, notNull);
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override {
+      ColumnReader::next(rowBatch, numValues, notNull, readPhase);
       // Since the byte rle places the output in a char* instead of long*,
       // we cheat here and use the long* and then expand it in a second pass.
       auto* ptr = dynamic_cast<BatchType&>(rowBatch).data.data();
@@ -221,8 +225,8 @@ namespace orc {
       expandBytesToIntegers(ptr, numValues);
     }
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override {
-      ColumnReader::seekToRowGroup(positions);
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override {
+      ColumnReader::seekToRowGroup(positions, readPhase);
       rle->seek(positions.at(columnId));
     }
   };
@@ -245,20 +249,20 @@ namespace orc {
       // PASS
     }
 
-    uint64_t skip(uint64_t numValues) override {
-      numValues = ColumnReader::skip(numValues);
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override {
+      numValues = ColumnReader::skip(numValues, readPhase);
       rle->skip(numValues);
       return numValues;
     }
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override {
-      ColumnReader::next(rowBatch, numValues, notNull);
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override {
+      ColumnReader::next(rowBatch, numValues, notNull, readPhase);
       rle->next(dynamic_cast<BatchType&>(rowBatch).data.data(), numValues,
                 rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr);
     }
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override {
-      ColumnReader::seekToRowGroup(positions);
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override {
+      ColumnReader::seekToRowGroup(positions, readPhase);
       rle->seek(positions.at(columnId));
     }
   };
@@ -276,11 +280,11 @@ namespace orc {
     TimestampColumnReader(const Type& type, StripeStreams& stripe, bool isInstantType);
     ~TimestampColumnReader() override;
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
   };
 
   TimestampColumnReader::TimestampColumnReader(const Type& type, StripeStreams& stripe,
@@ -304,15 +308,15 @@ namespace orc {
     // PASS
   }
 
-  uint64_t TimestampColumnReader::skip(uint64_t numValues) {
-    numValues = ColumnReader::skip(numValues);
+  uint64_t TimestampColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
+    numValues = ColumnReader::skip(numValues, readPhase);
     secondsRle->skip(numValues);
     nanoRle->skip(numValues);
     return numValues;
   }
 
-  void TimestampColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+  void TimestampColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     TimestampVectorBatch& timestampBatch = dynamic_cast<TimestampVectorBatch&>(rowBatch);
     int64_t* secsBuffer = timestampBatch.data.data();
@@ -353,8 +357,8 @@ namespace orc {
   }
 
   void TimestampColumnReader::seekToRowGroup(
-      std::unordered_map<uint64_t, PositionProvider>& positions) {
-    ColumnReader::seekToRowGroup(positions);
+      std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+    ColumnReader::seekToRowGroup(positions, readPhase);
     secondsRle->seek(positions.at(columnId));
     nanoRle->seek(positions.at(columnId));
   }
@@ -365,11 +369,11 @@ namespace orc {
     DoubleColumnReader(const Type& type, StripeStreams& stripe);
     ~DoubleColumnReader() override {}
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
 
    private:
     std::unique_ptr<SeekableInputStream> inputStream;
@@ -450,8 +454,8 @@ namespace orc {
 
   template <TypeKind columnKind, bool isLittleEndian, typename ValueType, typename BatchType>
   uint64_t DoubleColumnReader<columnKind, isLittleEndian, ValueType, BatchType>::skip(
-      uint64_t numValues) {
-    numValues = ColumnReader::skip(numValues);
+      uint64_t numValues, const ReadPhase& readPhase) {
+    numValues = ColumnReader::skip(numValues, readPhase);
 
     if (static_cast<size_t>(bufferEnd - bufferPointer) >= bytesPerValue * numValues) {
       bufferPointer += bytesPerValue * numValues;
@@ -473,8 +477,8 @@ namespace orc {
 
   template <TypeKind columnKind, bool isLittleEndian, typename ValueType, typename BatchType>
   void DoubleColumnReader<columnKind, isLittleEndian, ValueType, BatchType>::next(
-      ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+      ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     // update the notNull from the parent class
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     ValueType* outArray =
@@ -519,8 +523,8 @@ namespace orc {
 
   template <TypeKind columnKind, bool isLittleEndian, typename ValueType, typename BatchType>
   void DoubleColumnReader<columnKind, isLittleEndian, ValueType, BatchType>::seekToRowGroup(
-      std::unordered_map<uint64_t, PositionProvider>& positions) {
-    ColumnReader::seekToRowGroup(positions);
+      std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+    ColumnReader::seekToRowGroup(positions, readPhase);
     inputStream->seek(positions.at(columnId));
     // clear buffer state after seek
     bufferEnd = nullptr;
@@ -552,13 +556,13 @@ namespace orc {
     StringDictionaryColumnReader(const Type& type, StripeStreams& stipe);
     ~StringDictionaryColumnReader() override;
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
   };
 
   StringDictionaryColumnReader::StringDictionaryColumnReader(const Type& type,
@@ -602,15 +606,15 @@ namespace orc {
     // PASS
   }
 
-  uint64_t StringDictionaryColumnReader::skip(uint64_t numValues) {
-    numValues = ColumnReader::skip(numValues);
+  uint64_t StringDictionaryColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
+    numValues = ColumnReader::skip(numValues, readPhase);
     rle->skip(numValues);
     return numValues;
   }
 
   void StringDictionaryColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                          char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                          char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     // update the notNull from the parent class
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     StringVectorBatch& byteBatch = dynamic_cast<StringVectorBatch&>(rowBatch);
@@ -644,8 +648,8 @@ namespace orc {
   }
 
   void StringDictionaryColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                                 char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                                 char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     rowBatch.isEncoded = true;
 
@@ -657,8 +661,8 @@ namespace orc {
   }
 
   void StringDictionaryColumnReader::seekToRowGroup(
-      std::unordered_map<uint64_t, PositionProvider>& positions) {
-    ColumnReader::seekToRowGroup(positions);
+      std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+    ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
   }
 
@@ -682,11 +686,11 @@ namespace orc {
     StringDirectColumnReader(const Type& type, StripeStreams& stipe);
     ~StringDirectColumnReader() override;
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
   };
 
   StringDirectColumnReader::StringDirectColumnReader(const Type& type, StripeStreams& stripe)
@@ -706,9 +710,9 @@ namespace orc {
     // PASS
   }
 
-  uint64_t StringDirectColumnReader::skip(uint64_t numValues) {
+  uint64_t StringDirectColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
     const size_t BUFFER_SIZE = 1024;
-    numValues = ColumnReader::skip(numValues);
+    numValues = ColumnReader::skip(numValues, readPhase);
     int64_t buffer[BUFFER_SIZE];
     uint64_t done = 0;
     size_t totalBytes = 0;
@@ -756,8 +760,8 @@ namespace orc {
   }
 
   void StringDirectColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                      char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                      char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     // update the notNull from the parent class
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     StringVectorBatch& byteBatch = dynamic_cast<StringVectorBatch&>(rowBatch);
@@ -814,8 +818,8 @@ namespace orc {
   }
 
   void StringDirectColumnReader::seekToRowGroup(
-      std::unordered_map<uint64_t, PositionProvider>& positions) {
-    ColumnReader::seekToRowGroup(positions);
+      std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+    ColumnReader::seekToRowGroup(positions, readPhase);
     blobStream->seek(positions.at(columnId));
     lengthRle->seek(positions.at(columnId));
     // clear buffer state after seek
@@ -830,17 +834,17 @@ namespace orc {
    public:
     StructColumnReader(const Type& type, StripeStreams& stipe, bool useTightNumericVector = false);
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
 
    private:
     template <bool encoded>
-    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase);
   };
 
   StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe,
@@ -865,45 +869,51 @@ namespace orc {
     }
   }
 
-  uint64_t StructColumnReader::skip(uint64_t numValues) {
-    numValues = ColumnReader::skip(numValues);
+  uint64_t StructColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
+    numValues = ColumnReader::skip(numValues, readPhase);
     for (auto& ptr : children) {
-      ptr->skip(numValues);
+      if (shouldProcessChild(ptr->getType().getReaderCategory(), readPhase)) {
+        ptr->skip(numValues, readPhase);
+      }
     }
     return numValues;
   }
 
-  void StructColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<false>(rowBatch, numValues, notNull);
+  void StructColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
+    nextInternal<false>(rowBatch, numValues, notNull, readPhase);
   }
 
   void StructColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                       char* notNull) {
-    nextInternal<true>(rowBatch, numValues, notNull);
+                                       char* notNull, const ReadPhase& readPhase) {
+    nextInternal<true>(rowBatch, numValues, notNull, readPhase);
   }
 
   template <bool encoded>
   void StructColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                        char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                        char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     uint64_t i = 0;
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     for (auto iter = children.begin(); iter != children.end(); ++iter, ++i) {
-      if (encoded) {
-        (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[i]), numValues,
-                             notNull);
-      } else {
-        (*iter)->next(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[i]), numValues, notNull);
+      if (shouldProcessChild((*iter)->getType().getReaderCategory(), readPhase)) {
+        if (encoded) {
+          (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch &>(rowBatch).fields[i]), numValues,
+                               notNull, readPhase);
+        } else {
+          (*iter)->next(*(dynamic_cast<StructVectorBatch &>(rowBatch).fields[i]), numValues, notNull, readPhase);
+        }
       }
     }
   }
 
   void StructColumnReader::seekToRowGroup(
-      std::unordered_map<uint64_t, PositionProvider>& positions) {
-    ColumnReader::seekToRowGroup(positions);
+      std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+    ColumnReader::seekToRowGroup(positions, readPhase);
 
     for (auto& ptr : children) {
-      ptr->seekToRowGroup(positions);
+      if (shouldProcessChild(ptr->getType().getReaderCategory(), readPhase)) {
+        ptr->seekToRowGroup(positions, readPhase);
+      }
     }
   }
 
@@ -916,17 +926,17 @@ namespace orc {
     ListColumnReader(const Type& type, StripeStreams& stipe, bool useTightNumericVector = false);
     ~ListColumnReader() override;
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
 
    private:
     template <bool encoded>
-    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase);
   };
 
   ListColumnReader::ListColumnReader(const Type& type, StripeStreams& stripe,
@@ -949,8 +959,8 @@ namespace orc {
     // PASS
   }
 
-  uint64_t ListColumnReader::skip(uint64_t numValues) {
-    numValues = ColumnReader::skip(numValues);
+  uint64_t ListColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
+    numValues = ColumnReader::skip(numValues, readPhase);
     ColumnReader* childReader = child.get();
     if (childReader) {
       const uint64_t BUFFER_SIZE = 1024;
@@ -965,26 +975,26 @@ namespace orc {
         }
         lengthsRead += chunk;
       }
-      childReader->skip(childrenElements);
+      childReader->skip(childrenElements, readPhase);
     } else {
       rle->skip(numValues);
     }
     return numValues;
   }
 
-  void ListColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<false>(rowBatch, numValues, notNull);
+  void ListColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
+    nextInternal<false>(rowBatch, numValues, notNull, readPhase);
   }
 
   void ListColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                     char* notNull) {
-    nextInternal<true>(rowBatch, numValues, notNull);
+                                     char* notNull, const ReadPhase& readPhase) {
+    nextInternal<true>(rowBatch, numValues, notNull, readPhase);
   }
 
   template <bool encoded>
   void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                      char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                      char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     ListVectorBatch& listBatch = dynamic_cast<ListVectorBatch&>(rowBatch);
     int64_t* offsets = listBatch.offsets.data();
     notNull = listBatch.hasNulls ? listBatch.notNull.data() : nullptr;
@@ -1011,18 +1021,18 @@ namespace orc {
     ColumnReader* childReader = child.get();
     if (childReader) {
       if (encoded) {
-        childReader->nextEncoded(*(listBatch.elements.get()), totalChildren, nullptr);
+        childReader->nextEncoded(*(listBatch.elements.get()), totalChildren, nullptr, readPhase);
       } else {
-        childReader->next(*(listBatch.elements.get()), totalChildren, nullptr);
+        childReader->next(*(listBatch.elements.get()), totalChildren, nullptr, readPhase);
       }
     }
   }
 
-  void ListColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) {
-    ColumnReader::seekToRowGroup(positions);
+  void ListColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+    ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
     if (child.get()) {
-      child->seekToRowGroup(positions);
+      child->seekToRowGroup(positions, readPhase);
     }
   }
 
@@ -1036,17 +1046,17 @@ namespace orc {
     MapColumnReader(const Type& type, StripeStreams& stipe, bool useTightNumericVector = false);
     ~MapColumnReader() override;
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
 
    private:
     template <bool encoded>
-    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase);
   };
 
   MapColumnReader::MapColumnReader(const Type& type, StripeStreams& stripe,
@@ -1073,8 +1083,8 @@ namespace orc {
     // PASS
   }
 
-  uint64_t MapColumnReader::skip(uint64_t numValues) {
-    numValues = ColumnReader::skip(numValues);
+  uint64_t MapColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
+    numValues = ColumnReader::skip(numValues, readPhase);
     ColumnReader* rawKeyReader = keyReader.get();
     ColumnReader* rawElementReader = elementReader.get();
     if (rawKeyReader || rawElementReader) {
@@ -1091,10 +1101,10 @@ namespace orc {
         lengthsRead += chunk;
       }
       if (rawKeyReader) {
-        rawKeyReader->skip(childrenElements);
+        rawKeyReader->skip(childrenElements, readPhase);
       }
       if (rawElementReader) {
-        rawElementReader->skip(childrenElements);
+        rawElementReader->skip(childrenElements, readPhase);
       }
     } else {
       rle->skip(numValues);
@@ -1102,19 +1112,19 @@ namespace orc {
     return numValues;
   }
 
-  void MapColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<false>(rowBatch, numValues, notNull);
+  void MapColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
+    nextInternal<false>(rowBatch, numValues, notNull, readPhase);
   }
 
   void MapColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                    char* notNull) {
-    nextInternal<true>(rowBatch, numValues, notNull);
+                                    char* notNull, const ReadPhase& readPhase) {
+    nextInternal<true>(rowBatch, numValues, notNull, readPhase);
   }
 
   template <bool encoded>
   void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                     char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                     char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     MapVectorBatch& mapBatch = dynamic_cast<MapVectorBatch&>(rowBatch);
     int64_t* offsets = mapBatch.offsets.data();
     notNull = mapBatch.hasNulls ? mapBatch.notNull.data() : nullptr;
@@ -1141,29 +1151,29 @@ namespace orc {
     ColumnReader* rawKeyReader = keyReader.get();
     if (rawKeyReader) {
       if (encoded) {
-        rawKeyReader->nextEncoded(*(mapBatch.keys.get()), totalChildren, nullptr);
+        rawKeyReader->nextEncoded(*(mapBatch.keys.get()), totalChildren, nullptr, readPhase);
       } else {
-        rawKeyReader->next(*(mapBatch.keys.get()), totalChildren, nullptr);
+        rawKeyReader->next(*(mapBatch.keys.get()), totalChildren, nullptr, readPhase);
       }
     }
     ColumnReader* rawElementReader = elementReader.get();
     if (rawElementReader) {
       if (encoded) {
-        rawElementReader->nextEncoded(*(mapBatch.elements.get()), totalChildren, nullptr);
+        rawElementReader->nextEncoded(*(mapBatch.elements.get()), totalChildren, nullptr, readPhase);
       } else {
-        rawElementReader->next(*(mapBatch.elements.get()), totalChildren, nullptr);
+        rawElementReader->next(*(mapBatch.elements.get()), totalChildren, nullptr, readPhase);
       }
     }
   }
 
-  void MapColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) {
-    ColumnReader::seekToRowGroup(positions);
+  void MapColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+    ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
     if (keyReader.get()) {
-      keyReader->seekToRowGroup(positions);
+      keyReader->seekToRowGroup(positions, readPhase);
     }
     if (elementReader.get()) {
-      elementReader->seekToRowGroup(positions);
+      elementReader->seekToRowGroup(positions, readPhase);
     }
   }
 
@@ -1177,17 +1187,17 @@ namespace orc {
    public:
     UnionColumnReader(const Type& type, StripeStreams& stipe, bool useTightNumericVector = false);
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
 
    private:
     template <bool encoded>
-    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase);
   };
 
   UnionColumnReader::UnionColumnReader(const Type& type, StripeStreams& stripe,
@@ -1211,8 +1221,8 @@ namespace orc {
     }
   }
 
-  uint64_t UnionColumnReader::skip(uint64_t numValues) {
-    numValues = ColumnReader::skip(numValues);
+  uint64_t UnionColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
+    numValues = ColumnReader::skip(numValues, readPhase);
     const uint64_t BUFFER_SIZE = 1024;
     char buffer[BUFFER_SIZE];
     uint64_t lengthsRead = 0;
@@ -1227,26 +1237,27 @@ namespace orc {
       lengthsRead += chunk;
     }
     for (size_t i = 0; i < numChildren; ++i) {
-      if (counts[i] != 0 && childrenReader[i] != nullptr) {
-        childrenReader[i]->skip(static_cast<uint64_t>(counts[i]));
+      if (counts[i] != 0 && childrenReader[i] != nullptr
+        && shouldProcessChild(childrenReader[i]->getType().getReaderCategory(), readPhase)) {
+        childrenReader[i]->skip(static_cast<uint64_t>(counts[i]), readPhase);
       }
     }
     return numValues;
   }
 
-  void UnionColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    nextInternal<false>(rowBatch, numValues, notNull);
+  void UnionColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
+    nextInternal<false>(rowBatch, numValues, notNull, readPhase);
   }
 
   void UnionColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                      char* notNull) {
-    nextInternal<true>(rowBatch, numValues, notNull);
+                                      char* notNull, const ReadPhase& readPhase) {
+    nextInternal<true>(rowBatch, numValues, notNull, readPhase);
   }
 
   template <bool encoded>
   void UnionColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                       char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                       char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     UnionVectorBatch& unionBatch = dynamic_cast<UnionVectorBatch&>(rowBatch);
     uint64_t* offsets = unionBatch.offsets.data();
     int64_t* counts = childrenCounts.data();
@@ -1268,25 +1279,25 @@ namespace orc {
     }
     // read the right number of each child column
     for (size_t i = 0; i < numChildren; ++i) {
-      if (childrenReader[i] != nullptr) {
+      if (childrenReader[i] != nullptr && shouldProcessChild(childrenReader[i]->getType().getReaderCategory(), readPhase)) {
         if (encoded) {
           childrenReader[i]->nextEncoded(*(unionBatch.children[i]),
-                                         static_cast<uint64_t>(counts[i]), nullptr);
+                                         static_cast<uint64_t>(counts[i]), nullptr, readPhase);
         } else {
           childrenReader[i]->next(*(unionBatch.children[i]), static_cast<uint64_t>(counts[i]),
-                                  nullptr);
+                                  nullptr, readPhase);
         }
       }
     }
   }
 
   void UnionColumnReader::seekToRowGroup(
-      std::unordered_map<uint64_t, PositionProvider>& positions) {
-    ColumnReader::seekToRowGroup(positions);
+      std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+    ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
     for (size_t i = 0; i < numChildren; ++i) {
-      if (childrenReader[i] != nullptr) {
-        childrenReader[i]->seekToRowGroup(positions);
+      if (childrenReader[i] != nullptr && shouldProcessChild(childrenReader[i]->getType().getReaderCategory(), readPhase)) {
+        childrenReader[i]->seekToRowGroup(positions, readPhase);
       }
     }
   }
@@ -1360,11 +1371,11 @@ namespace orc {
     Decimal64ColumnReader(const Type& type, StripeStreams& stipe);
     ~Decimal64ColumnReader() override;
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
   };
   const uint32_t Decimal64ColumnReader::MAX_PRECISION_64;
   const uint32_t Decimal64ColumnReader::MAX_PRECISION_128;
@@ -1407,8 +1418,8 @@ namespace orc {
     // PASS
   }
 
-  uint64_t Decimal64ColumnReader::skip(uint64_t numValues) {
-    numValues = ColumnReader::skip(numValues);
+  uint64_t Decimal64ColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
+    numValues = ColumnReader::skip(numValues, readPhase);
     uint64_t skipped = 0;
     while (skipped < numValues) {
       readBuffer();
@@ -1420,8 +1431,8 @@ namespace orc {
     return numValues;
   }
 
-  void Decimal64ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+  void Decimal64ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     Decimal64VectorBatch& batch = dynamic_cast<Decimal64VectorBatch&>(rowBatch);
     int64_t* values = batch.values.data();
@@ -1463,8 +1474,8 @@ namespace orc {
   }
 
   void Decimal64ColumnReader::seekToRowGroup(
-      std::unordered_map<uint64_t, PositionProvider>& positions) {
-    ColumnReader::seekToRowGroup(positions);
+      std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+    ColumnReader::seekToRowGroup(positions, readPhase);
     valueStream->seek(positions.at(columnId));
     scaleDecoder->seek(positions.at(columnId));
     // clear buffer state after seek
@@ -1477,7 +1488,7 @@ namespace orc {
     Decimal128ColumnReader(const Type& type, StripeStreams& stipe);
     ~Decimal128ColumnReader() override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
 
    private:
     void readInt128(Int128& value, int32_t currentScale) {
@@ -1510,8 +1521,8 @@ namespace orc {
   }
 
   void Decimal128ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                    char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                    char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     Decimal128VectorBatch& batch = dynamic_cast<Decimal128VectorBatch&>(rowBatch);
     Int128* values = batch.values.data();
@@ -1543,9 +1554,9 @@ namespace orc {
     Decimal64ColumnReaderV2(const Type& type, StripeStreams& stripe);
     ~Decimal64ColumnReaderV2() override;
 
-    uint64_t skip(uint64_t numValues) override;
+    uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
   };
 
   Decimal64ColumnReaderV2::Decimal64ColumnReaderV2(const Type& type, StripeStreams& stripe)
@@ -1566,15 +1577,15 @@ namespace orc {
     // PASS
   }
 
-  uint64_t Decimal64ColumnReaderV2::skip(uint64_t numValues) {
-    numValues = ColumnReader::skip(numValues);
+  uint64_t Decimal64ColumnReaderV2::skip(uint64_t numValues, const ReadPhase& readPhase) {
+    numValues = ColumnReader::skip(numValues, readPhase);
     valueDecoder->skip(numValues);
     return numValues;
   }
 
   void Decimal64ColumnReaderV2::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                     char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                     char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     Decimal64VectorBatch& batch = dynamic_cast<Decimal64VectorBatch&>(rowBatch);
     valueDecoder->next(batch.values.data(), numValues, notNull);
@@ -1628,7 +1639,7 @@ namespace orc {
     DecimalHive11ColumnReader(const Type& type, StripeStreams& stipe);
     ~DecimalHive11ColumnReader() override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
   };
 
   DecimalHive11ColumnReader::DecimalHive11ColumnReader(const Type& type, StripeStreams& stripe)
@@ -1643,8 +1654,8 @@ namespace orc {
   }
 
   void DecimalHive11ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                       char* notNull) {
-    ColumnReader::next(rowBatch, numValues, notNull);
+                                       char* notNull, const ReadPhase& readPhase) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     Decimal128VectorBatch& batch = dynamic_cast<Decimal128VectorBatch&>(rowBatch);
     Int128* values = batch.values.data();
