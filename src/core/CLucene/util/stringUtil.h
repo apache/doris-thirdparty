@@ -65,7 +65,6 @@ static void to_lower(const uint8_t* src, int64_t len, uint8_t* dst) {
     if (len <= 0) {
         return;
     }
-    LowerUpperImpl<'A', 'Z'> lowerUpper;
     LowerUpperImpl<'A', 'Z'>::transfer(src, src + len, dst);
 }
 
