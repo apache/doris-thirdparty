@@ -50,6 +50,8 @@ private:
     bool closed{};
     std::string segment;// Current segment we are working on
     std::vector<uint32_t> docDeltaBuffer;
+    std::ostream* infoStream{};
+    int64_t ramBufferSize;
 
 public:
     class FieldMergeState;
@@ -658,12 +660,14 @@ public:
 
         this->closed = this->flushPending = false;
         this->threadState = nullptr;
+        this->infoStream = nullptr;
         fieldInfos = _CLNEW FieldInfos();
 
 
         this->closed = this->flushPending = false;
         postingsFreeCountDW = postingsAllocCountDW = 0;
         docStoreOffset = nextDocID = numDocsInRAM = numDocsInStore = nextWriteDocID = 0;
+        ramBufferSize = (int64_t) (256 * 1024 * 1024);
     }
     virtual ~SDocumentsWriter();
     int32_t flush(bool closeDocStore) override ;
@@ -698,6 +702,7 @@ public:
         bufferIsFull = false;
         flushPending = false;
         threadState->numThreads = 0;
+        balanceRAM();
         threadState->resetPostings();
         numBytesUsed = 0;
     }
@@ -712,9 +717,7 @@ public:
     int32_t getMaxBufferedDocs() override {
         return 0;
     }
-    float_t getRAMBufferSizeMB() override {
-        return 0.0f;
-    }
+
     int32_t getNumDocsInRAM() override {
         return numDocsInRAM;
     }
@@ -731,8 +734,25 @@ public:
     }
     void abort(AbortException *ae) override {}
     void setMaxBufferedDocs(int32_t count) override {}
-    void setInfoStream(std::ostream *infoStream) override {}
-    void setRAMBufferSizeMB(float_t mb) override {}
+    void setInfoStream(std::ostream *is) override {
+        this->infoStream = infoStream;
+    }
+    void setRAMBufferSizeMB(float_t mb) override {
+        if ((int32_t) mb == -1) {
+            ramBufferSize = -1;
+        } else {
+            ramBufferSize = (int64_t) (mb * 1024 * 1024);
+        }
+    }
+
+    float_t getRAMBufferSizeMB() override {
+        if (ramBufferSize == -1) {
+            return (float_t) ramBufferSize;
+        } else {
+            return ramBufferSize / 1024.0 / 1024.0;
+        }
+    }
+
     void close() override {}
     const std::vector<std::string>& files() override {
         if (_files != nullptr)
@@ -740,6 +760,12 @@ public:
         _files = _CLNEW std::vector<string>;
         return *_files;
     }
+    std::string toMB(int64_t v) {
+        char buf[40];
+        cl_sprintf(buf, 40, "%0.2f", v / 1024.0 / 1024.0);
+        return string(buf);
+    }
+    void balanceRAM();
     void setMaxBufferedDeleteTerms(int32_t _maxBufferedDeleteTerms) override {_CLTHROW_NOT_IMPLEMENT}
     int32_t getMaxBufferedDeleteTerms() override {_CLTHROW_NOT_IMPLEMENT}
     std::string closeDocStore() override {_CLTHROW_NOT_IMPLEMENT}
