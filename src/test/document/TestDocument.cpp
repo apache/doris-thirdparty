@@ -407,23 +407,55 @@ void TestSetFieldBench(CuTest *tc) {
     });
 }
 
+string generateRandomString(int length) {
+    static const char alphanum[] =
+            "0123456789"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            "abcdefghijklmnopqrstuvwxyz";
+    string randomString;
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<> dis(0, sizeof(alphanum) - 2);
+    for (int i = 0; i < length; ++i) {
+        randomString += alphanum[dis(gen)];
+    }
+    return randomString;
+}
+
+const int32_t MAX_FIELD_LEN = 0x7FFFFFFFL;
+const int32_t MAX_BUFFER_DOCS = 100000000;
+const int32_t MERGE_FACTOR = 100000000;
 void TestAddDocument(CuTest *tc) {
     RAMDirectory dir;
     SimpleAnalyzer<char> sanalyzer;
     IndexWriter w(&dir, NULL, true);
     w.setUseCompoundFile(false);
+    w.setMaxBufferedDocs(MAX_BUFFER_DOCS);
+    w.setRAMBufferSizeMB(256);
+    w.setMaxFieldLength(MAX_FIELD_LEN);
+    w.setMergeFactor(MERGE_FACTOR);
     w.setDocumentWriter(_CLNEW SDocumentsWriter<char>(w.getDirectory(), &w));
     Document doc;
     auto field_name = lucene::util::Misc::_charToWide("f3");
-    auto value1 = "value1";
-    auto stringReader = _CLNEW lucene::util::SStringReader<char>(
-            value1, strlen(value1), false);
-    auto stream = sanalyzer.reusableTokenStream(field_name, stringReader);
-
     auto field = _CLNEW Field(field_name, Field::INDEX_TOKENIZED | Field::STORE_NO);
-    field->setValue(stream);
     doc.add(*field);
-    w.addDocument(&doc, &sanalyzer);
+
+    for (int i = 0; i <= 2000000; i++) {
+        std::string value1 = "value1";
+        if (i > 0)
+            value1 = generateRandomString(2000);
+        auto stringReader = _CLNEW lucene::util::SStringReader<char>(
+                value1.c_str(), strlen(value1.c_str()), false);
+        auto stream = sanalyzer.reusableTokenStream(field_name, stringReader);
+
+        field->setValue(stream);
+        w.addDocument(&doc, &sanalyzer);
+    }
+    IndexSearcher searcher(&dir);
+    Term *t2 = _CLNEW Term(_T("f3"), _T("value1"));
+    auto *query2 = _CLNEW TermQuery(t2);
+    Hits *hits2 = searcher.search(query2);
+    CLUCENE_ASSERT(1 == hits2->length());
     doc.clear();
     w.close();
 }
