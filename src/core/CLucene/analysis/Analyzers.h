@@ -10,6 +10,7 @@
 #include "CLucene/util/VoidList.h"
 #include "CLucene/util/VoidMap.h"
 #include "CLucene/util/CLStreams.h"
+#include "CLucene/util/stringUtil.h"
 #include "AnalysisHeader.h"
 
 CL_NS_DEF(analysis)
@@ -32,6 +33,11 @@ protected:
     * token.  The default implementation does nothing.  Subclasses may use this
     * to, e.g., lowercase tokens. */
     virtual T normalize(const T c) const{return c;};
+
+    virtual void normalize(const T *src, int64_t len, T *dst) {
+        for (; src < src + len; ++src, ++dst)
+            *dst = normalize(*src);
+    };
 
 public:
     explicit CharTokenizer(CL_NS(util)::Reader* in):Tokenizer(in),

@@ -78,6 +78,7 @@ void testTokenStreamField(CuTest *tc) {
 
 void testChar(CuTest *tc) {
     const char *text = "This is a test 123_test";
+    std::vector<string> result{"this","is","a","test","123","test"};
     SStringReader<char> reader(text, strlen(text));
     SimpleAnalyzer<char> analyzer;
     TokenStream *stream = analyzer.tokenStream(NULL, &reader);
@@ -85,6 +86,7 @@ void testChar(CuTest *tc) {
     int32_t count = 0;
     CL_NS(analysis)::Token t;
     while (stream->next(&t) != NULL) {
+        assertEquals(true, strCompare(t.termBuffer<char>(), result.at(count).c_str()) == 0);
         count++;
     }
     //printf("count = %d\n", count);

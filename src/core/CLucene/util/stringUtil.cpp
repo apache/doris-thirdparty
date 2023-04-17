@@ -1,6 +1,7 @@
 //
 // Created by 姜凯 on 2022/9/20.
 //
+#include "CLucene/_ApiHeader.h"
 #include "stringUtil.h"
 
 template <>
