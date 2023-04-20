@@ -38,23 +38,20 @@ Token *CharTokenizer<char>::next(Token *token) {
                 return NULL;
         } else
             c = ioBuffer[bufferIndex++];
-        if (isTokenChar(c)) {// if it's a token TCHAR
+        if (is_alnum(c)) {// if it's a token TCHAR
 
             if (length == 0)// start of token
                 start = offset - 1;
 
-            //buffer[length++] = normalize(c);          // buffer it, normalized
-            buffer[length++] = c;
+            buffer[length++] = to_lower(c);          // buffer it, normalized
             if (length == LUCENE_MAX_WORD_LEN)// buffer overflow!
                 break;
 
         } else if (length > 0)// at non-Letter w/ chars
             break;            // return 'em
     }
-    char buffer_copy[LUCENE_MAX_WORD_LEN + 1];
-    normalize(buffer, length, buffer_copy);
-    buffer_copy[length] = 0;
-    token->set(buffer_copy, start, start + length);
+    buffer[length] = 0;
+    token->set(buffer, start, start + length);
 
     return token;
 };
