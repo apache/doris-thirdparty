@@ -18,44 +18,6 @@ void CharTokenizer<char>::normalize(const char *src, int64_t len, char *dst) {
     to_lower((const uint8_t *) src, len, (uint8_t *) dst);
 }
 
-template<>
-Token *CharTokenizer<char>::next(Token *token) {
-    int32_t length = 0;
-    int32_t start = offset;
-    while (true) {
-        char c;
-        offset++;
-        if (bufferIndex >= dataLen) {
-            dataLen = input->read((const void **) &ioBuffer, 1, LUCENE_IO_BUFFER_SIZE);
-            if (dataLen == -1)
-                dataLen = 0;
-            bufferIndex = 0;
-        }
-        if (dataLen <= 0) {
-            if (length > 0)
-                break;
-            else
-                return NULL;
-        } else
-            c = ioBuffer[bufferIndex++];
-        if (is_alnum(c)) {// if it's a token TCHAR
-
-            if (length == 0)// start of token
-                start = offset - 1;
-
-            buffer[length++] = to_lower(c);          // buffer it, normalized
-            if (length == LUCENE_MAX_WORD_LEN)// buffer overflow!
-                break;
-
-        } else if (length > 0)// at non-Letter w/ chars
-            break;            // return 'em
-    }
-    buffer[length] = 0;
-    token->set(buffer, start, start + length);
-
-    return token;
-};
-
 template<typename T>
 LetterTokenizer<T>::LetterTokenizer(CL_NS(util)::Reader* in):
     CharTokenizer<T>(in) {
@@ -98,6 +60,44 @@ bool SimpleTokenizer<T>::isTokenChar(const T c) const {
 	//return _istalnum(c)!=0;
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 }
+
+template<>
+Token *SimpleTokenizer<char>::next(Token *token) {
+    int32_t length = 0;
+    int32_t start = offset;
+    while (true) {
+        char c;
+        offset++;
+        if (bufferIndex >= dataLen) {
+            dataLen = input->read((const void **) &ioBuffer, 1, LUCENE_IO_BUFFER_SIZE);
+            if (dataLen == -1)
+                dataLen = 0;
+            bufferIndex = 0;
+        }
+        if (dataLen <= 0) {
+            if (length > 0)
+                break;
+            else
+                return NULL;
+        } else
+            c = ioBuffer[bufferIndex++];
+        if (is_alnum(c)) {// if it's a token TCHAR
+
+            if (length == 0)// start of token
+                start = offset - 1;
+
+            buffer[length++] = to_lower(c);          // buffer it, normalized
+            if (length == LUCENE_MAX_WORD_LEN)// buffer overflow!
+                break;
+
+        } else if (length > 0)// at non-Letter w/ chars
+            break;            // return 'em
+    }
+    buffer[length] = 0;
+    token->set(buffer, start, start + length);
+
+    return token;
+};
 
 template class SimpleTokenizer<TCHAR>;
 template class SimpleTokenizer<char>;

@@ -232,20 +232,19 @@ void _ThreadLocal::set ( void* t )
 #ifndef _CL_DISABLE_MULTITHREADING
 		//slightly un-usual way of initialising mutex, 
 		//because otherwise our initialisation order would be undefined
-		if ( threadData_LOCK == NULL ) {
-			static std::once_flag once_flag;
-			std::call_once(once_flag, []() {
+		
+		static std::once_flag once_flag;
+		std::call_once(once_flag, []() {
+			if ( threadData_LOCK == NULL ) {
 				threadData_LOCK = _CLNEW _LUCENE_THREADMUTEX;
-			});
-		}
+			}
+		});
+		
 		SCOPED_LOCK_MUTEX ( *threadData_LOCK );
 #endif
 
 		if ( threadData == NULL ) {
-			static std::once_flag once_flag;
-			std::call_once(once_flag, []() {
-				threadData = _CLNEW ThreadDataType ( false, true );
-			});
+			threadData = _CLNEW ThreadDataType ( false, true );
 		}
 
 		ThreadLocals* threadLocals = threadData->get(id);
