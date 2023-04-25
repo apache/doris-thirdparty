@@ -10,6 +10,7 @@
 #include "_SegmentInfos.h"
 #include "CLucene/util/Misc.h"
 
+#include <mutex>
 
 CL_NS_DEF(index)
 
@@ -55,10 +56,11 @@ CL_NS_DEF(index)
   
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_INDEX_EXTENSIONS;
     const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::INDEX_EXTENSIONS(){
-    if ( _INDEX_EXTENSIONS.length == 0 ){
-      _INDEX_EXTENSIONS.values = IndexFileNames_INDEX_EXTENSIONS_s;
-      _INDEX_EXTENSIONS.length = 15;
-    }
+    static std::once_flag once_flag;
+    std::call_once(once_flag, []() {
+        _INDEX_EXTENSIONS.values = IndexFileNames_INDEX_EXTENSIONS_s;
+        _INDEX_EXTENSIONS.length = 15;
+		});
     return _INDEX_EXTENSIONS;
   }
 
@@ -77,10 +79,11 @@ CL_NS_DEF(index)
 	};
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_INDEX_EXTENSIONS_IN_COMPOUND_FILE;
     const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::INDEX_EXTENSIONS_IN_COMPOUND_FILE(){
-    if ( _INDEX_EXTENSIONS_IN_COMPOUND_FILE.length == 0 ){
+    static std::once_flag once_flag;
+    std::call_once(once_flag, []() {
       _INDEX_EXTENSIONS_IN_COMPOUND_FILE.values = IndexFileNames_INDEX_EXTENSIONS_IN_COMPOUND_FILE_s;
       _INDEX_EXTENSIONS_IN_COMPOUND_FILE.length = 11;
-    }
+		});
     return _INDEX_EXTENSIONS_IN_COMPOUND_FILE;
   }
 
@@ -93,10 +96,11 @@ CL_NS_DEF(index)
 	};
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_STORE_INDEX_EXTENSIONS;
     const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::STORE_INDEX_EXTENSIONS(){
-    if ( _STORE_INDEX_EXTENSIONS.length == 0 ){
+		static std::once_flag once_flag;
+    std::call_once(once_flag, []() {
       _STORE_INDEX_EXTENSIONS.values = IndexFileNames_STORE_INDEX_EXTENSIONS_s;
       _STORE_INDEX_EXTENSIONS.length = 5;
-    }
+		});
     return _STORE_INDEX_EXTENSIONS;
   }
 	
@@ -109,11 +113,12 @@ CL_NS_DEF(index)
 		IndexFileNames::NORMS_EXTENSION
 	};
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_NON_STORE_INDEX_EXTENSIONS;
-    const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::NON_STORE_INDEX_EXTENSIONS(){
-    if ( _NON_STORE_INDEX_EXTENSIONS.length == 0 ){
-      _NON_STORE_INDEX_EXTENSIONS.values = IndexFileNames_NON_STORE_INDEX_EXTENSIONS_s;
-      _NON_STORE_INDEX_EXTENSIONS.length = 6;
-    }
+  const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::NON_STORE_INDEX_EXTENSIONS(){
+    static std::once_flag once_flag;
+    std::call_once(once_flag, []() {
+        _NON_STORE_INDEX_EXTENSIONS.values = IndexFileNames_NON_STORE_INDEX_EXTENSIONS_s;
+        _NON_STORE_INDEX_EXTENSIONS.length = 6;
+    });
     return _NON_STORE_INDEX_EXTENSIONS;
   }
 
@@ -128,10 +133,11 @@ CL_NS_DEF(index)
 	};
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_COMPOUND_EXTENSIONS;
     const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::COMPOUND_EXTENSIONS(){
-    if ( _COMPOUND_EXTENSIONS.length == 0 ){
+		static std::once_flag once_flag;
+    std::call_once(once_flag, []() {
       _COMPOUND_EXTENSIONS.values = IndexFileNames_COMPOUND_EXTENSIONS_s;
       _COMPOUND_EXTENSIONS.length = 7;
-    }
+		});
     return _COMPOUND_EXTENSIONS;
   }
 
@@ -142,10 +148,11 @@ CL_NS_DEF(index)
 	};
 	CL_NS(util)::ConstValueArray<const char*> IndexFileNames::_VECTOR_EXTENSIONS;
     const CL_NS(util)::ConstValueArray<const char*>& IndexFileNames::VECTOR_EXTENSIONS(){
-    if ( _VECTOR_EXTENSIONS.length == 0 ){
+		static std::once_flag once_flag;
+    std::call_once(once_flag, []() {
       _VECTOR_EXTENSIONS.values = IndexFileNames_VECTOR_EXTENSIONS_s;
       _VECTOR_EXTENSIONS.length = 3;
-    }
+		});
     return _VECTOR_EXTENSIONS;
   }
 

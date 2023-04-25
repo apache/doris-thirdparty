@@ -11,6 +11,8 @@
 #include "SearchHeader.h"
 #include "Searchable.h"
 
+#include <mutex>
+
 #if defined(__i386__) || defined(__x86_64__)
 #ifdef __linux__
 __asm__(".symver log,log@GLIBC_2.2.5");
@@ -148,10 +150,13 @@ CL_NS_DEF(search)
    }
 
    Similarity* Similarity::getDefault() {
-	   if ( Similarity_defaultImpl == NULL ){
-			Similarity_defaultImpl = _CLNEW DefaultSimilarity();
-	   }
-      return Similarity_defaultImpl;
+		static std::once_flag once_flag;
+		std::call_once(once_flag, []() {
+			if (Similarity_defaultImpl == NULL) {
+				Similarity_defaultImpl = _CLNEW DefaultSimilarity();
+			}
+		});
+    return Similarity_defaultImpl;
    }
    void Similarity::_shutdown(){
     _CLDELETE(Similarity_defaultImpl);

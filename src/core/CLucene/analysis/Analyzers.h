@@ -17,7 +17,7 @@ CL_NS_DEF(analysis)
 
 template<typename T>
 class CLUCENE_EXPORT CharTokenizer:public Tokenizer {
-private:
+protected:
     int32_t offset, bufferIndex, dataLen;
     T buffer[LUCENE_MAX_WORD_LEN+1];
     const T* ioBuffer;
@@ -141,6 +141,11 @@ public:
 	/** Construct a new SimpleTokenizer. */
 	SimpleTokenizer(CL_NS(util)::Reader* in);
     virtual ~SimpleTokenizer();
+
+    Token* next(Token* token) override {
+        return CharTokenizer<T>::next(token);
+    }
+
 protected:
 	/** Collects only characters which satisfy _istalpha.*/
     bool isTokenChar(const T c) const;
