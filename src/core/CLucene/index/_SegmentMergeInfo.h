@@ -24,9 +24,10 @@ public:
 	Term* term;
 	int32_t base;
 	IndexReader* reader;
+	int32_t readerIndex;
      
 	//Constructor
-	SegmentMergeInfo(const int32_t b, TermEnum* te, IndexReader* r);
+	SegmentMergeInfo(const int32_t b, TermEnum* te, IndexReader* r, int32_t readerIndex=0);
 
 	//Destructor
 	~SegmentMergeInfo();
