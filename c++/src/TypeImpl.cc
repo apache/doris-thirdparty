@@ -25,6 +25,12 @@
 
 namespace orc {
 
+  const ReadPhase ReadPhase::ALL = ReadPhase::fromCategories({ ReaderCategory::FILTER_CHILD, ReaderCategory::FILTER_PARENT, ReaderCategory::NON_FILTER });
+  const ReadPhase ReadPhase::LEADERS = ReadPhase::fromCategories({ ReaderCategory::FILTER_CHILD, ReaderCategory::FILTER_PARENT });
+  const ReadPhase ReadPhase::FOLLOWERS = ReadPhase::fromCategories({ ReaderCategory::NON_FILTER });
+  const ReadPhase ReadPhase::LEADER_PARENTS = ReadPhase::fromCategories({ ReaderCategory::FILTER_PARENT });
+  const ReadPhase ReadPhase::FOLLOWERS_AND_PARENTS = ReadPhase::fromCategories({ ReaderCategory::FILTER_PARENT, ReaderCategory::NON_FILTER });
+
   Type::~Type() {
     // PASS
   }
@@ -38,6 +44,7 @@ namespace orc {
     precision = 0;
     scale = 0;
     subtypeCount = 0;
+    readerCategory = ReaderCategory::NON_FILTER;
   }
 
   TypeImpl::TypeImpl(TypeKind _kind, uint64_t _maxLength) {
@@ -49,6 +56,7 @@ namespace orc {
     precision = 0;
     scale = 0;
     subtypeCount = 0;
+    readerCategory = ReaderCategory::NON_FILTER;
   }
 
   TypeImpl::TypeImpl(TypeKind _kind, uint64_t _precision, uint64_t _scale) {
@@ -60,6 +68,7 @@ namespace orc {
     precision = _precision;
     scale = _scale;
     subtypeCount = 0;
+    readerCategory = ReaderCategory::NON_FILTER;
   }
 
   uint64_t TypeImpl::assignIds(uint64_t root) const {
@@ -75,8 +84,8 @@ namespace orc {
   void TypeImpl::ensureIdAssigned() const {
     if (columnId == -1) {
       const TypeImpl* root = this;
-      while (root->parent != nullptr) {
-        root = root->parent;
+      while (root->getParent() != nullptr) {
+        root = dynamic_cast<const TypeImpl*>(root->getParent());
       }
       root->assignIds(0);
     }
@@ -100,7 +109,15 @@ namespace orc {
     return subtypeCount;
   }
 
+  Type* TypeImpl::getParent() const {
+    return parent;
+  }
+
   const Type* TypeImpl::getSubtype(uint64_t i) const {
+    return subTypes[i].get();
+  }
+
+  Type* TypeImpl::getSubtype(uint64_t i) {
     return subTypes[i].get();
   }
 
@@ -153,6 +170,14 @@ namespace orc {
       throw std::range_error("Key not found: " + key);
     }
     return it->second;
+  }
+
+  ReaderCategory TypeImpl::getReaderCategory() const {
+    return readerCategory;
+  }
+
+  void TypeImpl::setReaderCategory(ReaderCategory _readerCategory) {
+    readerCategory = _readerCategory;
   }
 
   void TypeImpl::setIds(uint64_t _columnId, uint64_t _maxColumnId) {

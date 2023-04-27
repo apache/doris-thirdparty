@@ -247,7 +247,8 @@ namespace orc {
   }
 
   RowReaderImpl::RowReaderImpl(std::shared_ptr<FileContents> _contents,
-                               const RowReaderOptions& opts)
+                               const RowReaderOptions& opts,
+                               const ORCFilter* _filter)
       : localTimezone(getLocalTimezone()),
         contents(_contents),
         throwOnHive11DecimalOverflow(opts.getThrowOnHive11DecimalOverflow()),
@@ -255,7 +256,8 @@ namespace orc {
         footer(contents->footer.get()),
         firstRowOfStripe(*contents->pool, 0),
         enableEncodedBlock(opts.getEnableLazyDecoding()),
-        readerTimezone(getTimezoneByName(opts.getTimezoneName())) {
+        readerTimezone(getTimezoneByName(opts.getTimezoneName())),
+        filter(_filter) {
     uint64_t numberOfStripes;
     numberOfStripes = static_cast<uint64_t>(footer->stripes_size());
     currentStripe = numberOfStripes;
@@ -309,6 +311,37 @@ namespace orc {
     }
 
     skipBloomFilters = hasBadBloomFilters();
+
+    const std::list<std::string>& filterCols = opts.getFilterColNames();
+
+    // Map columnNames to ColumnIds
+    buildTypeNameIdMap(contents->schema.get());
+
+    std::unordered_set<int> filterColIds;
+    if (!filterCols.empty()) {
+      for (auto& colName: filterCols) {
+        auto iter = nameTypeMap.find(colName);
+        if (iter != nameTypeMap.end()) {
+          Type* type = iter->second;
+          while (type != nullptr) {
+            if (type->getSubtypeCount() == 0) {
+              type->setReaderCategory(ReaderCategory::FILTER_CHILD);
+            } else {
+              type->setReaderCategory(ReaderCategory::FILTER_PARENT);
+            }
+            filterColIds.emplace(type->getColumnId());
+            type = type->getParent();
+          }
+        } else {
+          throw ParseError("Invalid column selected " + colName);
+        }
+      }
+      startReadPhase = ReadPhase::LEADERS;
+      readerContext = std::unique_ptr<ReaderContext>(new ReaderContext());
+      readerContext->setFilterCallback(std::move(filterColIds), filter);
+    } else {
+      startReadPhase = ReadPhase::ALL;
+    }
   }
 
   // Check if the file has inconsistent bloom filters.
@@ -337,7 +370,43 @@ namespace orc {
     return false;
   }
 
-  CompressionKind RowReaderImpl::getCompression() const {
+  /**
+   * Recurses over a type tree and build two maps
+   * map<TypeName, TypeId>, map<TypeId, Type>
+   */
+  void RowReaderImpl::buildTypeNameIdMap(Type* type) {
+    // map<type_id, Type*>
+    idTypeMap[type->getColumnId()] = type;
+
+    if (STRUCT == type->getKind()) {
+      for (size_t i = 0; i < type->getSubtypeCount(); ++i) {
+        const std::string& fieldName = type->getFieldName(i);
+        columns.push_back(fieldName);
+        nameTypeMap[toDotColumnPath()] = type->getSubtype(i);
+        buildTypeNameIdMap(type->getSubtype(i));
+        columns.pop_back();
+      }
+    } else {
+      // other non-primitive type
+      for (size_t j = 0; j < type->getSubtypeCount(); ++j) {
+        buildTypeNameIdMap(type->getSubtype(j));
+      }
+    }
+  }
+
+  std::string RowReaderImpl::toDotColumnPath() {
+    if (columns.empty()) {
+      return std::string();
+    }
+    std::ostringstream columnStream;
+    std::copy(columns.begin(), columns.end(),
+              std::ostream_iterator<std::string>(columnStream, "."));
+    std::string columnPath = columnStream.str();
+    return columnPath.substr(0, columnPath.length() - 1);
+  }
+
+
+    CompressionKind RowReaderImpl::getCompression() const {
     return contents->compression;
   }
 
@@ -401,7 +470,7 @@ namespace orc {
       // current stripe doesn't have row indexes
       currentStripe = seekToStripe;
       currentRowInStripe = rowNumber - firstRowOfStripe[currentStripe];
-      startNextStripe();
+      startNextStripe(startReadPhase);
       if (currentStripe >= lastStripe) {
         return;
       }
@@ -422,14 +491,14 @@ namespace orc {
         loadStripeIndex();
       }
       // TODO(ORC-1175): process the failures of loadStripeIndex() call
-      seekToRowGroup(static_cast<uint32_t>(rowsToSkip / rowIndexStride));
+      seekToRowGroup(static_cast<uint32_t>(rowsToSkip / rowIndexStride), startReadPhase);
       // skip leading rows in the target row group
       rowsToSkip %= rowIndexStride;
     }
     // 'reader' is reset in startNextStripe(). It could be nullptr if 'rowsToSkip' is 0,
     // e.g. when startNextStripe() skips all remaining rows of the file.
     if (rowsToSkip > 0) {
-      reader->skip(rowsToSkip);
+      reader->skip(rowsToSkip, startReadPhase);
     }
   }
 
@@ -477,7 +546,7 @@ namespace orc {
     }
   }
 
-  void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
+  void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId, const ReadPhase& readPhase) {
     // store positions for selected columns
     std::list<std::list<uint64_t>> positions;
     // store position providers for selected colimns
@@ -497,7 +566,7 @@ namespace orc {
       positionProviders.insert(std::make_pair(colId, PositionProvider(position)));
     }
 
-    reader->seekToRowGroup(positionProviders);
+    reader->seekToRowGroup(positionProviders, readPhase);
   }
 
   const FileContents& RowReaderImpl::getFileContents() const {
@@ -826,17 +895,17 @@ namespace orc {
     }
   }
 
-  std::unique_ptr<RowReader> ReaderImpl::createRowReader() const {
+  std::unique_ptr<RowReader> ReaderImpl::createRowReader(const ORCFilter* filter) const {
     RowReaderOptions defaultOpts;
-    return createRowReader(defaultOpts);
+    return createRowReader(defaultOpts, filter);
   }
 
-  std::unique_ptr<RowReader> ReaderImpl::createRowReader(const RowReaderOptions& opts) const {
+  std::unique_ptr<RowReader> ReaderImpl::createRowReader(const RowReaderOptions& opts, const ORCFilter* filter) const {
     if (opts.getSearchArgument() && !isMetadataLoaded) {
       // load stripe statistics for PPD
       readMetadata();
     }
-    return std::make_unique<RowReaderImpl>(contents, opts);
+    return std::make_unique<RowReaderImpl>(contents, opts, filter);
   }
 
   uint64_t maxStreamsForType(const proto::Type& type) {
@@ -1020,10 +1089,11 @@ namespace orc {
     }
   }
 
-  void RowReaderImpl::startNextStripe() {
+  void RowReaderImpl::startNextStripe(const ReadPhase& readPhase) {
     reader.reset();  // ColumnReaders use lots of memory; free old memory first
     rowIndexes.clear();
     bloomFilterIndex.clear();
+    followRowInStripe = 0;
 
     // evaluate file statistics if it exists
     if (sargsApplier && !sargsApplier->evaluateFileStatistics(*footer, numRowGroupsInStripeRange)) {
@@ -1051,6 +1121,9 @@ namespace orc {
       rowsInCurrentStripe = currentStripeInfo.numberofrows();
       processingStripe = currentStripe;
 
+      // read row group statistics and bloom filters of current stripe
+      loadStripeIndex();
+
       if (sargsApplier) {
         bool isStripeNeeded = true;
         if (contents->metadata) {
@@ -1064,9 +1137,6 @@ namespace orc {
         }
 
         if (isStripeNeeded) {
-          // read row group statistics and bloom filters of current stripe
-          loadStripeIndex();
-
           // select row groups to read in the current stripe
           sargsApplier->pickRowGroups(rowsInCurrentStripe, rowIndexes, bloomFilterIndex);
           if (sargsApplier->hasSelectedFrom(currentRowInStripe)) {
@@ -1100,7 +1170,7 @@ namespace orc {
                                   sargsApplier->getNextSkippedRows());
         previousRow = firstRowOfStripe[currentStripe] + currentRowInStripe - 1;
         if (currentRowInStripe > 0) {
-          seekToRowGroup(static_cast<uint32_t>(currentRowInStripe / footer->rowindexstride()));
+          seekToRowGroup(static_cast<uint32_t>(currentRowInStripe / footer->rowindexstride()), readPhase);
         }
       }
     } else {
@@ -1110,55 +1180,174 @@ namespace orc {
   }
 
   bool RowReaderImpl::next(ColumnVectorBatch& data) {
+    return nextBatch(data, nullptr) != 0;
+  }
+
+  uint64_t RowReaderImpl::nextBatch(ColumnVectorBatch& data, void* arg) {
     SCOPED_STOPWATCH(contents->readerMetrics, ReaderInclusiveLatencyUs, ReaderCall);
-    if (currentStripe >= lastStripe) {
-      data.numElements = 0;
-      markEndOfFile();
-      return false;
-    }
-    if (currentRowInStripe == 0) {
-      startNextStripe();
-    }
-    uint64_t rowsToRead =
-        std::min(static_cast<uint64_t>(data.capacity), rowsInCurrentStripe - currentRowInStripe);
-    if (sargsApplier && rowsToRead > 0) {
-      rowsToRead = computeBatchSize(rowsToRead, currentRowInStripe, rowsInCurrentStripe,
-                                    footer->rowindexstride(), sargsApplier->getNextSkippedRows());
-    }
-    data.numElements = rowsToRead;
-    if (rowsToRead == 0) {
-      markEndOfFile();
-      return false;
-    }
-    if (enableEncodedBlock) {
-      reader->nextEncoded(data, rowsToRead, nullptr);
-    } else {
-      reader->next(data, rowsToRead, nullptr);
-    }
-    // update row number
-    previousRow = firstRowOfStripe[currentStripe] + currentRowInStripe;
-    currentRowInStripe += rowsToRead;
+    uint64_t readRows = 0;
+    uint64_t rowsToRead = 0;
+    // do...while is required to handle the case where the filter eliminates all rows in the
+    // batch, we never return an empty batch unless the file is exhausted
+    do {
+      if (currentStripe >= lastStripe) {
+        data.numElements = 0;
+        markEndOfFile();
+        return readRows;
+      }
+      if (currentRowInStripe == 0) {
+        startNextStripe(startReadPhase);
+        followRowInStripe = currentRowInStripe;
+      }
+      rowsToRead =
+          std::min(static_cast<uint64_t>(data.capacity),
+                   rowsInCurrentStripe - currentRowInStripe);
+      if (sargsApplier) {
+        rowsToRead = computeBatchSize(rowsToRead,
+                                      currentRowInStripe,
+                                      rowsInCurrentStripe,
+                                      footer->rowindexstride(),
+                                      sargsApplier->getNextSkippedRows());
+      }
+      if (rowsToRead == 0) {
+        markEndOfFile();
+        return readRows;
+      }
+      uint16_t sel_rowid_idx[rowsToRead];
+      nextBatch(data, rowsToRead, startReadPhase, sel_rowid_idx, arg);
+
+      if (startReadPhase == ReadPhase::LEADERS && data.numElements > 0) {
+        // At least 1 row has been selected and as a result we read the follow columns into the
+        // row batch
+        nextBatch(data, rowsToRead,
+                  prepareFollowReaders(footer->rowindexstride(),
+                                       currentRowInStripe, followRowInStripe), sel_rowid_idx, arg);
+        followRowInStripe = currentRowInStripe + rowsToRead;
+      }
+
+      // update row number
+      previousRow = firstRowOfStripe[currentStripe] + currentRowInStripe;
+      currentRowInStripe += rowsToRead;
+      readRows += rowsToRead;
 
     // check if we need to advance to next selected row group
     if (sargsApplier) {
       uint64_t nextRowToRead =
           advanceToNextRowGroup(currentRowInStripe, rowsInCurrentStripe, footer->rowindexstride(),
                                 sargsApplier->getNextSkippedRows());
-      if (currentRowInStripe != nextRowToRead) {
-        // it is guaranteed to be at start of a row group
-        currentRowInStripe = nextRowToRead;
-        if (currentRowInStripe < rowsInCurrentStripe) {
-          seekToRowGroup(static_cast<uint32_t>(currentRowInStripe / footer->rowindexstride()));
+        if (currentRowInStripe != nextRowToRead) {
+          // it is guaranteed to be at start of a row group
+          currentRowInStripe = nextRowToRead;
+          if (currentRowInStripe < rowsInCurrentStripe) {
+            seekToRowGroup(static_cast<uint32_t>(currentRowInStripe / footer->rowindexstride()),
+                           startReadPhase);
+          }
         }
       }
+
+      if (currentRowInStripe >= rowsInCurrentStripe) {
+        currentStripe += 1;
+        currentRowInStripe = 0;
+      }
+    } while (rowsToRead != 0 && data.numElements == 0);
+    return readRows;
+  }
+
+  void RowReaderImpl::nextBatch(ColumnVectorBatch& data, int batchSize, const ReadPhase& readPhase, uint16_t* sel_rowid_idx, void* arg) {
+    if (enableEncodedBlock) {
+      reader->nextEncoded(data, batchSize, nullptr, readPhase);
+    }
+    else {
+      reader->next(data, batchSize, nullptr, readPhase);
+    }
+    if (readPhase == ReadPhase::ALL || readPhase == ReadPhase::LEADERS) {
+      // Set the batch size when reading everything or when reading FILTER columns
+      data.numElements = batchSize;
     }
 
-    if (currentRowInStripe >= rowsInCurrentStripe) {
-      currentStripe += 1;
-      currentRowInStripe = 0;
+    if (readPhase == ReadPhase::LEADERS) {
+      // Apply filter callback to reduce number of # rows selected for decoding in the next
+      // TreeReaders
+      if (readerContext->getFilterCallback()) {
+        readerContext->getFilterCallback()->filter(data, sel_rowid_idx, batchSize, arg);
+      }
     }
-    return rowsToRead != 0;
   }
+
+    /**
+   * Determine the RowGroup based on the supplied row id.
+   * @param rowIdx Row for which the row group is being determined
+   * @return Id of the RowGroup that the row belongs to
+   */
+    int RowReaderImpl::computeRGIdx(uint64_t rowIndexStride, long rowIdx) {
+      return rowIndexStride == 0 ? 0 : (int) (rowIdx / rowIndexStride);
+    }
+
+    /**
+     * This method prepares the non-filter column readers for next batch. This involves the following
+     * 1. Determine position
+     * 2. Perform IO if required
+     * 3. Position the non-filter readers
+     *
+     * This method is repositioning the non-filter columns and as such this method shall never have to
+     * deal with navigating the stripe forward or skipping row groups, all of this should have already
+     * taken place based on the filter columns.
+     * @param toFollowRow The rowIdx identifies the required row position within the stripe for
+     *                    follow read
+     * @param fromFollowRow Indicates the current position of the follow read, exclusive
+     * @return the read phase for reading non-filter columns, this shall be FOLLOWERS_AND_PARENTS in
+     * case of a seek otherwise will be FOLLOWERS
+     */
+    ReadPhase RowReaderImpl::prepareFollowReaders(uint64_t rowIndexStride, long toFollowRow, long fromFollowRow) {
+      // 1. Determine the required row group and skip rows needed from the RG start
+      int needRG = computeRGIdx(rowIndexStride, toFollowRow);
+      // The current row is not yet read so we -1 to compute the previously read row group
+      int readRG = computeRGIdx(rowIndexStride, fromFollowRow - 1);
+      long skipRows;
+      if (needRG == readRG && toFollowRow >= fromFollowRow) {
+        // In case we are skipping forward within the same row group, we compute skip rows from the
+        // current position
+        skipRows = toFollowRow - fromFollowRow;
+      } else {
+        // In all other cases including seeking backwards, we compute the skip rows from the start of
+        // the required row group
+        skipRows = toFollowRow - (needRG * rowIndexStride);
+      }
+
+      // 2. Plan the row group idx for the non-filter columns if this has not already taken place
+      if (needsFollowColumnsRead) {
+        needsFollowColumnsRead = false;
+      }
+
+      // 3. Position the non-filter readers to the required RG and skipRows
+      ReadPhase result = ReadPhase::FOLLOWERS;
+      if (needRG != readRG || toFollowRow < fromFollowRow) {
+        // When having to change a row group or in case of back navigation, seek both the filter
+        // parents and non-filter. This will re-position the parents present vector. This is needed
+        // to determine the number of non-null values to skip on the non-filter columns.
+        seekToRowGroup(needRG, ReadPhase::FOLLOWERS_AND_PARENTS);
+        // skip rows on both the filter parents and non-filter as both have been positioned in the
+        // previous step
+        reader->skip(skipRows, ReadPhase::FOLLOWERS_AND_PARENTS);
+        result = ReadPhase::FOLLOWERS_AND_PARENTS;
+      } else if (skipRows > 0) {
+        // in case we are only skipping within the row group, position the filter parents back to the
+        // position of the follow. This is required to determine the non-null values to skip on the
+        // non-filter columns.
+        seekToRowGroup(readRG, ReadPhase::LEADER_PARENTS);
+        reader->skip(fromFollowRow - (readRG * rowIndexStride), ReadPhase::LEADER_PARENTS);
+        // Move both the filter parents and non-filter forward, this will compute the correct
+        // non-null skips on follow children
+        reader->skip(skipRows, ReadPhase::FOLLOWERS_AND_PARENTS);
+        result = ReadPhase::FOLLOWERS_AND_PARENTS;
+      }
+      // Identifies the read level that should be performed for the read
+      // FOLLOWERS_WITH_PARENTS indicates repositioning identifying both non-filter and filter parents
+      // FOLLOWERS indicates read only of the non-filter level without the parents, which is used during
+      // contiguous read. During a contiguous read no skips are needed and the non-null information of
+      // the parent is available in the column vector for use during non-filter read
+      return result;
+    }
 
   uint64_t RowReaderImpl::computeBatchSize(uint64_t requestedSize, uint64_t currentRowInStripe,
                                            uint64_t rowsInCurrentStripe, uint64_t rowIndexStride,

@@ -34,6 +34,25 @@ namespace orc {
 
   static const uint64_t DIRECTORY_SIZE_GUESS = 16 * 1024;
 
+  class ReaderContext {
+  public:
+   ReaderContext() = default;
+
+   const ORCFilter* getFilterCallback() const {
+     return filter;
+   }
+
+   ReaderContext& setFilterCallback(std::unordered_set<int> _filterColumnIds, const ORCFilter* _filter) {
+     this->filterColumnIds = std::move(_filterColumnIds);
+     this->filter = _filter;
+     return *this;
+   }
+
+  private:
+   std::unordered_set<int> filterColumnIds;
+   const ORCFilter* filter;
+  };
+
   /**
    * WriterVersion Implementation
    */
@@ -150,6 +169,7 @@ namespace orc {
     uint64_t lastStripe;  // the stripe AFTER the last one
     uint64_t processingStripe;
     uint64_t currentRowInStripe;
+    uint64_t followRowInStripe;
     uint64_t rowsInCurrentStripe;
     // number of row groups between first stripe and last stripe
     uint64_t numRowGroupsInStripeRange;
@@ -160,7 +180,7 @@ namespace orc {
     bool enableEncodedBlock;
     bool useTightNumericVector;
     // internal methods
-    void startNextStripe();
+    void startNextStripe(const ReadPhase& readPhase);
     inline void markEndOfFile();
 
     // row index of current stripe with column id as the key
@@ -171,6 +191,15 @@ namespace orc {
 
     // desired timezone to return data of timestamp types.
     const Timezone& readerTimezone;
+
+    std::unique_ptr<ReaderContext> readerContext;
+    const ORCFilter* filter;
+    ReadPhase startReadPhase;
+    bool needsFollowColumnsRead;
+
+    std::map<uint64_t, const Type*> idTypeMap;
+    std::map<std::string, Type*> nameTypeMap;
+    std::vector<std::string> columns;
 
     // load stripe index if not done so
     void loadStripeIndex();
@@ -199,7 +228,7 @@ namespace orc {
      * Seek to the start of a row group in the current stripe
      * @param rowGroupEntryId the row group id to seek to
      */
-    void seekToRowGroup(uint32_t rowGroupEntryId);
+    void seekToRowGroup(uint32_t rowGroupEntryId, const ReadPhase& readPhase);
 
     /**
      * Check if the file has bad bloom filters. We will skip using them in the
@@ -208,13 +237,25 @@ namespace orc {
      */
     bool hasBadBloomFilters();
 
-   public:
+
+    // build map from type name and id, id to Type
+    void buildTypeNameIdMap(Type* type);
+
+    std::string toDotColumnPath();
+
+    void nextBatch(ColumnVectorBatch& data, int batchSize, const ReadPhase& readPhase, uint16_t* sel_rowid_idx, void* arg);
+
+    int computeRGIdx(uint64_t rowIndexStride, long rowIdx);
+
+    ReadPhase prepareFollowReaders(uint64_t rowIndexStride, long toFollowRow, long fromFollowRow);
+
+  public:
     /**
      * Constructor that lets the user specify additional options.
      * @param contents of the file
      * @param options options for reading
      */
-    RowReaderImpl(std::shared_ptr<FileContents> contents, const RowReaderOptions& options);
+    RowReaderImpl(std::shared_ptr<FileContents> contents, const RowReaderOptions& options, const ORCFilter* filter = nullptr);
 
     // Select the columns from the options object
     const std::vector<bool> getSelectedColumns() const override;
@@ -222,6 +263,8 @@ namespace orc {
     const Type& getSelectedType() const override;
 
     std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size) const override;
+
+    uint64_t nextBatch(ColumnVectorBatch& data, void* arg = nullptr) override;
 
     bool next(ColumnVectorBatch& data) override;
 
@@ -312,9 +355,9 @@ namespace orc {
 
     std::unique_ptr<StripeStatistics> getStripeStatistics(uint64_t stripeIndex) const override;
 
-    std::unique_ptr<RowReader> createRowReader() const override;
+    std::unique_ptr<RowReader> createRowReader(const ORCFilter* filter = nullptr) const override;
 
-    std::unique_ptr<RowReader> createRowReader(const RowReaderOptions& options) const override;
+    std::unique_ptr<RowReader> createRowReader(const RowReaderOptions& options, const ORCFilter* filter = nullptr) const override;
 
     uint64_t getContentLength() const override;
     uint64_t getStripeStatisticsLength() const override;

@@ -19,11 +19,46 @@
 #ifndef ORC_TYPE_HH
 #define ORC_TYPE_HH
 
+#include <bitset>
+#include <unordered_set>
 #include "MemoryPool.hh"
 #include "orc/Vector.hh"
 #include "orc/orc-config.hh"
 
 namespace orc {
+  enum class ReaderCategory {
+      FILTER_CHILD,    // Primitive type that is a filter column
+      FILTER_PARENT,   // Compound type with filter children
+      NON_FILTER       // Non-filter column
+  };
+
+  class ReadPhase {
+   public:
+      static const int NUM_CATEGORIES = 3;  // Number of values in ReaderCategory
+      std::bitset<NUM_CATEGORIES> categories;
+
+      static const ReadPhase ALL;
+      static const ReadPhase LEADERS;
+      static const ReadPhase FOLLOWERS;
+      static const ReadPhase LEADER_PARENTS;
+      static const ReadPhase FOLLOWERS_AND_PARENTS;
+
+      static ReadPhase fromCategories(const std::unordered_set<ReaderCategory>& cats) {
+        ReadPhase phase;
+        for (ReaderCategory cat : cats) {
+          phase.categories.set(static_cast<size_t>(cat));
+        }
+        return phase;
+      }
+
+      bool contains(ReaderCategory cat) const {
+        return categories.test(static_cast<size_t>(cat));
+      }
+
+      bool operator==(const ReadPhase& other) const {
+        return categories == other.categories;
+      }
+  };
 
   enum TypeKind {
     BOOLEAN = 0,
@@ -54,7 +89,9 @@ namespace orc {
     virtual uint64_t getMaximumColumnId() const = 0;
     virtual TypeKind getKind() const = 0;
     virtual uint64_t getSubtypeCount() const = 0;
+    virtual Type* getParent() const = 0;
     virtual const Type* getSubtype(uint64_t childId) const = 0;
+    virtual Type* getSubtype(uint64_t childId) = 0;
     virtual const std::string& getFieldName(uint64_t childId) const = 0;
     virtual uint64_t getMaximumLength() const = 0;
     virtual uint64_t getPrecision() const = 0;
@@ -64,6 +101,8 @@ namespace orc {
     virtual Type& removeAttribute(const std::string& key) = 0;
     virtual std::vector<std::string> getAttributeKeys() const = 0;
     virtual std::string getAttributeValue(const std::string& key) const = 0;
+    virtual ReaderCategory getReaderCategory() const = 0;
+    virtual void setReaderCategory(ReaderCategory readerCategory) = 0;
     virtual std::string toString() const = 0;
     /**
      * Get the Type with the given column ID

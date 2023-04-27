@@ -186,6 +186,26 @@ namespace orc {
     RowReaderOptions& includeTypes(const std::list<uint64_t>& types);
 
     /**
+      * For files that have structs as the top-level object, filter the fields.
+      * by index. The first field is 0, the second 1, and so on. By default,
+      * all columns are read. This option clears any previous setting of
+      * the selected columns.
+      * @param filterColIndexes a list of fields to read
+      * @return this
+      */
+    RowReaderOptions& filter(const std::list<uint64_t>& filterColIndexes);
+
+    /**
+      * For files that have structs as the top-level object, filter the fields
+      * by name. By default, all columns are read. This option clears
+      * any previous setting of the selected columns.
+      * @param filterColNames a list of fields to read
+      * @return this
+      */
+    RowReaderOptions& filter(const std::list<std::string>& filterColNames);
+
+
+      /**
      * A map type of <typeId, ReadIntent>.
      */
     typedef std::map<uint64_t, ReadIntent> IdReadIntentMap;
@@ -282,6 +302,12 @@ namespace orc {
     const std::list<std::string>& getIncludeNames() const;
 
     /**
+     * Get the list of selected columns to read. All children of the selected
+     * columns are also selected.
+     */
+    const std::list<std::string>& getFilterColNames() const;
+
+    /**
      * Get the start of the range for the data being processed.
      * @return if not set, return 0
      */
@@ -336,6 +362,12 @@ namespace orc {
      * @return if not set, the default is false
      */
     bool getUseTightNumericVector() const;
+  };
+
+  class ORCFilter {
+   public:
+    virtual ~ORCFilter() = default;
+    virtual void filter(ColumnVectorBatch& data, uint16_t* sel, uint16_t size, void* arg = nullptr) const = 0;
   };
 
   class RowReader;
@@ -523,14 +555,14 @@ namespace orc {
      * Create a RowReader based on this reader with the default options.
      * @return a RowReader to read the rows
      */
-    virtual std::unique_ptr<RowReader> createRowReader() const = 0;
+    virtual std::unique_ptr<RowReader> createRowReader(const ORCFilter* filter = nullptr) const = 0;
 
     /**
      * Create a RowReader based on this reader.
      * @param options RowReader Options
      * @return a RowReader to read the rows
      */
-    virtual std::unique_ptr<RowReader> createRowReader(const RowReaderOptions& options) const = 0;
+    virtual std::unique_ptr<RowReader> createRowReader(const RowReaderOptions& options, const ORCFilter* filter = nullptr) const = 0;
 
     /**
      * Get the name of the input stream.
@@ -621,8 +653,18 @@ namespace orc {
      * Caller must look at numElements in the row batch to determine how
      * many rows were read.
      * @param data the row batch to read into.
+     * @param arg argument.
+     * @return number of rows.
+     */
+    virtual uint64_t nextBatch(ColumnVectorBatch& data, void* arg = nullptr) = 0;
+
+    /**
+     * Read the next row batch from the current position.
+     * Caller must look at numElements in the row batch to determine how
+     * many rows were read.
+     * @param data the row batch to read into.
      * @return true if a non-zero number of rows were read or false if the
-     *   end of the file was reached.
+     * end of the file was reached.
      */
     virtual bool next(ColumnVectorBatch& data) = 0;
 
