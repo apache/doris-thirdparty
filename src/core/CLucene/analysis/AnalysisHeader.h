@@ -267,12 +267,12 @@ protected:
     /** Used by Analyzers that implement reusableTokenStream
 	*  to retrieve previously saved TokenStreams for re-use
 	*  by the same thread. */
-    TokenStream* getPreviousTokenStream();
+    virtual TokenStream* getPreviousTokenStream();
 
     /** Used by Analyzers that implement reusableTokenStream
 	*  to save a TokenStream for later re-use by the same
 	*  thread. */
-    void setPreviousTokenStream(TokenStream* obj);
+    virtual void setPreviousTokenStream(TokenStream* obj);
 public:
     /**
 	* Invoked before indexing a Field instance if

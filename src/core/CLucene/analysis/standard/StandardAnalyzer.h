@@ -22,6 +22,7 @@ CL_NS_DEF2(analysis,standard)
 	private:
 		CLTCSetList* stopSet;
         int32_t maxTokenLength;
+        TokenStream* prev_tokenStream{};
 
         class SavedStreams;
 	public:
@@ -46,6 +47,13 @@ CL_NS_DEF2(analysis,standard)
 
 		virtual ~StandardAnalyzer();
 
+
+        TokenStream* getPreviousTokenStream() override {
+            return prev_tokenStream;
+        }
+        void setPreviousTokenStream(TokenStream* obj) override {
+            prev_tokenStream = obj;
+        }
         /**
         * Constructs a StandardTokenizer filtered by a 
         * StandardFilter, a LowerCaseFilter and a StopFilter.
