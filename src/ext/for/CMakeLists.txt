@@ -55,11 +55,6 @@ set(SRC_FILES
 
 # Add base source files to library
 add_library(ic STATIC
-    bitpack.c
-    bitunpack.c
-    vp4c.c
-    vp4d.c
-    transpose.c
     bitutil.c
     fp.c
     v8.c
@@ -75,13 +70,20 @@ foreach(SRC_FILE ${SRC_FILES})
     get_filename_component(SRC_NAME ${SRC_FILE} NAME_WE)
     set(SSE_OUTPUT ${SRC_NAME}_sse.o)
     set(AVX2_OUTPUT ${SRC_NAME}_avx2.o)
+    set(OUTPUT ${SRC_NAME}.o)
 
+    add_custom_command(
+        OUTPUT ${OUTPUT}
+	COMMAND ${CMAKE_C_COMPILER} -c -o ${OUTPUT} ${SRC_FILE} ${c_flags_list}
+        DEPENDS ${SRC_FILE}
+    )
     add_custom_command(
         OUTPUT ${SSE_OUTPUT}
 	COMMAND ${CMAKE_C_COMPILER} -c -o ${SSE_OUTPUT} ${SRC_FILE} ${c_flags_list} -DSSE2_ON ${SSE}
         DEPENDS ${SRC_FILE}
     )
 
+    target_sources(ic PRIVATE ${OUTPUT})
     target_sources(ic PRIVATE ${SSE_OUTPUT})
 
     if(USE_AVX2)
