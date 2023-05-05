@@ -36,9 +36,6 @@ endif(WIN32)
 # include specific modules
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-#remove FOR cmake,use shell script
-include(cmake/TurboPFOR.cmake)
-
 #define options...
 
 include(cmake/CLuceneDocs.cmake)
@@ -188,6 +185,8 @@ INCLUDE_DIRECTORIES( ${_CL_BOOST_INCLUDE_PATH} )
 
 #include the projects
 ADD_SUBDIRECTORY (src/ext)
+#TurboPFOR
+ADD_SUBDIRECTORY (src/ext/for)
 ADD_SUBDIRECTORY (src/shared)
 ADD_SUBDIRECTORY (src/core)
 ADD_SUBDIRECTORY (src/test)

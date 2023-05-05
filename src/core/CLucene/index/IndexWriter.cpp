@@ -22,7 +22,6 @@
 #include "CLucene/store/_RAMDirectory.h"
 #include "CLucene/util/Array.h"
 #include "CLucene/util/PriorityQueue.h"
-#include "CLucene/util/croaring/roaring.hh"
 #include "MergePolicy.h"
 #include "MergeScheduler.h"
 #include "SDocumentWriter.h"
