@@ -27,37 +27,37 @@
 
 namespace orc {
   enum class ReaderCategory {
-      FILTER_CHILD,    // Primitive type that is a filter column
-      FILTER_PARENT,   // Compound type with filter children
-      NON_FILTER       // Non-filter column
+    FILTER_CHILD,   // Primitive type that is a filter column
+    FILTER_PARENT,  // Compound type with filter children
+    NON_FILTER      // Non-filter column
   };
 
   class ReadPhase {
    public:
-      static const int NUM_CATEGORIES = 3;  // Number of values in ReaderCategory
-      std::bitset<NUM_CATEGORIES> categories;
+    static const int NUM_CATEGORIES = 3;  // Number of values in ReaderCategory
+    std::bitset<NUM_CATEGORIES> categories;
 
-      static const ReadPhase ALL;
-      static const ReadPhase LEADERS;
-      static const ReadPhase FOLLOWERS;
-      static const ReadPhase LEADER_PARENTS;
-      static const ReadPhase FOLLOWERS_AND_PARENTS;
+    static const ReadPhase ALL;
+    static const ReadPhase LEADERS;
+    static const ReadPhase FOLLOWERS;
+    static const ReadPhase LEADER_PARENTS;
+    static const ReadPhase FOLLOWERS_AND_PARENTS;
 
-      static ReadPhase fromCategories(const std::unordered_set<ReaderCategory>& cats) {
-        ReadPhase phase;
-        for (ReaderCategory cat : cats) {
-          phase.categories.set(static_cast<size_t>(cat));
-        }
-        return phase;
+    static ReadPhase fromCategories(const std::unordered_set<ReaderCategory>& cats) {
+      ReadPhase phase;
+      for (ReaderCategory cat : cats) {
+        phase.categories.set(static_cast<size_t>(cat));
       }
+      return phase;
+    }
 
-      bool contains(ReaderCategory cat) const {
-        return categories.test(static_cast<size_t>(cat));
-      }
+    bool contains(ReaderCategory cat) const {
+      return categories.test(static_cast<size_t>(cat));
+    }
 
-      bool operator==(const ReadPhase& other) const {
-        return categories == other.categories;
-      }
+    bool operator==(const ReadPhase& other) const {
+      return categories == other.categories;
+    }
   };
 
   enum TypeKind {

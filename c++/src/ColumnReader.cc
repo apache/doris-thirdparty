@@ -85,7 +85,8 @@ namespace orc {
     return numValues;
   }
 
-  void ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* incomingMask, const ReadPhase& readPhase) {
+  void ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* incomingMask,
+                          const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) {
     if (numValues > rowBatch.capacity) {
       rowBatch.resize(numValues);
     }
@@ -101,19 +102,17 @@ namespace orc {
           return;
         }
       }
-      rowBatch.hasNulls = false;
     } else if (incomingMask) {
       // If we don't have a notNull stream, copy the incomingMask
       rowBatch.hasNulls = true;
       memcpy(rowBatch.notNull.data(), incomingMask, numValues);
       return;
-    } else {
-      rowBatch.hasNulls = false;
-      memset(rowBatch.notNull.data(), 1, numValues);
     }
+    rowBatch.hasNulls = false;
   }
 
-  void ColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+  void ColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                                    const ReadPhase& readPhase) {
     if (notNullDecoder.get()) {
       notNullDecoder->seek(positions.at(columnId));
     }
@@ -148,9 +147,11 @@ namespace orc {
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override;
   };
 
   template <typename BatchType>
@@ -176,7 +177,8 @@ namespace orc {
 
   template <typename BatchType>
   void BooleanColumnReader<BatchType>::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                            char* notNull, const ReadPhase& readPhase) {
+                                            char* notNull, const ReadPhase& readPhase,
+                                            uint16_t* sel_rowid_idx, size_t sel_size) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     // Since the byte rle places the output in a char* and BatchType here may be
     // LongVectorBatch with long*. We cheat here in that case and use the long*
@@ -215,7 +217,8 @@ namespace orc {
       return numValues;
     }
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override {
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override {
       ColumnReader::next(rowBatch, numValues, notNull, readPhase);
       // Since the byte rle places the output in a char* instead of long*,
       // we cheat here and use the long* and then expand it in a second pass.
@@ -225,7 +228,8 @@ namespace orc {
       expandBytesToIntegers(ptr, numValues);
     }
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override {
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override {
       ColumnReader::seekToRowGroup(positions, readPhase);
       rle->seek(positions.at(columnId));
     }
@@ -255,13 +259,15 @@ namespace orc {
       return numValues;
     }
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override {
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override {
       ColumnReader::next(rowBatch, numValues, notNull, readPhase);
       rle->next(dynamic_cast<BatchType&>(rowBatch).data.data(), numValues,
                 rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr);
     }
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override {
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override {
       ColumnReader::seekToRowGroup(positions, readPhase);
       rle->seek(positions.at(columnId));
     }
@@ -276,15 +282,24 @@ namespace orc {
     const int64_t epochOffset;
     const bool sameTimezone;
 
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                      const ReadPhase& readPhase);
+    void nextInternalWithFilter(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                size_t sel_size);
+    uint64_t skipInternal(uint64_t numValues, const ReadPhase& readPhase);
+
    public:
     TimestampColumnReader(const Type& type, StripeStreams& stripe, bool isInstantType);
     ~TimestampColumnReader() override;
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override;
   };
 
   TimestampColumnReader::TimestampColumnReader(const Type& type, StripeStreams& stripe,
@@ -310,12 +325,28 @@ namespace orc {
 
   uint64_t TimestampColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
     numValues = ColumnReader::skip(numValues, readPhase);
+    numValues = skipInternal(numValues, readPhase);
+    return numValues;
+  }
+
+  uint64_t TimestampColumnReader::skipInternal(uint64_t numValues, const ReadPhase& readPhase) {
     secondsRle->skip(numValues);
     nanoRle->skip(numValues);
     return numValues;
   }
 
-  void TimestampColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
+  void TimestampColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                   const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                   size_t sel_size) {
+    if (sel_rowid_idx == nullptr) {
+      nextInternal(rowBatch, numValues, notNull, readPhase);
+    } else {
+      nextInternalWithFilter(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
+    }
+  }
+
+  void TimestampColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
+                                           char* notNull, const ReadPhase& readPhase) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     TimestampVectorBatch& timestampBatch = dynamic_cast<TimestampVectorBatch&>(rowBatch);
@@ -356,6 +387,51 @@ namespace orc {
     }
   }
 
+  void TimestampColumnReader::nextInternalWithFilter(ColumnVectorBatch& rowBatch,
+                                                     uint64_t numValues, char* notNull,
+                                                     const ReadPhase& readPhase,
+                                                     uint16_t* sel_rowid_idx, size_t sel_size) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
+    notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
+    TimestampVectorBatch& timestampBatch = dynamic_cast<TimestampVectorBatch&>(rowBatch);
+    int64_t* secsBuffer = timestampBatch.data.data();
+    secondsRle->next(secsBuffer, numValues, notNull);
+    int64_t* nanoBuffer = timestampBatch.nanoseconds.data();
+    nanoRle->next(nanoBuffer, numValues, notNull);
+
+    // Construct the values
+    for (size_t i = 0; i < sel_size; i++) {
+      uint16_t idx = sel_rowid_idx[i];
+      if (notNull == nullptr || notNull[idx]) {
+        uint64_t zeros = nanoBuffer[idx] & 0x7;
+        nanoBuffer[idx] >>= 3;
+        if (zeros != 0) {
+          for (uint64_t j = 0; j <= zeros; ++j) {
+            nanoBuffer[idx] *= 10;
+          }
+        }
+        int64_t writerTime = secsBuffer[idx] + epochOffset;
+        if (!sameTimezone) {
+          // adjust timestamp value to same wall clock time if writer and reader
+          // time zones have different rules, which is required for Apache Orc.
+          const auto& wv = writerTimezone.getVariant(writerTime);
+          const auto& rv = readerTimezone.getVariant(writerTime);
+          if (!wv.hasSameTzRule(rv)) {
+            // If the timezone adjustment moves the millis across a DST boundary,
+            // we need to reevaluate the offsets.
+            int64_t adjustedTime = writerTime + wv.gmtOffset - rv.gmtOffset;
+            const auto& adjustedReader = readerTimezone.getVariant(adjustedTime);
+            writerTime = writerTime + wv.gmtOffset - adjustedReader.gmtOffset;
+          }
+        }
+        secsBuffer[idx] = writerTime;
+        if (secsBuffer[idx] < 0 && nanoBuffer[i] > 999999) {
+          secsBuffer[idx] -= 1;
+        }
+      }
+    }
+  }
+
   void TimestampColumnReader::seekToRowGroup(
       std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
     ColumnReader::seekToRowGroup(positions, readPhase);
@@ -371,15 +447,24 @@ namespace orc {
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override;
 
    private:
     std::unique_ptr<SeekableInputStream> inputStream;
     const uint64_t bytesPerValue = (columnKind == FLOAT) ? 4 : 8;
     const char* bufferPointer;
     const char* bufferEnd;
+
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                      const ReadPhase& readPhase);
+
+    void nextInternalWithFilter(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                size_t sel_size);
 
     unsigned char readByte() {
       if (bufferPointer == bufferEnd) {
@@ -442,6 +527,8 @@ namespace orc {
       }
       return static_cast<FloatType>(*result);
     }
+
+    uint64_t skipInternal(uint64_t numValues, const ReadPhase& readPhase);
   };
 
   template <TypeKind columnKind, bool isLittleEndian, typename ValueType, typename BatchType>
@@ -456,7 +543,12 @@ namespace orc {
   uint64_t DoubleColumnReader<columnKind, isLittleEndian, ValueType, BatchType>::skip(
       uint64_t numValues, const ReadPhase& readPhase) {
     numValues = ColumnReader::skip(numValues, readPhase);
+    return skipInternal(numValues, readPhase);
+  }
 
+  template <TypeKind columnKind, bool isLittleEndian, typename ValueType, typename BatchType>
+  uint64_t DoubleColumnReader<columnKind, isLittleEndian, ValueType, BatchType>::skipInternal(
+      uint64_t numValues, const ReadPhase& readPhase) {
     if (static_cast<size_t>(bufferEnd - bufferPointer) >= bytesPerValue * numValues) {
       bufferPointer += bytesPerValue * numValues;
     } else {
@@ -477,6 +569,17 @@ namespace orc {
 
   template <TypeKind columnKind, bool isLittleEndian, typename ValueType, typename BatchType>
   void DoubleColumnReader<columnKind, isLittleEndian, ValueType, BatchType>::next(
+      ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase,
+      uint16_t* sel_rowid_idx, size_t sel_size) {
+    if (sel_rowid_idx == nullptr) {
+      nextInternal(rowBatch, numValues, notNull, readPhase);
+    } else {
+      nextInternalWithFilter(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
+    }
+  }
+
+  template <TypeKind columnKind, bool isLittleEndian, typename ValueType, typename BatchType>
+  void DoubleColumnReader<columnKind, isLittleEndian, ValueType, BatchType>::nextInternal(
       ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     // update the notNull from the parent class
@@ -522,6 +625,68 @@ namespace orc {
   }
 
   template <TypeKind columnKind, bool isLittleEndian, typename ValueType, typename BatchType>
+  void DoubleColumnReader<columnKind, isLittleEndian, ValueType, BatchType>::nextInternalWithFilter(
+      ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase,
+      uint16_t* sel_rowid_idx, size_t sel_size) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
+    // update the notNull from the parent class
+    notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
+    ValueType* outArray =
+        reinterpret_cast<ValueType*>(dynamic_cast<BatchType&>(rowBatch).data.data());
+    uint16_t previousIdx = 0;
+
+    if constexpr (columnKind == FLOAT) {
+      if (notNull) {
+        for (size_t i = 0; i < sel_size; i++) {
+          uint16_t idx = sel_rowid_idx[i];
+          if (idx - previousIdx > 0) {
+            skipInternal(countNonNullRowsInRange(notNull, previousIdx, idx), readPhase);
+          }
+          if (notNull[idx]) {
+            outArray[idx] = readFloat<ValueType>();
+          }
+          previousIdx = idx + 1;
+        }
+        skipInternal(countNonNullRowsInRange(notNull, previousIdx, numValues), readPhase);
+      } else {
+        for (size_t i = 0; i < sel_size; i++) {
+          uint16_t idx = sel_rowid_idx[i];
+          if (idx - previousIdx > 0) {
+            skipInternal(idx - previousIdx, readPhase);
+          }
+          outArray[idx] = readFloat<ValueType>();
+          previousIdx = idx + 1;
+        }
+        skipInternal(numValues - previousIdx, readPhase);
+      }
+    } else {
+      if (notNull) {
+        for (size_t i = 0; i < sel_size; i++) {
+          uint16_t idx = sel_rowid_idx[i];
+          if (idx - previousIdx > 0) {
+            skipInternal(countNonNullRowsInRange(notNull, previousIdx, idx), readPhase);
+          }
+          if (notNull[idx]) {
+            outArray[idx] = readDouble<ValueType>();
+          }
+          previousIdx = idx + 1;
+        }
+        skipInternal(countNonNullRowsInRange(notNull, previousIdx, numValues), readPhase);
+      } else {
+        for (size_t i = 0; i < sel_size; i++) {
+          uint16_t idx = sel_rowid_idx[i];
+          if (idx - previousIdx > 0) {
+            skipInternal(idx - previousIdx, readPhase);
+          }
+          outArray[idx] = readDouble<ValueType>();
+          previousIdx = idx + 1;
+        }
+        skipInternal(numValues - previousIdx, readPhase);
+      }
+    }
+  }
+
+  template <TypeKind columnKind, bool isLittleEndian, typename ValueType, typename BatchType>
   void DoubleColumnReader<columnKind, isLittleEndian, ValueType, BatchType>::seekToRowGroup(
       std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
     ColumnReader::seekToRowGroup(positions, readPhase);
@@ -552,17 +717,26 @@ namespace orc {
     std::shared_ptr<StringDictionary> dictionary;
     std::unique_ptr<RleDecoder> rle;
 
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                      const ReadPhase& readPhase);
+    void nextInternalWithFilter(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                size_t sel_size);
+
    public:
     StringDictionaryColumnReader(const Type& type, StripeStreams& stipe);
     ~StringDictionaryColumnReader() override;
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                     const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override;
   };
 
   StringDictionaryColumnReader::StringDictionaryColumnReader(const Type& type,
@@ -613,7 +787,17 @@ namespace orc {
   }
 
   void StringDictionaryColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                          char* notNull, const ReadPhase& readPhase) {
+                                          char* notNull, const ReadPhase& readPhase,
+                                          uint16_t* sel_rowid_idx, size_t sel_size) {
+    if (sel_rowid_idx == nullptr) {
+      nextInternal(rowBatch, numValues, notNull, readPhase);
+    } else {
+      nextInternalWithFilter(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
+    }
+  }
+
+  void StringDictionaryColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
+                                                  char* notNull, const ReadPhase& readPhase) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     // update the notNull from the parent class
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
@@ -647,8 +831,58 @@ namespace orc {
     }
   }
 
+  void StringDictionaryColumnReader::nextInternalWithFilter(ColumnVectorBatch& rowBatch,
+                                                            uint64_t numValues, char* notNull,
+                                                            const ReadPhase& readPhase,
+                                                            uint16_t* sel_rowid_idx,
+                                                            size_t sel_size) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
+    // update the notNull from the parent class
+    notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
+    StringVectorBatch& byteBatch = dynamic_cast<StringVectorBatch&>(rowBatch);
+    char* blob = dictionary->dictionaryBlob.data();
+    int64_t* dictionaryOffsets = dictionary->dictionaryOffset.data();
+    char** outputStarts = byteBatch.data.data();
+    int64_t* outputLengths = byteBatch.length.data();
+    std::unique_ptr<int64_t[]> tmpOutputLengths(new int64_t[byteBatch.length.size()]);
+    rle->next(tmpOutputLengths.get(), numValues, notNull);
+    uint64_t dictionaryCount = dictionary->dictionaryOffset.size() - 1;
+    if (notNull) {
+      for (size_t i = 0; i < numValues; i++) {
+        outputStarts[i] = nullptr;
+        outputLengths[i] = 0;
+      }
+      for (size_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel_rowid_idx[i];
+        if (notNull[idx]) {
+          int64_t entry = tmpOutputLengths[idx];
+          if (entry < 0 || static_cast<uint64_t>(entry) >= dictionaryCount) {
+            throw ParseError("Entry index out of range in StringDictionaryColumn");
+          }
+          outputStarts[idx] = blob + dictionaryOffsets[entry];
+          outputLengths[idx] = dictionaryOffsets[entry + 1] - dictionaryOffsets[entry];
+        }
+      }
+    } else {
+      for (size_t i = 0; i < numValues; i++) {
+        outputStarts[i] = nullptr;
+        outputLengths[i] = 0;
+      }
+      for (size_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel_rowid_idx[i];
+        int64_t entry = tmpOutputLengths[idx];
+        if (entry < 0 || static_cast<uint64_t>(entry) >= dictionaryCount) {
+          throw ParseError("Entry index out of range in StringDictionaryColumn");
+        }
+        outputStarts[idx] = blob + dictionaryOffsets[entry];
+        outputLengths[idx] = dictionaryOffsets[entry + 1] - dictionaryOffsets[entry];
+      }
+    }
+  }
+
   void StringDictionaryColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                                 char* notNull, const ReadPhase& readPhase) {
+                                                 char* notNull, const ReadPhase& readPhase,
+                                                 uint16_t* sel_rowid_idx, size_t sel_size) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     rowBatch.isEncoded = true;
@@ -688,9 +922,11 @@ namespace orc {
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override;
   };
 
   StringDirectColumnReader::StringDirectColumnReader(const Type& type, StripeStreams& stripe)
@@ -760,7 +996,8 @@ namespace orc {
   }
 
   void StringDirectColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                      char* notNull, const ReadPhase& readPhase) {
+                                      char* notNull, const ReadPhase& readPhase,
+                                      uint16_t* sel_rowid_idx, size_t sel_size) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     // update the notNull from the parent class
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
@@ -836,15 +1073,19 @@ namespace orc {
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                     const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override;
 
    private:
     template <bool encoded>
-    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase);
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                      const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size);
   };
 
   StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe,
@@ -879,35 +1120,40 @@ namespace orc {
     return numValues;
   }
 
-  void StructColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
-    nextInternal<false>(rowBatch, numValues, notNull, readPhase);
+  void StructColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                size_t sel_size) {
+    nextInternal<false>(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
   }
 
   void StructColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                       char* notNull, const ReadPhase& readPhase) {
-    nextInternal<true>(rowBatch, numValues, notNull, readPhase);
+                                       char* notNull, const ReadPhase& readPhase,
+                                       uint16_t* sel_rowid_idx, size_t sel_size) {
+    nextInternal<true>(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
   }
 
   template <bool encoded>
   void StructColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                        char* notNull, const ReadPhase& readPhase) {
-    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
+                                        char* notNull, const ReadPhase& readPhase,
+                                        uint16_t* sel_rowid_idx, size_t sel_size) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
     uint64_t i = 0;
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     for (auto iter = children.begin(); iter != children.end(); ++iter, ++i) {
       if (shouldProcessChild((*iter)->getType().getReaderCategory(), readPhase)) {
         if (encoded) {
-          (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch &>(rowBatch).fields[i]), numValues,
-                               notNull, readPhase);
+          (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[i]), numValues,
+                               notNull, readPhase, sel_rowid_idx, sel_size);
         } else {
-          (*iter)->next(*(dynamic_cast<StructVectorBatch &>(rowBatch).fields[i]), numValues, notNull, readPhase);
+          (*iter)->next(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[i]), numValues, notNull,
+                        readPhase, sel_rowid_idx, sel_size);
         }
       }
     }
   }
 
-  void StructColumnReader::seekToRowGroup(
-      std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+  void StructColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                                          const ReadPhase& readPhase) {
     ColumnReader::seekToRowGroup(positions, readPhase);
 
     for (auto& ptr : children) {
@@ -928,15 +1174,19 @@ namespace orc {
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                     const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override;
 
    private:
     template <bool encoded>
-    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase);
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                      const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size);
   };
 
   ListColumnReader::ListColumnReader(const Type& type, StripeStreams& stripe,
@@ -982,19 +1232,23 @@ namespace orc {
     return numValues;
   }
 
-  void ListColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
-    nextInternal<false>(rowBatch, numValues, notNull, readPhase);
+  void ListColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                              const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                              size_t sel_size) {
+    nextInternal<false>(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
   }
 
-  void ListColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                     char* notNull, const ReadPhase& readPhase) {
-    nextInternal<true>(rowBatch, numValues, notNull, readPhase);
+  void ListColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                     const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                     size_t sel_size) {
+    nextInternal<true>(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
   }
 
   template <bool encoded>
   void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                      char* notNull, const ReadPhase& readPhase) {
-    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
+                                      char* notNull, const ReadPhase& readPhase,
+                                      uint16_t* sel_rowid_idx, size_t sel_size) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
     ListVectorBatch& listBatch = dynamic_cast<ListVectorBatch&>(rowBatch);
     int64_t* offsets = listBatch.offsets.data();
     notNull = listBatch.hasNulls ? listBatch.notNull.data() : nullptr;
@@ -1021,14 +1275,17 @@ namespace orc {
     ColumnReader* childReader = child.get();
     if (childReader) {
       if (encoded) {
-        childReader->nextEncoded(*(listBatch.elements.get()), totalChildren, nullptr, readPhase);
+        childReader->nextEncoded(*(listBatch.elements.get()), totalChildren, nullptr, readPhase,
+                                 sel_rowid_idx, sel_size);
       } else {
-        childReader->next(*(listBatch.elements.get()), totalChildren, nullptr, readPhase);
+        childReader->next(*(listBatch.elements.get()), totalChildren, nullptr, readPhase,
+                          sel_rowid_idx, sel_size);
       }
     }
   }
 
-  void ListColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+  void ListColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                                        const ReadPhase& readPhase) {
     ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
     if (child.get()) {
@@ -1048,15 +1305,19 @@ namespace orc {
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                     const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override;
 
    private:
     template <bool encoded>
-    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase);
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                      const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size);
   };
 
   MapColumnReader::MapColumnReader(const Type& type, StripeStreams& stripe,
@@ -1112,19 +1373,22 @@ namespace orc {
     return numValues;
   }
 
-  void MapColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
-    nextInternal<false>(rowBatch, numValues, notNull, readPhase);
+  void MapColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                             const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) {
+    nextInternal<false>(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
   }
 
-  void MapColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                    char* notNull, const ReadPhase& readPhase) {
-    nextInternal<true>(rowBatch, numValues, notNull, readPhase);
+  void MapColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                    const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                    size_t sel_size) {
+    nextInternal<true>(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
   }
 
   template <bool encoded>
-  void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                     char* notNull, const ReadPhase& readPhase) {
-    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
+  void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                     const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                     size_t sel_size) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
     MapVectorBatch& mapBatch = dynamic_cast<MapVectorBatch&>(rowBatch);
     int64_t* offsets = mapBatch.offsets.data();
     notNull = mapBatch.hasNulls ? mapBatch.notNull.data() : nullptr;
@@ -1159,14 +1423,16 @@ namespace orc {
     ColumnReader* rawElementReader = elementReader.get();
     if (rawElementReader) {
       if (encoded) {
-        rawElementReader->nextEncoded(*(mapBatch.elements.get()), totalChildren, nullptr, readPhase);
+        rawElementReader->nextEncoded(*(mapBatch.elements.get()), totalChildren, nullptr,
+                                      readPhase);
       } else {
         rawElementReader->next(*(mapBatch.elements.get()), totalChildren, nullptr, readPhase);
       }
     }
   }
 
-  void MapColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+  void MapColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                                       const ReadPhase& readPhase) {
     ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
     if (keyReader.get()) {
@@ -1189,15 +1455,19 @@ namespace orc {
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                     const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override;
 
    private:
     template <bool encoded>
-    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase);
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                      const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size);
   };
 
   UnionColumnReader::UnionColumnReader(const Type& type, StripeStreams& stripe,
@@ -1237,26 +1507,30 @@ namespace orc {
       lengthsRead += chunk;
     }
     for (size_t i = 0; i < numChildren; ++i) {
-      if (counts[i] != 0 && childrenReader[i] != nullptr
-        && shouldProcessChild(childrenReader[i]->getType().getReaderCategory(), readPhase)) {
+      if (counts[i] != 0 && childrenReader[i] != nullptr &&
+          shouldProcessChild(childrenReader[i]->getType().getReaderCategory(), readPhase)) {
         childrenReader[i]->skip(static_cast<uint64_t>(counts[i]), readPhase);
       }
     }
     return numValues;
   }
 
-  void UnionColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
-    nextInternal<false>(rowBatch, numValues, notNull, readPhase);
+  void UnionColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                               const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                               size_t sel_size) {
+    nextInternal<false>(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
   }
 
   void UnionColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                      char* notNull, const ReadPhase& readPhase) {
-    nextInternal<true>(rowBatch, numValues, notNull, readPhase);
+                                      char* notNull, const ReadPhase& readPhase,
+                                      uint16_t* sel_rowid_idx, size_t sel_size) {
+    nextInternal<true>(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
   }
 
   template <bool encoded>
   void UnionColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                       char* notNull, const ReadPhase& readPhase) {
+                                       char* notNull, const ReadPhase& readPhase,
+                                       uint16_t* sel_rowid_idx, size_t sel_size) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     UnionVectorBatch& unionBatch = dynamic_cast<UnionVectorBatch&>(rowBatch);
     uint64_t* offsets = unionBatch.offsets.data();
@@ -1279,7 +1553,8 @@ namespace orc {
     }
     // read the right number of each child column
     for (size_t i = 0; i < numChildren; ++i) {
-      if (childrenReader[i] != nullptr && shouldProcessChild(childrenReader[i]->getType().getReaderCategory(), readPhase)) {
+      if (childrenReader[i] != nullptr &&
+          shouldProcessChild(childrenReader[i]->getType().getReaderCategory(), readPhase)) {
         if (encoded) {
           childrenReader[i]->nextEncoded(*(unionBatch.children[i]),
                                          static_cast<uint64_t>(counts[i]), nullptr, readPhase);
@@ -1291,12 +1566,13 @@ namespace orc {
     }
   }
 
-  void UnionColumnReader::seekToRowGroup(
-      std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
+  void UnionColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                                         const ReadPhase& readPhase) {
     ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
     for (size_t i = 0; i < numChildren; ++i) {
-      if (childrenReader[i] != nullptr && shouldProcessChild(childrenReader[i]->getType().getReaderCategory(), readPhase)) {
+      if (childrenReader[i] != nullptr &&
+          shouldProcessChild(childrenReader[i]->getType().getReaderCategory(), readPhase)) {
         childrenReader[i]->seekToRowGroup(positions, readPhase);
       }
     }
@@ -1367,15 +1643,24 @@ namespace orc {
       }
     }
 
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                      const ReadPhase& readPhase);
+    void nextInternalWithFilter(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                size_t sel_size);
+    uint64_t skipInternal(uint64_t numValues, const ReadPhase& readPhase);
+
    public:
     Decimal64ColumnReader(const Type& type, StripeStreams& stipe);
     ~Decimal64ColumnReader() override;
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
-    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) override;
+    void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
+                        const ReadPhase& readPhase) override;
   };
   const uint32_t Decimal64ColumnReader::MAX_PRECISION_64;
   const uint32_t Decimal64ColumnReader::MAX_PRECISION_128;
@@ -1420,6 +1705,12 @@ namespace orc {
 
   uint64_t Decimal64ColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
     numValues = ColumnReader::skip(numValues, readPhase);
+    numValues = skipInternal(numValues, readPhase);
+    scaleDecoder->skip(numValues);
+    return numValues;
+  }
+
+  uint64_t Decimal64ColumnReader::skipInternal(uint64_t numValues, const ReadPhase& readPhase) {
     uint64_t skipped = 0;
     while (skipped < numValues) {
       readBuffer();
@@ -1427,11 +1718,21 @@ namespace orc {
         skipped += 1;
       }
     }
-    scaleDecoder->skip(numValues);
     return numValues;
   }
 
-  void Decimal64ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) {
+  void Decimal64ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                   const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                   size_t sel_size) {
+    if (sel_rowid_idx == nullptr) {
+      nextInternal(rowBatch, numValues, notNull, readPhase);
+    } else {
+      nextInternalWithFilter(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
+    }
+  }
+
+  void Decimal64ColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
+                                           char* notNull, const ReadPhase& readPhase) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     Decimal64VectorBatch& batch = dynamic_cast<Decimal64VectorBatch&>(rowBatch);
@@ -1451,6 +1752,46 @@ namespace orc {
       for (size_t i = 0; i < numValues; ++i) {
         readInt64(values[i], static_cast<int32_t>(scaleBuffer[i]));
       }
+    }
+  }
+
+  void Decimal64ColumnReader::nextInternalWithFilter(ColumnVectorBatch& rowBatch,
+                                                     uint64_t numValues, char* notNull,
+                                                     const ReadPhase& readPhase,
+                                                     uint16_t* sel_rowid_idx, size_t sel_size) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
+    notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
+    Decimal64VectorBatch& batch = dynamic_cast<Decimal64VectorBatch&>(rowBatch);
+    int64_t* values = batch.values.data();
+    int64_t* scaleBuffer = batch.readScales.data();
+    scaleDecoder->next(scaleBuffer, numValues, notNull);
+    batch.precision = precision;
+    batch.scale = scale;
+
+    uint16_t previousIdx = 0;
+    if (notNull) {
+      for (size_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel_rowid_idx[i];
+        if (idx - previousIdx > 0) {
+          skipInternal(countNonNullRowsInRange(notNull, previousIdx, idx), readPhase);
+        }
+        if (notNull[idx]) {
+          readInt64(values[idx], static_cast<int32_t>(scaleBuffer[idx]));
+          ;
+        }
+        previousIdx = idx + 1;
+      }
+      skipInternal(countNonNullRowsInRange(notNull, previousIdx, numValues), readPhase);
+    } else {
+      for (size_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel_rowid_idx[i];
+        if (idx - previousIdx > 0) {
+          skipInternal(idx - previousIdx, readPhase);
+        }
+        readInt64(values[idx], static_cast<int32_t>(scaleBuffer[idx]));
+        previousIdx = idx + 1;
+      }
+      skipInternal(numValues - previousIdx, readPhase);
     }
   }
 
@@ -1488,7 +1829,8 @@ namespace orc {
     Decimal128ColumnReader(const Type& type, StripeStreams& stipe);
     ~Decimal128ColumnReader() override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
    private:
     void readInt128(Int128& value, int32_t currentScale) {
@@ -1509,6 +1851,13 @@ namespace orc {
       unZigZagInt128(value);
       scaleInt128(value, static_cast<uint32_t>(scale), static_cast<uint32_t>(currentScale));
     }
+
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                      const ReadPhase& readPhase);
+
+    void nextInternalWithFilter(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                size_t sel_size);
   };
 
   Decimal128ColumnReader::Decimal128ColumnReader(const Type& type, StripeStreams& stripe)
@@ -1520,8 +1869,18 @@ namespace orc {
     // PASS
   }
 
-  void Decimal128ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                    char* notNull, const ReadPhase& readPhase) {
+  void Decimal128ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                    const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                    size_t sel_size) {
+    if (sel_rowid_idx == nullptr) {
+      nextInternal(rowBatch, numValues, notNull, readPhase);
+    } else {
+      nextInternalWithFilter(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
+    }
+  }
+
+  void Decimal128ColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
+                                            char* notNull, const ReadPhase& readPhase) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     Decimal128VectorBatch& batch = dynamic_cast<Decimal128VectorBatch&>(rowBatch);
@@ -1544,6 +1903,46 @@ namespace orc {
     }
   }
 
+  void Decimal128ColumnReader::nextInternalWithFilter(ColumnVectorBatch& rowBatch,
+                                                      uint64_t numValues, char* notNull,
+                                                      const ReadPhase& readPhase,
+                                                      uint16_t* sel_rowid_idx, size_t sel_size) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
+    notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
+    Decimal128VectorBatch& batch = dynamic_cast<Decimal128VectorBatch&>(rowBatch);
+    Int128* values = batch.values.data();
+    // read the next group of scales
+    int64_t* scaleBuffer = batch.readScales.data();
+    scaleDecoder->next(scaleBuffer, numValues, notNull);
+    batch.precision = precision;
+    batch.scale = scale;
+
+    uint16_t previousIdx = 0;
+    if (notNull) {
+      for (size_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel_rowid_idx[i];
+        if (idx - previousIdx > 0) {
+          skipInternal(countNonNullRowsInRange(notNull, previousIdx, idx), readPhase);
+        }
+        if (notNull[idx]) {
+          readInt128(values[idx], static_cast<int32_t>(scaleBuffer[idx]));
+        }
+        previousIdx = idx + 1;
+      }
+      skipInternal(countNonNullRowsInRange(notNull, previousIdx, numValues), readPhase);
+    } else {
+      for (size_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel_rowid_idx[i];
+        if (idx - previousIdx > 0) {
+          skipInternal(idx - previousIdx, readPhase);
+        }
+        readInt128(values[idx], static_cast<int32_t>(scaleBuffer[idx]));
+        previousIdx = idx + 1;
+      }
+      skipInternal(numValues - previousIdx, readPhase);
+    }
+  }
+
   class Decimal64ColumnReaderV2 : public ColumnReader {
    protected:
     std::unique_ptr<RleDecoder> valueDecoder;
@@ -1556,7 +1955,8 @@ namespace orc {
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
   };
 
   Decimal64ColumnReaderV2::Decimal64ColumnReaderV2(const Type& type, StripeStreams& stripe)
@@ -1583,8 +1983,9 @@ namespace orc {
     return numValues;
   }
 
-  void Decimal64ColumnReaderV2::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                     char* notNull, const ReadPhase& readPhase) {
+  void Decimal64ColumnReaderV2::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                     const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                     size_t sel_size) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     Decimal64VectorBatch& batch = dynamic_cast<Decimal64VectorBatch&>(rowBatch);
@@ -1635,11 +2036,19 @@ namespace orc {
       return value >= MIN_VALUE && value <= MAX_VALUE;
     }
 
+    void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                      const ReadPhase& readPhase);
+
+    void nextInternalWithFilter(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+                                const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
+                                size_t sel_size);
+
    public:
     DecimalHive11ColumnReader(const Type& type, StripeStreams& stipe);
     ~DecimalHive11ColumnReader() override;
 
-    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull, const ReadPhase& readPhase) override;
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
   };
 
   DecimalHive11ColumnReader::DecimalHive11ColumnReader(const Type& type, StripeStreams& stripe)
@@ -1654,7 +2063,17 @@ namespace orc {
   }
 
   void DecimalHive11ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues,
-                                       char* notNull, const ReadPhase& readPhase) {
+                                       char* notNull, const ReadPhase& readPhase,
+                                       uint16_t* sel_rowid_idx, size_t sel_size) {
+    if (sel_rowid_idx == nullptr) {
+      nextInternal(rowBatch, numValues, notNull, readPhase);
+    } else {
+      nextInternalWithFilter(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
+    }
+  }
+
+  void DecimalHive11ColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
+                                               char* notNull, const ReadPhase& readPhase) {
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     Decimal128VectorBatch& batch = dynamic_cast<Decimal128VectorBatch&>(rowBatch);
@@ -1695,6 +2114,67 @@ namespace orc {
           }
         }
       }
+    }
+  }
+
+  void DecimalHive11ColumnReader::nextInternalWithFilter(ColumnVectorBatch& rowBatch,
+                                                         uint64_t numValues, char* notNull,
+                                                         const ReadPhase& readPhase,
+                                                         uint16_t* sel_rowid_idx, size_t sel_size) {
+    ColumnReader::next(rowBatch, numValues, notNull, readPhase);
+    notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
+    Decimal128VectorBatch& batch = dynamic_cast<Decimal128VectorBatch&>(rowBatch);
+    Int128* values = batch.values.data();
+    // read the next group of scales
+    int64_t* scaleBuffer = batch.readScales.data();
+
+    scaleDecoder->next(scaleBuffer, numValues, notNull);
+
+    batch.precision = precision;
+    batch.scale = scale;
+
+    uint16_t previousIdx = 0;
+    if (notNull) {
+      for (size_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel_rowid_idx[i];
+        if (idx - previousIdx > 0) {
+          skipInternal(countNonNullRowsInRange(notNull, previousIdx, idx), readPhase);
+        }
+        if (notNull[idx]) {
+          if (!readInt128(values[idx], static_cast<int32_t>(scaleBuffer[idx]))) {
+            if (throwOnOverflow) {
+              throw ParseError("Hive 0.11 decimal was more than 38 digits.");
+            } else {
+              *errorStream << "Warning: "
+                           << "Hive 0.11 decimal with more than 38 digits "
+                           << "replaced by NULL.\n";
+              notNull[idx] = false;
+            }
+          }
+        }
+        previousIdx = idx + 1;
+      }
+      skipInternal(countNonNullRowsInRange(notNull, previousIdx, numValues), readPhase);
+    } else {
+      for (size_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel_rowid_idx[i];
+        if (idx - previousIdx > 0) {
+          skipInternal(idx - previousIdx, readPhase);
+        }
+        if (!readInt128(values[idx], static_cast<int32_t>(scaleBuffer[idx]))) {
+          if (throwOnOverflow) {
+            throw ParseError("Hive 0.11 decimal was more than 38 digits.");
+          } else {
+            *errorStream << "Warning: "
+                         << "Hive 0.11 decimal with more than 38 digits "
+                         << "replaced by NULL.\n";
+            batch.hasNulls = true;
+            batch.notNull[idx] = false;
+          }
+        }
+        previousIdx = idx + 1;
+      }
+      skipInternal(numValues - previousIdx, readPhase);
     }
   }
 
