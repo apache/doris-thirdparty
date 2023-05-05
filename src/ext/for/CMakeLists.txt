@@ -55,6 +55,11 @@ set(SRC_FILES
 
 # Add base source files to library
 add_library(ic STATIC
+    bitpack.c
+    bitunpack.c
+    vp4c.c
+    vp4d.c
+    transpose.c
     bitutil.c
     fp.c
     v8.c
