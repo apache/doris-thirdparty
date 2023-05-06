@@ -25,6 +25,8 @@ if(COMMAND cmake_policy)
   cmake_policy(SET CMP0003 NEW)
   cmake_policy(SET CMP0043 NEW)
   cmake_policy(SET CMP0054 NEW)
+  cmake_policy(SET CMP0074 NEW)
+  cmake_policy(SET CMP0077 NEW)
 endif(COMMAND cmake_policy)
 
 #set various platform specific global options
@@ -40,6 +42,8 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(cmake/CLuceneDocs.cmake)
 Include (FindThreads)
+include(cmake/FindRoaring.cmake)
+find_package(Roaring REQUIRED)
 
 IF(NOT CMAKE_BUILD_TYPE)
     SET(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING

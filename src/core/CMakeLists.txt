@@ -210,10 +210,6 @@ file(GLOB_RECURSE HEADERS ${clucene-core_SOURCE_DIR}/*.h )
 #create the libraries
 INCLUDE_DIRECTORIES(${clucene_SOURCE_DIR}/src/core)
 INCLUDE_DIRECTORIES(${clucene_SOURCE_DIR}/src/ext/for)
-if(ROARING_ROOT)
-  set(roaring_INCLUDE_DIR ${ROARING_ROOT}/include)
-  set(roaring_LIBRARY ${ROARING_ROOT}/lib/libroaring.a)
-endif()
 
 IF (BUILD_SHARED_LIBRARIES)
   add_library(clucene-core SHARED
