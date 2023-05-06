@@ -64,7 +64,7 @@ namespace limonp {
                     << " " << LOG_LEVEL_ARRAY[level_]
                     << " ";
         }
-        ~Logger() {
+        ~Logger() noexcept(false) {
 #ifdef LOGGING_LEVEL
             if (level_ < LOGGING_LEVEL) {
                 return;

@@ -148,7 +148,7 @@ public:
 
 protected:
 	/** Collects only characters which satisfy _istalpha.*/
-    bool isTokenChar(const T c) const;
+    bool isTokenChar(const T c) const override;
 };
 
 /** A WhitespaceTokenizer is a tokenizer that divides text at whitespace.

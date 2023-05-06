@@ -1,3 +1,4 @@
+#include "CLucene/SharedHeader.h"
 #include "docids_writer.h"
 
 #include "CLucene/debug/error.h"

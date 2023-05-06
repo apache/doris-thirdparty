@@ -58,9 +58,9 @@ CL_NS_DEF2(analysis,standard)
         * Constructs a StandardTokenizer filtered by a 
         * StandardFilter, a LowerCaseFilter and a StopFilter.
         */
-        TokenStream* tokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader);
+        TokenStream* tokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader) override;
 
-        TokenStream* reusableTokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader);
+        TokenStream* reusableTokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader) override;
 
         /**
         * Set maximum allowed token length.  If a token is seen

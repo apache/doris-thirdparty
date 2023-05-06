@@ -332,7 +332,7 @@ public:
     void mergeTerms();
 
     // Compare current index with the other
-    bool compareIndexes(lucene::store::Directory* other);
+    void compareIndexes(lucene::store::Directory* other);
 
 	// Release the write lock, if needed.
 	SegmentInfos* segmentInfos;

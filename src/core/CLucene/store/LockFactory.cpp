@@ -145,6 +145,13 @@ void FSLockFactory::clearLock( const char* lockName )
 		} else {
 			strcpy(name,lockName);
 		}
+                size_t totalLength = lockDir.length() + strlen(name) + 1; // +1 for the '/'
+                if (totalLength >= CL_MAX_DIR) {
+                        // Truncate the name and log a warning.
+                        size_t maxNameLength = CL_MAX_DIR - lockDir.length() - 2; // -2 for the '/' and null terminator
+                        name[maxNameLength] = '\0';
+                        fprintf(stderr, "Warning: The lock file name has been truncated due to exceeding the maximum path length.\n");
+                }
 
 		_snprintf(path,CL_MAX_DIR,"%s/%s",lockDir.c_str(),name);
 

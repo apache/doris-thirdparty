@@ -1394,7 +1394,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     newSegmentInfos.clear();
 }
 
-bool IndexWriter::compareIndexes(lucene::store::Directory *other) {
+void IndexWriter::compareIndexes(lucene::store::Directory *other) {
     /// compare merged segments
     // index compaction segments
     // term -> <docId, freq>

@@ -820,7 +820,7 @@ TCHAR *SDocumentsWriter<TCHAR>::getSCharBlock() {
     TCHAR *c;
     if (0 == size) {
         numBytesAlloc += CHAR_BLOCK_SIZE * CHAR_NUM_BYTE;
-        c = _CL_NEWARRAY(TCHAR, CHAR_NUM_BYTE);
+        c = _CL_NEWARRAY(TCHAR, CHAR_BLOCK_SIZE);
         memset(c, 0, sizeof(TCHAR) * CHAR_BLOCK_SIZE);
     } else {
         c = *freeSCharBlocks.begin();

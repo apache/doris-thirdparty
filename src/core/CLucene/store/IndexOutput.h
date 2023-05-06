@@ -149,18 +149,18 @@ public:
 	* occur.
 	* @see #seek(long)
 	*/
-	int64_t getFilePointer() const;
+	int64_t getFilePointer() const override;
 
 	/** Sets current position in this file, where the next write will occur.
 	* @see #getFilePointer()
 	*/
-	virtual void seek(const int64_t pos);
+	virtual void seek(const int64_t pos) override;
 
 	/** The number of bytes in the file. */
-	virtual int64_t length() const = 0;
+	virtual int64_t length() const override = 0;
 
 	/** Forces any buffered output to be written. */
-	void flush();
+	void flush() override;
 
 protected:
 	/** Expert: implements buffer write.  Writes bytes at the current position in
