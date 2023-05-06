@@ -25,11 +25,15 @@
 
 namespace orc {
 
-  const ReadPhase ReadPhase::ALL = ReadPhase::fromCategories({ ReaderCategory::FILTER_CHILD, ReaderCategory::FILTER_PARENT, ReaderCategory::NON_FILTER });
-  const ReadPhase ReadPhase::LEADERS = ReadPhase::fromCategories({ ReaderCategory::FILTER_CHILD, ReaderCategory::FILTER_PARENT });
-  const ReadPhase ReadPhase::FOLLOWERS = ReadPhase::fromCategories({ ReaderCategory::NON_FILTER });
-  const ReadPhase ReadPhase::LEADER_PARENTS = ReadPhase::fromCategories({ ReaderCategory::FILTER_PARENT });
-  const ReadPhase ReadPhase::FOLLOWERS_AND_PARENTS = ReadPhase::fromCategories({ ReaderCategory::FILTER_PARENT, ReaderCategory::NON_FILTER });
+  const ReadPhase ReadPhase::ALL = ReadPhase::fromCategories(
+      {ReaderCategory::FILTER_CHILD, ReaderCategory::FILTER_PARENT, ReaderCategory::NON_FILTER});
+  const ReadPhase ReadPhase::LEADERS =
+      ReadPhase::fromCategories({ReaderCategory::FILTER_CHILD, ReaderCategory::FILTER_PARENT});
+  const ReadPhase ReadPhase::FOLLOWERS = ReadPhase::fromCategories({ReaderCategory::NON_FILTER});
+  const ReadPhase ReadPhase::LEADER_PARENTS =
+      ReadPhase::fromCategories({ReaderCategory::FILTER_PARENT});
+  const ReadPhase ReadPhase::FOLLOWERS_AND_PARENTS =
+      ReadPhase::fromCategories({ReaderCategory::FILTER_PARENT, ReaderCategory::NON_FILTER});
 
   Type::~Type() {
     // PASS

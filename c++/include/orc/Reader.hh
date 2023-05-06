@@ -186,26 +186,25 @@ namespace orc {
     RowReaderOptions& includeTypes(const std::list<uint64_t>& types);
 
     /**
-      * For files that have structs as the top-level object, filter the fields.
-      * by index. The first field is 0, the second 1, and so on. By default,
-      * all columns are read. This option clears any previous setting of
-      * the selected columns.
-      * @param filterColIndexes a list of fields to read
-      * @return this
-      */
+     * For files that have structs as the top-level object, filter the fields.
+     * by index. The first field is 0, the second 1, and so on. By default,
+     * all columns are read. This option clears any previous setting of
+     * the selected columns.
+     * @param filterColIndexes a list of fields to read
+     * @return this
+     */
     RowReaderOptions& filter(const std::list<uint64_t>& filterColIndexes);
 
     /**
-      * For files that have structs as the top-level object, filter the fields
-      * by name. By default, all columns are read. This option clears
-      * any previous setting of the selected columns.
-      * @param filterColNames a list of fields to read
-      * @return this
-      */
+     * For files that have structs as the top-level object, filter the fields
+     * by name. By default, all columns are read. This option clears
+     * any previous setting of the selected columns.
+     * @param filterColNames a list of fields to read
+     * @return this
+     */
     RowReaderOptions& filter(const std::list<std::string>& filterColNames);
 
-
-      /**
+    /**
      * A map type of <typeId, ReadIntent>.
      */
     typedef std::map<uint64_t, ReadIntent> IdReadIntentMap;
@@ -367,7 +366,8 @@ namespace orc {
   class ORCFilter {
    public:
     virtual ~ORCFilter() = default;
-    virtual void filter(ColumnVectorBatch& data, uint16_t* sel, uint16_t size, void* arg = nullptr) const = 0;
+    virtual void filter(ColumnVectorBatch& data, uint16_t* sel, uint16_t size,
+                        void* arg = nullptr) const = 0;
   };
 
   class RowReader;
@@ -562,7 +562,8 @@ namespace orc {
      * @param options RowReader Options
      * @return a RowReader to read the rows
      */
-    virtual std::unique_ptr<RowReader> createRowReader(const RowReaderOptions& options, const ORCFilter* filter = nullptr) const = 0;
+    virtual std::unique_ptr<RowReader> createRowReader(const RowReaderOptions& options,
+                                                       const ORCFilter* filter = nullptr) const = 0;
 
     /**
      * Get the name of the input stream.

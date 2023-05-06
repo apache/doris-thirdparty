@@ -35,22 +35,23 @@ namespace orc {
   static const uint64_t DIRECTORY_SIZE_GUESS = 16 * 1024;
 
   class ReaderContext {
-  public:
-   ReaderContext() = default;
+   public:
+    ReaderContext() = default;
 
-   const ORCFilter* getFilterCallback() const {
-     return filter;
-   }
+    const ORCFilter* getFilterCallback() const {
+      return filter;
+    }
 
-   ReaderContext& setFilterCallback(std::unordered_set<int> _filterColumnIds, const ORCFilter* _filter) {
-     this->filterColumnIds = std::move(_filterColumnIds);
-     this->filter = _filter;
-     return *this;
-   }
+    ReaderContext& setFilterCallback(std::unordered_set<int> _filterColumnIds,
+                                     const ORCFilter* _filter) {
+      this->filterColumnIds = std::move(_filterColumnIds);
+      this->filter = _filter;
+      return *this;
+    }
 
-  private:
-   std::unordered_set<int> filterColumnIds;
-   const ORCFilter* filter;
+   private:
+    std::unordered_set<int> filterColumnIds;
+    const ORCFilter* filter;
   };
 
   /**
@@ -237,25 +238,26 @@ namespace orc {
      */
     bool hasBadBloomFilters();
 
-
     // build map from type name and id, id to Type
     void buildTypeNameIdMap(Type* type);
 
     std::string toDotColumnPath();
 
-    void nextBatch(ColumnVectorBatch& data, int batchSize, const ReadPhase& readPhase, uint16_t* sel_rowid_idx, void* arg);
+    void nextBatch(ColumnVectorBatch& data, int batchSize, const ReadPhase& readPhase,
+                   uint16_t* sel_rowid_idx, void* arg);
 
     int computeRGIdx(uint64_t rowIndexStride, long rowIdx);
 
     ReadPhase prepareFollowReaders(uint64_t rowIndexStride, long toFollowRow, long fromFollowRow);
 
-  public:
+   public:
     /**
      * Constructor that lets the user specify additional options.
      * @param contents of the file
      * @param options options for reading
      */
-    RowReaderImpl(std::shared_ptr<FileContents> contents, const RowReaderOptions& options, const ORCFilter* filter = nullptr);
+    RowReaderImpl(std::shared_ptr<FileContents> contents, const RowReaderOptions& options,
+                  const ORCFilter* filter = nullptr);
 
     // Select the columns from the options object
     const std::vector<bool> getSelectedColumns() const override;
@@ -357,7 +359,8 @@ namespace orc {
 
     std::unique_ptr<RowReader> createRowReader(const ORCFilter* filter = nullptr) const override;
 
-    std::unique_ptr<RowReader> createRowReader(const RowReaderOptions& options, const ORCFilter* filter = nullptr) const override;
+    std::unique_ptr<RowReader> createRowReader(const RowReaderOptions& options,
+                                               const ORCFilter* filter = nullptr) const override;
 
     uint64_t getContentLength() const override;
     uint64_t getStripeStatisticsLength() const override;
