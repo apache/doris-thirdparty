@@ -207,6 +207,10 @@ namespace orc {
    * @return a clone of the fileType filtered by the selection array
    */
   std::unique_ptr<Type> buildSelectedType(const Type* fileType, const std::vector<bool>& selected);
+
+  bool checkAcidSchema(const Type& type);
+
+  const Type& removeAcid(const Type& type);
 }  // namespace orc
 
 #endif

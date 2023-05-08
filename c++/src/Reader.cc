@@ -171,12 +171,12 @@ namespace orc {
   void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns,
                                       const RowReaderOptions& options) {
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
-    if (contents->schema->getKind() == STRUCT && options.getIndexesSet()) {
+    if (contents->schemaAfterAcidRemoved->getKind() == STRUCT && options.getIndexesSet()) {
       for (std::list<uint64_t>::const_iterator field = options.getInclude().begin();
            field != options.getInclude().end(); ++field) {
         updateSelectedByFieldId(selectedColumns, *field);
       }
-    } else if (contents->schema->getKind() == STRUCT && options.getNamesSet()) {
+    } else if (contents->schemaAfterAcidRemoved->getKind() == STRUCT && options.getNamesSet()) {
       for (std::list<std::string>::const_iterator field = options.getIncludeNames().begin();
            field != options.getIncludeNames().end(); ++field) {
         updateSelectedByName(selectedColumns, *field);
@@ -191,18 +191,18 @@ namespace orc {
       // default is to select all columns
       std::fill(selectedColumns.begin(), selectedColumns.end(), true);
     }
-    selectParents(selectedColumns, *contents->schema.get());
+    selectParents(selectedColumns, *contents->schemaAfterAcidRemoved);
     selectedColumns[0] = true;  // column 0 is selected by default
   }
 
   void ColumnSelector::updateSelectedByFieldId(std::vector<bool>& selectedColumns,
                                                uint64_t fieldId) {
-    if (fieldId < contents->schema->getSubtypeCount()) {
-      selectChildren(selectedColumns, *contents->schema->getSubtype(fieldId));
+    if (fieldId < contents->schemaAfterAcidRemoved->getSubtypeCount()) {
+      selectChildren(selectedColumns, *contents->schemaAfterAcidRemoved->getSubtype(fieldId));
     } else {
       std::stringstream buffer;
       buffer << "Invalid column selected " << fieldId << " out of "
-             << contents->schema->getSubtypeCount();
+             << contents->schemaAfterAcidRemoved->getSubtypeCount();
       throw ParseError(buffer.str());
     }
   }
@@ -243,7 +243,7 @@ namespace orc {
   }
 
   ColumnSelector::ColumnSelector(const FileContents* _contents) : contents(_contents) {
-    buildTypeNameIdMap(contents->schema.get());
+    buildTypeNameIdMap(contents->schemaAfterAcidRemoved);
   }
 
   RowReaderImpl::RowReaderImpl(std::shared_ptr<FileContents> _contents,
@@ -304,9 +304,9 @@ namespace orc {
     // prepare SargsApplier if SearchArgument is available
     if (opts.getSearchArgument() && footer->rowindexstride() > 0) {
       sargs = opts.getSearchArgument();
-      sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), footer->rowindexstride(),
-                                          getWriterVersionImpl(_contents.get()),
-                                          contents->readerMetrics));
+      sargsApplier.reset(
+          new SargsApplier(*contents->schemaAfterAcidRemoved, sargs.get(), footer->rowindexstride(),
+                           getWriterVersionImpl(_contents.get()), contents->readerMetrics));
     }
 
     skipBloomFilters = hasBadBloomFilters();
@@ -314,7 +314,7 @@ namespace orc {
     const std::list<std::string>& filterCols = opts.getFilterColNames();
 
     // Map columnNames to ColumnIds
-    buildTypeNameIdMap(contents->schema.get());
+    buildTypeNameIdMap(const_cast<Type*>(contents->schemaAfterAcidRemoved));
 
     std::unordered_set<int> filterColIds;
     if (!filterCols.empty()) {
@@ -418,7 +418,7 @@ namespace orc {
 
   const Type& RowReaderImpl::getSelectedType() const {
     if (selectedSchema.get() == nullptr) {
-      selectedSchema = buildSelectedType(contents->schema.get(), selectedColumns);
+      selectedSchema = buildSelectedType(contents->schemaAfterAcidRemoved, selectedColumns);
     }
     return *(selectedSchema.get());
   }
@@ -617,6 +617,7 @@ namespace orc {
     checkOrcVersion();
     numberOfStripes = static_cast<uint64_t>(footer->stripes_size());
     contents->schema = convertType(footer->types(0), *footer);
+    contents->schemaAfterAcidRemoved = &(removeAcid(*(contents->schema.get())));
     contents->blockSize = getCompressionBlockSize(*contents->postscript);
     contents->compression = convertCompressionKind(*contents->postscript);
   }
@@ -813,7 +814,7 @@ namespace orc {
   }
 
   const Type& ReaderImpl::getType() const {
-    return *(contents->schema.get());
+    return *(contents->schemaAfterAcidRemoved);
   }
 
   std::unique_ptr<StripeStatistics> ReaderImpl::getStripeStatistics(uint64_t stripeIndex) const {
@@ -947,7 +948,7 @@ namespace orc {
     std::vector<bool> selectedColumns;
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
     ColumnSelector column_selector(contents.get());
-    if (contents->schema->getKind() == STRUCT && include.begin() != include.end()) {
+    if (contents->schemaAfterAcidRemoved->getKind() == STRUCT && include.begin() != include.end()) {
       for (std::list<uint64_t>::const_iterator field = include.begin(); field != include.end();
            ++field) {
         column_selector.updateSelectedByFieldId(selectedColumns, *field);
@@ -956,7 +957,7 @@ namespace orc {
       // default is to select all columns
       std::fill(selectedColumns.begin(), selectedColumns.end(), true);
     }
-    column_selector.selectParents(selectedColumns, *contents->schema.get());
+    column_selector.selectParents(selectedColumns, *contents->schemaAfterAcidRemoved);
     selectedColumns[0] = true;  // column 0 is selected by default
     return getMemoryUse(stripeIx, selectedColumns);
   }
@@ -965,7 +966,7 @@ namespace orc {
     std::vector<bool> selectedColumns;
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
     ColumnSelector column_selector(contents.get());
-    if (contents->schema->getKind() == STRUCT && names.begin() != names.end()) {
+    if (contents->schemaAfterAcidRemoved->getKind() == STRUCT && names.begin() != names.end()) {
       for (std::list<std::string>::const_iterator field = names.begin(); field != names.end();
            ++field) {
         column_selector.updateSelectedByName(selectedColumns, *field);
@@ -974,7 +975,7 @@ namespace orc {
       // default is to select all columns
       std::fill(selectedColumns.begin(), selectedColumns.end(), true);
     }
-    column_selector.selectParents(selectedColumns, *contents->schema.get());
+    column_selector.selectParents(selectedColumns, *contents->schemaAfterAcidRemoved);
     selectedColumns[0] = true;  // column 0 is selected by default
     return getMemoryUse(stripeIx, selectedColumns);
   }
@@ -992,7 +993,7 @@ namespace orc {
       // default is to select all columns
       std::fill(selectedColumns.begin(), selectedColumns.end(), true);
     }
-    column_selector.selectParents(selectedColumns, *contents->schema.get());
+    column_selector.selectParents(selectedColumns, *contents->schemaAfterAcidRemoved);
     selectedColumns[0] = true;  // column 0 is selected by default
     return getMemoryUse(stripeIx, selectedColumns);
   }
@@ -1159,7 +1160,7 @@ namespace orc {
       StripeStreamsImpl stripeStreams(*this, currentStripe, currentStripeInfo, currentStripeFooter,
                                       currentStripeInfo.offset(), *contents->stream, writerTimezone,
                                       readerTimezone);
-      reader = buildReader(*contents->schema, stripeStreams, useTightNumericVector);
+      reader = buildReader(*contents->schemaAfterAcidRemoved, stripeStreams, useTightNumericVector);
 
       if (sargsApplier) {
         // move to the 1st selected row group when PPD is enabled.

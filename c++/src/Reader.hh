@@ -81,6 +81,7 @@ namespace orc {
     std::unique_ptr<proto::PostScript> postscript;
     std::unique_ptr<proto::Footer> footer;
     std::unique_ptr<Type> schema;
+    const Type* schemaAfterAcidRemoved;
     uint64_t blockSize;
     CompressionKind compression;
     MemoryPool* pool;

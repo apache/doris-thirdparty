@@ -20,6 +20,7 @@
 #include "Adaptor.hh"
 #include "orc/Exceptions.hh"
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 
@@ -34,6 +35,11 @@ namespace orc {
       ReadPhase::fromCategories({ReaderCategory::FILTER_PARENT});
   const ReadPhase ReadPhase::FOLLOWERS_AND_PARENTS =
       ReadPhase::fromCategories({ReaderCategory::FILTER_PARENT, ReaderCategory::NON_FILTER});
+
+  static const char* ACID_EVENT_FIELD_NAMES[] = {"operation", "originaltransaction", "bucket",
+                                                 "rowid",     "currenttransaction",  "row"};
+
+  static const int ACID_ROW_OFFSET = 5;
 
   Type::~Type() {
     // PASS
@@ -596,6 +602,32 @@ namespace orc {
       result->setAttribute(key, value);
     }
     return std::move(result);
+  }
+
+  bool checkAcidSchema(const Type& type) {
+    if (TypeKind::STRUCT == type.getKind()) {
+      if (type.getSubtypeCount() != std::size(ACID_EVENT_FIELD_NAMES)) {
+        return false;
+      }
+      for (uint64_t i = 0; i < type.getSubtypeCount(); ++i) {
+        const std::string& fieldName = type.getFieldName(i);
+        std::string fieldNameLowerCase = fieldName;
+        std::transform(fieldName.begin(), fieldName.end(), fieldNameLowerCase.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        if (fieldNameLowerCase != ACID_EVENT_FIELD_NAMES[i]) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  const Type& removeAcid(const Type& type) {
+    if (checkAcidSchema(type)) {
+      return *(type.getSubtype(ACID_ROW_OFFSET));
+    } else {
+      return type;
+    }
   }
 
   std::unique_ptr<Type> Type::buildTypeFromString(const std::string& input) {
