@@ -221,7 +221,7 @@ IF (BUILD_SHARED_LIBRARIES)
           )
     TARGET_LINK_LIBRARIES(clucene-core ssl crypto ${BRPC_LIB} ${GLOG_LIB} ${GFLAG_LIB} ${PROTOBUF_LIB})
   ENDIF (USE_BTHREAD)
-  TARGET_INCLUDE_DIRECTORIES(clucene-core PUBLIC ${roaring_INCLUDE_DIR})
+  TARGET_INCLUDE_DIRECTORIES(clucene-core PUBLIC ${Roaring_INCLUDE_DIR})
 
   #set properties on the libraries
   SET_TARGET_PROPERTIES(clucene-core PROPERTIES
@@ -246,7 +246,7 @@ IF (BUILD_STATIC_LIBRARIES)
             )
     TARGET_LINK_LIBRARIES(clucene-core-static ssl crypto ${BRPC_LIB} ${GLOG_LIB} ${GFLAG_LIB} ${PROTOBUF_LIB})
   ENDIF (USE_BTHREAD)
-  TARGET_INCLUDE_DIRECTORIES(clucene-core-static PUBLIC ${roaring_INCLUDE_DIR})
+  TARGET_INCLUDE_DIRECTORIES(clucene-core-static PUBLIC ${Roaring_INCLUDE_DIR})
 
   SET_TARGET_PROPERTIES(clucene-core-static PROPERTIES
       VERSION ${CLUCENE_VERSION}
