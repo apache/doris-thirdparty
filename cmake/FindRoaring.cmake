@@ -16,10 +16,10 @@ find_package_handle_standard_args(Roaring
 if(NOT Roaring_FOUND)
   message(STATUS "Roaring not found, trying to build from ext directory.")
 
-  set(EXT_ROARING_DIR "${clucene-ext_SOURCE_DIR}/roaring")
-  if(EXISTS "${EXT_ROARING_DIR}/roaring.c" AND EXISTS "${EXT_ROARING_DIR}/roaring.h" AND EXISTS "${EXT_ROARING_DIR}/roaring.hh")
+  set(EXT_ROARING_DIR "${clucene-ext_SOURCE_DIR}")
+  if(EXISTS "${EXT_ROARING_DIR}/roaring/roaring.c" AND EXISTS "${EXT_ROARING_DIR}/roaring/roaring.h" AND EXISTS "${EXT_ROARING_DIR}/roaring/roaring.hh")
     set(Roaring_INCLUDE_DIR ${EXT_ROARING_DIR})
-    add_library(roaring STATIC "${EXT_ROARING_DIR}/roaring.c")
+    add_library(roaring STATIC "${EXT_ROARING_DIR}/roaring/roaring.c")
     #target_include_directories(roaring INTERFACE ${Roaring_INCLUDE_DIR})
     set(Roaring_LIBRARY roaring)
     set(Roaring_FOUND TRUE)
