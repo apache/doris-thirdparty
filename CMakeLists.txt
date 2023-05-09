@@ -42,8 +42,6 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(cmake/CLuceneDocs.cmake)
 Include (FindThreads)
-include(cmake/FindRoaring.cmake)
-find_package(Roaring REQUIRED)
 
 IF(NOT CMAKE_BUILD_TYPE)
     SET(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
@@ -189,6 +187,8 @@ INCLUDE_DIRECTORIES( ${_CL_BOOST_INCLUDE_PATH} )
 
 #include the projects
 ADD_SUBDIRECTORY (src/ext)
+include(cmake/FindRoaring.cmake)
+find_package(Roaring REQUIRED)
 #TurboPFOR
 ADD_SUBDIRECTORY (src/ext/for)
 ADD_SUBDIRECTORY (src/shared)
