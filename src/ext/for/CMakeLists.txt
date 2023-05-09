@@ -21,8 +21,8 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OPT}")
 
 # Architecture-specific settings
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    set(SSE "-msse4.2")
-    set(AVX2 "-mavx2")
+    set(SSE "-march=corei7-avx -mtune=corei7-avx")
+    set(AVX2 "-march=haswell")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     set(SSE "-march=armv8-a")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le")
@@ -46,6 +46,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 # Define base source files
 set(SRC_FILES
+	${CMAKE_CURRENT_SOURCE_DIR}/bitutil.c
 	${CMAKE_CURRENT_SOURCE_DIR}/bitpack.c
 	${CMAKE_CURRENT_SOURCE_DIR}/bitunpack.c
 	${CMAKE_CURRENT_SOURCE_DIR}/vp4c.c
@@ -55,7 +56,6 @@ set(SRC_FILES
 
 # Add base source files to library
 add_library(ic STATIC
-    bitutil.c
     fp.c
     v8.c
     vint.c
@@ -68,18 +68,13 @@ add_library(ic STATIC
 # Add custom commands to generate SSE and AVX2 versions of source files
 foreach(SRC_FILE ${SRC_FILES})
     get_filename_component(SRC_NAME ${SRC_FILE} NAME_WE)
-    set(SSE_OUTPUT ${SRC_NAME}_sse.o)
+    #set(SSE_OUTPUT ${SRC_NAME}_sse.o)
     set(AVX2_OUTPUT ${SRC_NAME}_avx2.o)
     set(OUTPUT ${SRC_NAME}.o)
 
     add_custom_command(
         OUTPUT ${OUTPUT}
 	COMMAND ${CMAKE_C_COMPILER} -c -o ${OUTPUT} ${SRC_FILE} ${c_flags_list}
-        DEPENDS ${SRC_FILE}
-    )
-    add_custom_command(
-        OUTPUT ${SSE_OUTPUT}
-	COMMAND ${CMAKE_C_COMPILER} -c -o ${SSE_OUTPUT} ${SRC_FILE} ${c_flags_list} -DSSE2_ON ${SSE}
         DEPENDS ${SRC_FILE}
     )
 
@@ -89,7 +84,7 @@ foreach(SRC_FILE ${SRC_FILES})
     if(USE_AVX2)
         add_custom_command(
             OUTPUT ${AVX2_OUTPUT}
-	    COMMAND ${CMAKE_C_COMPILER} -c -o ${AVX2_OUTPUT} ${SRC_FILE} ${c_flags_list} -DAVX2_ON ${AVX2}
+	    COMMAND ${CMAKE_C_COMPILER} -c -o ${AVX2_OUTPUT} ${SRC_FILE} ${c_flags_list} ${AVX2}
             DEPENDS ${SRC_FILE}
         )
 
