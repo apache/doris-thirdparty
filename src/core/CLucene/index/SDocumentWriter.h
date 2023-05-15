@@ -699,10 +699,10 @@ public:
         numDocsInRAM = 0;
         nextDocID = 0;
         nextWriteDocID = 0;
+        balanceRAM();
         bufferIsFull = false;
         flushPending = false;
         threadState->numThreads = 0;
-        balanceRAM();
         threadState->resetPostings();
         numBytesUsed = 0;
     }

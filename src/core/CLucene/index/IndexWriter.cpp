@@ -464,7 +464,6 @@ void IndexWriter::setInfoStream(std::ostream *infoStream) {
 void IndexWriter::messageState() {
     message(string("setInfoStream: dir=") + directory->toString() +
             " autoCommit=" + (autoCommit ? "true" : "false" + string(" mergePolicy=") + mergePolicy->getObjectName() + " mergeScheduler=" + mergeScheduler->getObjectName() + " ramBufferSizeMB=" + Misc::toString(docWriter->getRAMBufferSizeMB()) + " maxBuffereDocs=" + Misc::toString(docWriter->getMaxBufferedDocs())) +
-            " maxBuffereDeleteTerms=" + Misc::toString(docWriter->getMaxBufferedDeleteTerms()) +
             " maxFieldLength=" + Misc::toString(maxFieldLength) +
             " index=" + segString());
 }

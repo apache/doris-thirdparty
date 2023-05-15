@@ -65,7 +65,7 @@ const int32_t DocumentsWriter::levelSizeArray[10] = {5, 14, 20, 30, 40, 40, 80, 
 const int32_t DocumentsWriter::POSTING_NUM_BYTE = OBJECT_HEADER_BYTES + 9 * INT_NUM_BYTE + 5 * POINTER_NUM_BYTE;
 
 const int32_t DocumentsWriter::BYTE_BLOCK_SHIFT = 15;
-const int32_t DocumentsWriter::BYTE_BLOCK_SIZE = (int32_t) pow(2.0, BYTE_BLOCK_SHIFT);
+const int32_t DocumentsWriter::BYTE_BLOCK_SIZE = 1 << BYTE_BLOCK_SHIFT;//(int32_t) pow(2.0, BYTE_BLOCK_SHIFT);
 const int32_t DocumentsWriter::BYTE_BLOCK_MASK = BYTE_BLOCK_SIZE - 1;
 const int32_t DocumentsWriter::BYTE_BLOCK_NOT_MASK = ~BYTE_BLOCK_MASK;
 
