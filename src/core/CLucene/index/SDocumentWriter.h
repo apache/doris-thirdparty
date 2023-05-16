@@ -735,7 +735,7 @@ public:
     void abort(AbortException *ae) override {}
     void setMaxBufferedDocs(int32_t count) override {}
     void setInfoStream(std::ostream *is) override {
-        this->infoStream = infoStream;
+        this->infoStream = is;
     }
     void setRAMBufferSizeMB(float_t mb) override {
         if ((int32_t) mb == -1) {
