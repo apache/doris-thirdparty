@@ -261,13 +261,14 @@ void IndexWriter::init(Directory *d, Analyzer *a, const bool create, const bool 
             // against an index that's currently open for
             // searching.  In this case we write the next
             // segments_N file with no segments:
-            try {
+            //NOTE: do not read when create, because doris would never read an old index dir
+            /*try {
                 segmentInfos->read(directory);
                 segmentInfos->clear();
             } catch (CLuceneError &e) {
                 if (e.number() != CL_ERR_IO) throw e;
                 // Likely this means it's a fresh directory
-            }
+            }*/
             segmentInfos->write(directory);
         } else {
             segmentInfos->read(directory);
