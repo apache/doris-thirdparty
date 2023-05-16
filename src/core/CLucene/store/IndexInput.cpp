@@ -179,8 +179,8 @@ BufferedIndexInput::BufferedIndexInput(int32_t _bufferSize):
     }
   }
 
-	const char* BufferedIndexInput::getObjectName(){ return getClassName(); }
-	const char* BufferedIndexInput::getClassName(){ return "BufferedIndexInput"; }
+	const char* BufferedIndexInput::getObjectName() const { return getClassName(); }
+	const char* BufferedIndexInput::getClassName() { return "BufferedIndexInput"; }
 		
     void BufferedIndexInput::readBytes(uint8_t* b, const int32_t len){
         readBytes(b, len, 0, true);

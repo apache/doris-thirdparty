@@ -1,3 +1,4 @@
+#include "CLucene/SharedHeader.h"
 #include "docids_writer.h"
 
 #include "CLucene/debug/error.h"
@@ -5,7 +6,7 @@
 CL_NS_DEF2(util, bkd)
 
 void docids_writer::write_doc_ids_bitmap(std::vector<int32_t> &docids, int32_t start, int32_t count, store::IndexOutput *out){
-    Roaring r;
+    roaring::Roaring r;
     for (int32_t i = 0; i < count; ++i) {
         int32_t doc = docids[start + i];
         r.add(doc);
@@ -61,7 +62,7 @@ void docids_writer::read_bitmap_ints(store::IndexInput *in, int32_t count, std::
     auto size = in->readVInt();
     char buf[size];
     in->readBytes((uint8_t *) buf, size);
-    Roaring result = Roaring::read(buf, false);
+    roaring::Roaring result = roaring::Roaring::read(buf, false);
     int c = 0;
     for (auto i: result) {
         if (c <= count) {
@@ -71,18 +72,18 @@ void docids_writer::read_bitmap_ints(store::IndexInput *in, int32_t count, std::
     }
 }
 
-void docids_writer::read_bitmap(store::IndexInput *in, Roaring &r) {
+void docids_writer::read_bitmap(store::IndexInput *in, roaring::Roaring &r) {
     auto size = in->readVInt();
     char buf[size];
     in->readBytes((uint8_t *) buf, size);
-    r = Roaring::read(buf, false);
+    r = roaring::Roaring::read(buf, false);
 }
 
 void docids_writer::read_bitmap(store::IndexInput *in, bkd_reader::intersect_visitor *visitor){
     auto size = in->readVInt();
     char buf[size];
     in->readBytes((uint8_t *) buf, size);
-    visitor->visit(Roaring::read(buf, false));
+    visitor->visit(roaring::Roaring::read(buf, false));
 }
 
 void docids_writer::read_low_cardinal_bitmap(store::IndexInput *in, bkd_reader::intersect_visitor *visitor){
@@ -92,7 +93,7 @@ void docids_writer::read_low_cardinal_bitmap(store::IndexInput *in, bkd_reader::
         auto size = in->readVInt();
         buf.resize(size);
         in->readBytes((uint8_t *) buf.data(), size);
-        visitor->visit(Roaring::read(buf.data(), false));
+        visitor->visit(roaring::Roaring::read(buf.data(), false));
     }
 }
 

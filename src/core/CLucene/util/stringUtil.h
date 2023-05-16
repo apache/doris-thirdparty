@@ -61,22 +61,21 @@ public:
     }
 };
 
-static void to_lower(const uint8_t* src, int64_t len, uint8_t* dst) {
+[[maybe_unused]] static void to_lower(const uint8_t* src, int64_t len, uint8_t* dst) {
     if (len <= 0) {
         return;
     }
     LowerUpperImpl<'A', 'Z'>::transfer(src, src + len, dst);
 }
 
-static void to_upper(const uint8_t* src, int64_t len, uint8_t* dst) {
+[[maybe_unused]] static void to_upper(const uint8_t* src, int64_t len, uint8_t* dst) {
     if (len <= 0) {
         return;
     }
-    LowerUpperImpl<'a', 'z'> lowerUpper;
     LowerUpperImpl<'a', 'z'>::transfer(src, src + len, dst);
 }
 
-static __attribute__((__always_inline__)) bool is_alnum(uint8_t c) {
+[[maybe_unused]] static inline bool is_alnum(uint8_t c) {
     static constexpr uint8_t LUT[256] = {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -91,7 +90,7 @@ static __attribute__((__always_inline__)) bool is_alnum(uint8_t c) {
     return (bool)LUT[c];
 }
 
-static __attribute__((__always_inline__)) char to_lower(uint8_t c) {
+[[maybe_unused]] static inline char to_lower(uint8_t c) {
     static constexpr uint8_t LUT[256] = {
             0,   1,   2,   3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,  14,  15,
             16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  31,

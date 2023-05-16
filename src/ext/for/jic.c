@@ -1,6 +1,6 @@
 /**
-    Copyright (C) powturbo 2013-2019
-    GPL v2 License
+    Copyright (C) powturbo 2013-2023
+    SPDX-License-Identifier: GPL v2 License
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,11 +24,14 @@
 //    ic - "Integer Compression" Java Critical Native Interface / JNI
 #include <stdio.h>
 #include <stdlib.h>
-#include "bitutil.h"
-#include "vint.h"
-#include "vsimple.h"
-#include "bitpack.h"
-#include "vp4.h"
+#include <stdint.h>
+
+#include "include_/conf.h"
+#include "include_/bitutil.h"
+#include "include_/vint.h"
+#include "include_/vsimple.h"
+#include "include_/bitpack.h"
+#include "include_/vp4.h"
 
 #include "jic.h"
 
@@ -56,8 +59,8 @@
 
 #define JNIEI (*env)->ReleasePrimitiveArrayCritical(env, _in,   in, JNI_ABORT);
 
-#define JNIBIT( __func, _in, n)    JNIBI; jint l = __func ((unsigned      *)in, n   ); JNIEI; return l
-#define JNIBITS(__func, _in, n, x) JNIBI; jint l = __func ((unsigned      *)in, n, x); JNIEI; return l
+#define JNIBIT( __func, _in, n)    JNIBI; jint l = __func ((unsigned      *)in, n, 0   ); JNIEI; return l
+#define JNIBITS(__func, _in, n, x) JNIBI; jint l = __func ((unsigned      *)in, n, 0, x); JNIEI; return l
 
 //---------------------------------- variable byte ------------------------------------------------------------------------------------------
 JNIEXPORT jint JNICALL Java_jic_vbenc32(           JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNIENC(vbenc32,              _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_vbenc32(          jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return vbenc32(           (unsigned *)in, n, (unsigned char *)out          ) - (unsigned char *)out; }
@@ -73,20 +76,20 @@ JNIEXPORT jint JNICALL Java_jic_vsenc32(           JNIEnv *env, jclass cls,  jin
 JNIEXPORT jint JNICALL Java_jic_vsdec32(           JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNIDEC(vsdec32,              _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_vsdec32(          jint i, jbyte *in, jint n, jint o,  jint *out                     ) { return vsdec32(      (unsigned char *)in, n,      (unsigned *)out          ) - (unsigned char *)in; }
 //--------------------------------- TurboPFor: PFor/PForDelta -----------------------------------------------------------------
 // High level API - n = unlimited
-JNIEXPORT jint JNICALL Java_jic_p4nenc32(          JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNNIENC(p4nenc32,             _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nenc32(         jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4nenc32(          (unsigned *)in, n, (unsigned char *)out          ); }
-JNIEXPORT jint JNICALL Java_jic_p4ndec32(          JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNNIDEC(p4ndec32,             _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4ndec32(         jint i, jbyte *in, jint n, jint o,  jint *out                     ) { return p4ndec32(     (unsigned char *)in, n,      (unsigned *)out          ); }
+JNIEXPORT jint JNICALL Java_jic_p4nenc32(          JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNINENC(p4nenc32,             _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nenc32(         jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4nenc32(          (unsigned *)in, n, (unsigned char *)out          ); }
+JNIEXPORT jint JNICALL Java_jic_p4ndec32(          JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNINDEC(p4ndec32,             _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4ndec32(         jint i, jbyte *in, jint n, jint o,  jint *out                     ) { return p4ndec32(     (unsigned char *)in, n,      (unsigned *)out          ); }
 
-JNIEXPORT jint JNICALL Java_jic_p4nenc128v32(      JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNNIENC(p4nenc128v32,         _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nenc128v32(     jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4nenc128v32(      (unsigned *)in, n, (unsigned char *)out          ); }
-JNIEXPORT jint JNICALL Java_jic_p4ndec128v32(      JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNNIDEC(p4ndec128v32,         _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4ndec128v32(     jint i, jbyte *in, jint n, jint o,  jint *out                     ) { return p4ndec128v32( (unsigned char *)in, n,      (unsigned *)out          ); }
+JNIEXPORT jint JNICALL Java_jic_p4nenc128v32(      JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNINENC(p4nenc128v32,         _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nenc128v32(     jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4nenc128v32(      (unsigned *)in, n, (unsigned char *)out          ); }
+JNIEXPORT jint JNICALL Java_jic_p4ndec128v32(      JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNINDEC(p4ndec128v32,         _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4ndec128v32(     jint i, jbyte *in, jint n, jint o,  jint *out                     ) { return p4ndec128v32( (unsigned char *)in, n,      (unsigned *)out          ); }
 
-JNIEXPORT jint JNICALL Java_jic_p4nenc256v32(      JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNNIENC(p4nenc256v32,         _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nenc256v32(     jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4nenc256v32(      (unsigned *)in, n, (unsigned char *)out          ); }
-JNIEXPORT jint JNICALL Java_jic_p4ndec256v32(      JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNNIDEC(p4ndec256v32,         _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4ndec256v32(     jint i, jbyte *in, jint n, jint o,  jint *out                     ) { return p4ndec256v32( (unsigned char *)in, n,      (unsigned *)out          ); }
+JNIEXPORT jint JNICALL Java_jic_p4nenc256v32(      JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNINENC(p4nenc256v32,         _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nenc256v32(     jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4nenc256v32(      (unsigned *)in, n, (unsigned char *)out          ); }
+JNIEXPORT jint JNICALL Java_jic_p4ndec256v32(      JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNINDEC(p4ndec256v32,         _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4ndec256v32(     jint i, jbyte *in, jint n, jint o,  jint *out                     ) { return p4ndec256v32( (unsigned char *)in, n,      (unsigned *)out          ); }
 //--------
-JNIEXPORT jint JNICALL Java_jic_p4ndenc32(         JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNNIENC(p4ndenc32,            _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4ndenc32(        jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4ndenc32(         (unsigned *)in, n, (unsigned char *)out          ); }
-JNIEXPORT jint JNICALL Java_jic_p4nddec32(         JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNNIDEC(p4nddec32,           _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nddec32(        jint i, jbyte *in, jint n, jint o,  jint *out, jint start         ) { return p4nddec32(    (unsigned char *)in, n,      (unsigned *)out          ); }
+JNIEXPORT jint JNICALL Java_jic_p4ndenc32(         JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNINENC(p4ndenc32,            _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4ndenc32(        jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4ndenc32(         (unsigned *)in, n, (unsigned char *)out          ); }
+JNIEXPORT jint JNICALL Java_jic_p4nddec32(         JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNINDEC(p4nddec32,           _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nddec32(        jint i, jbyte *in, jint n, jint o,  jint *out, jint start         ) { return p4nddec32(    (unsigned char *)in, n,      (unsigned *)out          ); }
 
-JNIEXPORT jint JNICALL Java_jic_p4nd1enc32(        JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNNIENC(p4nd1enc32,           _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nd1enc32(       jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4nd1enc32(        (unsigned *)in, n, (unsigned char *)out          ); }
-JNIEXPORT jint JNICALL Java_jic_p4nd1dec32(        JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNNIDEC(p4nd1dec32,          _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nd1dec32(       jint i, jbyte *in, jint n, jint o,  jint *out, jint start         ) { return p4nd1dec32(   (unsigned char *)in, n,      (unsigned *)out          ); }
+JNIEXPORT jint JNICALL Java_jic_p4nd1enc32(        JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNINENC(p4nd1enc32,           _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nd1enc32(       jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4nd1enc32(        (unsigned *)in, n, (unsigned char *)out          ); }
+JNIEXPORT jint JNICALL Java_jic_p4nd1dec32(        JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNINDEC(p4nd1dec32,          _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nd1dec32(       jint i, jbyte *in, jint n, jint o,  jint *out, jint start         ) { return p4nd1dec32(   (unsigned char *)in, n,      (unsigned *)out          ); }
 
 JNIEXPORT jint JNICALL Java_jic_p4nzenc32(         JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out                    ) { JNINENC(p4nzenc32,            _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nzenc32(        jint i,  jint *in, jint n, jint o, jbyte *out                     ) { return p4nzenc32(         (unsigned *)in, n, (unsigned char *)out          ); }
 JNIEXPORT jint JNICALL Java_jic_p4nzdec32(         JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out                    ) { JNINDEC(p4nzdec32,           _in, n, _out          ); } JNIEXPORT jint JNICALL JavaCritical_jic_p4nzdec32(        jint i, jbyte *in, jint n, jint o,  jint *out, jint start         ) { return p4nzdec32(    (unsigned char *)in, n,      (unsigned *)out          ); }
@@ -166,7 +169,7 @@ JNIEXPORT jint JNICALL Java_jic_bitdunpack256v32(  JNIEnv *env, jclass cls, jbyt
 JNIEXPORT jint JNICALL Java_jic_bitd1pack256v32(   JNIEnv *env, jclass cls,  jintArray _in, jint n, jbyteArray _out, jint start, jint b) { JNIENCSB(bitd1pack256v32,    _in, n, _out, start, b); } JNIEXPORT jint JNICALL JavaCritical_jic_bitd1pack256v32(   jint i,  jint *in, jint n, jint o, jbyte *out, jint start, jint b) { return bitd1pack256v32(   (unsigned      *)in, n, (unsigned char *)out, start, b) - (unsigned char *)out; }
 JNIEXPORT jint JNICALL Java_jic_bitd1unpack256v32( JNIEnv *env, jclass cls, jbyteArray _in, jint n,  jintArray _out, jint start, jint b) { JNIDECSB(bitd1unpack256v32,  _in, n, _out, start, b); } JNIEXPORT jint JNICALL JavaCritical_jic_bitd1unpack256v32( jint i, jbyte *in, jint n, jint o,  jint *out, jint start, jint b) { return bitd1unpack256v32( (unsigned char *)in, n,      (unsigned *)out, start, b) - (unsigned char *)in; }
 //--------------------------------- bitutil --------------------------------------------------------------------------------------------------
-JNIEXPORT jint JNICALL Java_jic_bit32(             JNIEnv *env, jclass cls,  jintArray _in, jint n                                     ) { JNIBIT( bit32,               _in, n                ); } JNIEXPORT jint JNICALL JavaCritical_jic_bit32(             jint i,  jint *in, jint n                                        ) { return bit32(             (unsigned      *)in, n                              ); }
-JNIEXPORT jint JNICALL Java_jic_bitd32(            JNIEnv *env, jclass cls,  jintArray _in, jint n,                  jint start        ) { JNIBITS(bitd32,              _in, n,       start   ); } JNIEXPORT jint JNICALL JavaCritical_jic_bitd32(            jint i,  jint *in, jint n,                     jint start        ) { return bitd32(            (unsigned      *)in, n,                       start ); }
-JNIEXPORT jint JNICALL Java_jic_bitd132(           JNIEnv *env, jclass cls,  jintArray _in, jint n,                  jint start        ) { JNIBITS(bitd132,             _in, n,       start   ); } JNIEXPORT jint JNICALL JavaCritical_jic_bitd132(           jint i,  jint *in, jint n,                     jint start        ) { return bitd132(           (unsigned      *)in, n,                       start ); }
+JNIEXPORT jint JNICALL Java_jic_bit32(             JNIEnv *env, jclass cls,  jintArray _in, jint n                                     ) { JNIBIT( bit32,               _in, n                ); } JNIEXPORT jint JNICALL JavaCritical_jic_bit32(             jint i,  jint *in, jint n                                        ) { return bit32(             (unsigned      *)in, n,                    0          ); }
+JNIEXPORT jint JNICALL Java_jic_bitd32(            JNIEnv *env, jclass cls,  jintArray _in, jint n,                  jint start        ) { JNIBITS(bitd32,              _in, n,       start   ); } JNIEXPORT jint JNICALL JavaCritical_jic_bitd32(            jint i,  jint *in, jint n,                     jint start        ) { return bitd32(            (unsigned      *)in, n,                    0,   start ); }
+JNIEXPORT jint JNICALL Java_jic_bitd132(           JNIEnv *env, jclass cls,  jintArray _in, jint n,                  jint start        ) { JNIBITS(bitd132,             _in, n,       start   ); } JNIEXPORT jint JNICALL JavaCritical_jic_bitd132(           jint i,  jint *in, jint n,                     jint start        ) { return bitd132(           (unsigned      *)in, n,                    0,   start ); }
 

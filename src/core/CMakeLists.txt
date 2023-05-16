@@ -43,9 +43,6 @@ SET(clucene_core_Files
     ./CLucene/util/bkd/point_reader.cpp
     ./CLucene/util/bkd/docids_writer.cpp
     ./CLucene/util/bkd/bkd_msb_radix_sorter.cpp
-    ./CLucene/util/croaring/roaring.c
-    ./CLucene/util/croaring/roaring.h
-    ./CLucene/util/croaring/roaring.hh
     ./CLucene/util/BitUtil.cpp
     ./CLucene/util/BytesRef.cpp
     ./CLucene/util/BytesRefBuilder.cpp
@@ -212,17 +209,20 @@ file(GLOB_RECURSE HEADERS ${clucene-core_SOURCE_DIR}/*.h )
 
 #create the libraries
 INCLUDE_DIRECTORIES(${clucene_SOURCE_DIR}/src/core)
-INCLUDE_DIRECTORIES(${clucene_SOURCE_DIR}/src/ext/for)
+INCLUDE_DIRECTORIES(${clucene_SOURCE_DIR}/src/ext/for/include_)
+
 IF (BUILD_SHARED_LIBRARIES)
   add_library(clucene-core SHARED
       ${clucene_core_Files} ${clucene_shared_Files} ${HEADERS}
       )
   IF (USE_BTHREAD)
-    target_include_directories(clucene-core PUBLIC
+    TARGET_INCLUDE_DIRECTORIES(clucene-core PUBLIC
           $<BUILD_INTERFACE:${BRPC_DIR}>
           )
     TARGET_LINK_LIBRARIES(clucene-core ssl crypto ${BRPC_LIB} ${GLOG_LIB} ${GFLAG_LIB} ${PROTOBUF_LIB})
   ENDIF (USE_BTHREAD)
+  TARGET_INCLUDE_DIRECTORIES(clucene-core PUBLIC ${Roaring_INCLUDE_DIR})
+
   #set properties on the libraries
   SET_TARGET_PROPERTIES(clucene-core PROPERTIES
       VERSION ${CLUCENE_VERSION}
@@ -241,11 +241,13 @@ IF (BUILD_STATIC_LIBRARIES)
       ${clucene_core_Files} ${clucene_shared_Files} ${HEADERS}
       )
   IF (USE_BTHREAD)
-    target_include_directories(clucene-core-static PUBLIC
+    TARGET_INCLUDE_DIRECTORIES(clucene-core-static PUBLIC
             $<BUILD_INTERFACE:${BRPC_DIR}>
             )
     TARGET_LINK_LIBRARIES(clucene-core-static ssl crypto ${BRPC_LIB} ${GLOG_LIB} ${GFLAG_LIB} ${PROTOBUF_LIB})
   ENDIF (USE_BTHREAD)
+  TARGET_INCLUDE_DIRECTORIES(clucene-core-static PUBLIC ${Roaring_INCLUDE_DIR})
+
   SET_TARGET_PROPERTIES(clucene-core-static PROPERTIES
       VERSION ${CLUCENE_VERSION}
       SOVERSION ${CLUCENE_SOVERSION}
@@ -316,9 +318,6 @@ ELSE (LUCENE_SYS_INCLUDES)
       COMPONENT development)
   install(FILES ${clucene-shared_BINARY_DIR}/CLucene/util/Misc.h
       DESTINATION include/CLucene/util
-      COMPONENT development)
-  install(FILES ${clucene_SOURCE_DIR}/src/core/CLucene/util/croaring/roaring.hh
-      DESTINATION include/CLucene/util/croaring
       COMPONENT development)
 ENDIF (LUCENE_SYS_INCLUDES)
 

@@ -1,3 +1,4 @@
+#include "CLucene/SharedHeader.h"
 #include "CLucene/util/CodecUtil.h"
 #include "CLucene/util/FixedBitSet.h"
 #include "CLucene/util/FutureArrays.h"

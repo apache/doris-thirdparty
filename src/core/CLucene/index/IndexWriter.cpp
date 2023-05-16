@@ -22,7 +22,6 @@
 #include "CLucene/store/_RAMDirectory.h"
 #include "CLucene/util/Array.h"
 #include "CLucene/util/PriorityQueue.h"
-#include "CLucene/util/croaring/roaring.hh"
 #include "MergePolicy.h"
 #include "MergeScheduler.h"
 #include "SDocumentWriter.h"
@@ -465,7 +464,6 @@ void IndexWriter::setInfoStream(std::ostream *infoStream) {
 void IndexWriter::messageState() {
     message(string("setInfoStream: dir=") + directory->toString() +
             " autoCommit=" + (autoCommit ? "true" : "false" + string(" mergePolicy=") + mergePolicy->getObjectName() + " mergeScheduler=" + mergeScheduler->getObjectName() + " ramBufferSizeMB=" + Misc::toString(docWriter->getRAMBufferSizeMB()) + " maxBuffereDocs=" + Misc::toString(docWriter->getMaxBufferedDocs())) +
-            " maxBuffereDeleteTerms=" + Misc::toString(docWriter->getMaxBufferedDeleteTerms()) +
             " maxFieldLength=" + Misc::toString(maxFieldLength) +
             " index=" + segString());
 }
@@ -1395,7 +1393,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     newSegmentInfos.clear();
 }
 
-bool IndexWriter::compareIndexes(lucene::store::Directory *other) {
+void IndexWriter::compareIndexes(lucene::store::Directory *other) {
     /// compare merged segments
     // index compaction segments
     // term -> <docId, freq>

@@ -325,7 +325,8 @@ public:
     /** Expert: Reset the tokenizer to a new reader.  Typically, an
 	*  analyzer (in its reusableTokenStream method) will use
 	*  this to re-use a previously created tokenizer. */
-    virtual void reset(CL_NS(util)::Reader* _input){
+    using TokenStream::reset;
+    virtual void reset(CL_NS(util)::Reader* _input) {
         // ? delete input;
         this->input = _input;
     };

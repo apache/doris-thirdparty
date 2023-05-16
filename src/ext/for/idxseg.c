@@ -1,6 +1,6 @@
 /**
-    Copyright (C) powturbo 2013-2019
-    GPL v2 License
+    Copyright (C) powturbo 2013-2023
+    SPDX-License-Identifier: GPL v2 License
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@
 #endif
 
 #include <getopt.h>
-#include "conf.h"
+#include "include_/conf.h"
 
 #ifndef min
 #define min(x,y) (((x)<(y)) ? (x) : (y))
@@ -55,7 +55,7 @@ unsigned argtoi(char *s) {
 }
 
 void usage() {
-  fprintf(stderr, "\nTurboPFor Copyright (c) 2013-2019 Powturbo  %s\n", __DATE__);
+  fprintf(stderr, "\nTurboPFor Copyright (c) 2013-2023 Powturbo  %s\n", __DATE__);
   fprintf(stderr, "Partitioning\n");
   fprintf(stderr, "Usage: idxseg -nNs -sPs <docid file> <destination dir>\n");
   fprintf(stderr, "Ns=total number of documents. Ps=number of partitions\n");

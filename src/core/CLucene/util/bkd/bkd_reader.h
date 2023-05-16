@@ -3,7 +3,7 @@
 #include "CLucene/StdHeader.h"
 
 #include "CLucene/store/IndexInput.h"
-#include "CLucene/util/croaring/roaring.hh"
+#include <roaring/roaring.hh>
 #include "bkd_docid_iterator.h"
 #include "index_tree.h"
 
@@ -60,10 +60,10 @@ public:
          *  case of ties, in increasing docid order.
          */
         virtual void visit(int docid, std::vector<uint8_t> &packedValue) = 0;
-        virtual void visit(Roaring &docid) = 0;
-        virtual void visit(Roaring &&docid) = 0;
+        virtual void visit(roaring::Roaring &docid) = 0;
+        virtual void visit(roaring::Roaring &&docid) = 0;
         virtual void visit(bkd_docid_set_iterator *iter, std::vector<uint8_t> &packedValue) = 0;
-        virtual void visit(Roaring *docid, std::vector<uint8_t> &packedValue) = 0;
+        virtual void visit(roaring::Roaring *docid, std::vector<uint8_t> &packedValue) = 0;
         virtual void visit(std::vector<char>& docid, std::vector<uint8_t> &packedValue) = 0;
 
         /** Called for non-leaf cells to test how the cell relates to the query, to

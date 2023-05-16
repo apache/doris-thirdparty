@@ -40,7 +40,7 @@ const uint8_t SDocumentsWriter<T>::defaultNorm = search::Similarity::encodeNorm(
 template<typename T>
 const int32_t SDocumentsWriter<T>::BYTE_BLOCK_SHIFT = 15;
 template<typename T>
-const int32_t SDocumentsWriter<T>::BYTE_BLOCK_SIZE = (int32_t) pow(2.0, BYTE_BLOCK_SHIFT);
+const int32_t SDocumentsWriter<T>::BYTE_BLOCK_SIZE = 1 << BYTE_BLOCK_SHIFT;//(int32_t) pow(2.0, BYTE_BLOCK_SHIFT);
 template<typename T>
 const int32_t SDocumentsWriter<T>::BYTE_BLOCK_MASK = BYTE_BLOCK_SIZE - 1;
 template<typename T>
@@ -250,7 +250,7 @@ void SDocumentsWriter<T>::ThreadState::writeDocument() {
     // abort all documents since we last flushed because
     // it means those files are possibly inconsistent.
     try {
-        _parent->numDocsInStore++;
+        //_parent->numDocsInStore++;
 
         // Append norms for the fields we saw:
         for (int32_t i = 0; i < numFieldData; i++) {
@@ -820,7 +820,7 @@ TCHAR *SDocumentsWriter<TCHAR>::getSCharBlock() {
     TCHAR *c;
     if (0 == size) {
         numBytesAlloc += CHAR_BLOCK_SIZE * CHAR_NUM_BYTE;
-        c = _CL_NEWARRAY(TCHAR, CHAR_NUM_BYTE);
+        c = _CL_NEWARRAY(TCHAR, CHAR_BLOCK_SIZE);
         memset(c, 0, sizeof(TCHAR) * CHAR_BLOCK_SIZE);
     } else {
         c = *freeSCharBlocks.begin();

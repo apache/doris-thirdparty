@@ -18,14 +18,14 @@ SOURCE_GROUP("store" ./store/*)
 SOURCE_GROUP("util" ./util/*)
 
 IF (BUILD_CONTRIBS_LIB)
-    SET(test_contribs_lib_files ./contribs-lib/analysis/testChinese.cpp ./contribs-lib/analysis/de/TestGermanStemFilter.cpp util/TestBKD.cpp)
+    SET(test_contribs_lib_files ./contribs-lib/analysis/testChinese.cpp)
     SET(EXTRA_LIBS ${EXTRA_LIBS} clucene-contribs-lib)
     ADD_DEFINITIONS(-DTEST_CONTRIB_LIBS)
-    INCLUDE_DIRECTORIES(${clucene-test_SOURCE_DIR} ${clucene-contribs-lib_SOURCE_DIR})
 
     SOURCE_GROUP("contribs-lib" REGULAR_EXPRESSION ./contribs-lib/*)
     SOURCE_GROUP("contribs-lib\\analysis" REGULAR_EXPRESSION ./contribs-lib/analysis/*)
     SOURCE_GROUP("contribs-lib\\analysis\\de" FILES ${test_contribs_lib_files})
+    INCLUDE_DIRECTORIES( ${clucene_SOURCE_DIR}/src/contribs-lib )
 ENDIF (BUILD_CONTRIBS_LIB)
 
 file(GLOB_RECURSE test_HEADERS ${CMAKE_SOURCE_DIR}/test/*.h)
@@ -99,8 +99,7 @@ SET(test_files ./tests.cpp
         ./util/TestMSBRadixSorter.cpp
         ./util/TestStringBuffer.cpp
         ./util/English.cpp
-        ${test_HEADERS}
-        contribs-lib/analysis/testChinese.cpp)
+        ${test_HEADERS})
 IF (USE_SHARED_OBJECT_FILES)
     GET_SHARED_FILES(clucene_shared_Files)
 ENDIF (USE_SHARED_OBJECT_FILES)
@@ -254,7 +253,7 @@ ENDIF (ENABLE_COMPILE_TESTS)
 IF (BUILD_STATIC_LIBRARIES)
     PROJECT(clucene-test)
 
-    ADD_EXECUTABLE(cl_test EXCLUDE_FROM_ALL ${clucene_shared_Files} ${test_files})
+    ADD_EXECUTABLE(cl_test EXCLUDE_FROM_ALL ${clucene_shared_Files} ${test_files} ${test_contribs_lib_files})
     if (__COMPILER_CLANG)
         SET_TARGET_PROPERTIES(cl_test PROPERTIES
             COMPILE_FLAGS "-O0 -fsanitize=address -DADDRESS_SANITIZER -g"
@@ -265,9 +264,9 @@ IF (BUILD_STATIC_LIBRARIES)
                 LINK_FLAGS "-fsanitize=address -static-libasan")
     endif ()
     IF (UNIX)
-        TARGET_LINK_LIBRARIES(cl_test clucene-core-static clucene-shared-static pthread ic ${EXTRA_LIBS})
+	    TARGET_LINK_LIBRARIES(cl_test clucene-core-static clucene-shared-static pthread ic ${EXTRA_LIBS} ${Roaring_LIBRARY})
     ELSE ()
-        TARGET_LINK_LIBRARIES(cl_test clucene-core-static clucene-shared-static ic gtest ${EXTRA_LIBS})
+	    TARGET_LINK_LIBRARIES(cl_test clucene-core-static clucene-shared-static ic gtest ${EXTRA_LIBS} ${Roaring_LIBRARY})
     ENDIF (UNIX)
 
 ENDIF (BUILD_STATIC_LIBRARIES)

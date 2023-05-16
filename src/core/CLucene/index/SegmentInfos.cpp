@@ -747,8 +747,8 @@ string SegmentInfo::segString(Directory* dir) {
 		  if(format < 0){     // file contains explicit format info
 			  // check that it is a format we can understand
 			  if (format < CURRENT_FORMAT){
-				  char err[30];
-				  cl_sprintf(err,30,"Unknown format version: %d", format);
+				  char err[50];
+				  cl_sprintf(err,50,"Unknown format version: %d", format);
 				  _CLTHROWA(CL_ERR_CorruptIndex, err);
 			  }
 			  version = input->readLong(); // read version
@@ -1107,8 +1107,8 @@ string SegmentInfo::segString(Directory* dir) {
 		  format = input->readInt();
 		  if(format < 0){
 			  if(format < CURRENT_FORMAT){
-				  char err[30];
-				  cl_sprintf(err,30,"Unknown format version: %d",format);
+				  char err[50];
+				  cl_sprintf(err,50,"Unknown format version: %d",format);
 				  _CLTHROWA(CL_ERR_CorruptIndex,err);
 			  }
 			  version = input->readLong(); // read version

@@ -44,7 +44,7 @@ namespace bkd
         void write_packed_value(int32_t index, const uint8_t* bytes, uint32_t length);
         std::vector<int> compute_cardinality(int from, int to, int num_dims, int bytes_per_dim, std::vector<int32_t> &common_prefix_lengths);
         void append(std::shared_ptr<std::vector<uint8_t>> &packedValue, int64_t ord, int32_t docid);
-        void append(const uint8_t* packedValue, uint32_t value_length, int64_t ord, int32_t docid);
+        void append(const uint8_t* packedValue, uint32_t value_length, int64_t ord, int32_t docid) override;
         void append(const std::vector<uint8_t> &packedValue, int64_t ord, int32_t docid) override;
         std::shared_ptr<point_reader> get_reader(int64_t start, int64_t length) override;
         std::shared_ptr<point_reader> get_shared_reader(int64_t start, int64_t length, const std::vector<std::shared_ptr<point_reader>> &toCloseHeroically) override;
