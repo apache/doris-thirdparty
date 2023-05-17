@@ -1,0 +1,111 @@
+<!---
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License. See accompanying LICENSE file.
+-->
+
+Apache Hadoop ${project.version}
+================================
+
+Apache Hadoop ${project.version} incorporates a number of significant
+enhancements over the previous major release line (hadoop-3.2).
+
+Overview
+========
+
+Users are encouraged to read the full set of release notes.
+This page provides an overview of the major changes.
+
+ARM Support
+------------
+This is the first release to support ARM architectures.
+
+Upgrade protobuf from 2.5.0 to something newer
+---------------------------------------------
+Protobuf upgraded to 3.7.1 as protobuf-2.5.0 reached EOL.
+
+Java 11 runtime support
+------------------
+
+Java 11 runtime support is completed.
+
+Shaded Guava from thirdparty
+--------------------------------
+Hadoop now switches to use a shaded version of Guava from
+`hadoop-thirdparty` which helps to remove Guava version conflicts with
+downstream applications.
+
+Adoption of lz4-java and snappy-java
+----------------------------------
+For LZ4 and Snappy compression codec, Hadoop now moves to use `lz4-java`
+and `snappy-java` instead of requring the native libraries of these to
+be installed on the systems running Hadoop.
+
+Support impersonation for AuthenticationFilter
+---------------------------------------------
+
+External services or YARN service may need to call into WebHDFS or YARN REST API on behave of the user using web
+protocols. It would be good to support impersonation mechanism in AuthenticationFilter or similar extensions.
+
+
+s3A Enhancements
+------------------
+Lots of enhancements to the S3A code including Delegation Token support, better handling of 404 caching,
+ S3guard performance, resilience improvements
+
+ABFS Enhancements
+--------------------
+Address issues which surface in the field and tune things which need tuning, add more tests where appropriate.
+Improve docs, especially troubleshooting.
+
+HDFS RBF stabilization
+--------------------
+
+HDFS Router now supports security. Also contains many bug fixes and improvements.
+
+Support non-volatile storage class memory(SCM) in HDFS cache directives	.
+-----------------------------------------------------------------------
+
+Aims to enable storage class memory first in read cache.
+Although storage class memory has non-volatile characteristics, to keep the same behavior as current read only cache,
+we don't use its persistent characteristics currently.
+
+
+Application Catalog for YARN applications.
+-----------------------------------------
+
+application catalog system which provides an editorial and search interface for YARN applications.
+This improves usability of YARN for manage the life cycle of applications.
+
+
+Incorporate Tencent Cloud COS File System Implementation
+-------------------------------------------------------
+
+Tencent cloud is top 2 cloud vendors in China market and the object store COS is widely used among China’s cloud users.
+This task implements a COSN filesytem to support Tencent cloud COS natively in Hadoop.
+
+Scheduling of opportunistic containers
+-------------------------------------
+
+scheduling of opportunistic container through the central RM (YARN-5220), through distributed scheduling (YARN-2877),
+as well as the scheduling of containers based on actual node utilization (YARN-1011) and the container
+promotion/demotion (YARN-5085).
+
+Getting Started
+===============
+
+The Hadoop documentation includes the information you need to get started using
+Hadoop. Begin with the
+[Single Node Setup](./hadoop-project-dist/hadoop-common/SingleCluster.html)
+which shows you how to set up a single-node Hadoop installation.
+Then move on to the
+[Cluster Setup](./hadoop-project-dist/hadoop-common/ClusterSetup.html)
+to learn how to set up a multi-node Hadoop installation.
