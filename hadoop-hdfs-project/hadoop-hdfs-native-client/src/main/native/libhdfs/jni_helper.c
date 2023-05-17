@@ -655,7 +655,7 @@ static char* getClassPath()
 static JNIEnv* getGlobalJNIEnv(void)
 {
     JavaVM* vmBuf[VM_BUF_LENGTH]; 
-    JNIEnv *env;
+    JNIEnv *env = NULL;
     jint rv = 0; 
     jint noVMs = 0;
     jthrowable jthr;
@@ -815,18 +815,21 @@ JNIEnv* getJNIEnv(void)
     if (!state) {
       mutexUnlock(&jvmMutex);
       fprintf(stderr, "getJNIEnv: Unable to create ThreadLocalState\n");
-      return NULL;
-    }
-    if (threadLocalStorageSet(state)) {
-      mutexUnlock(&jvmMutex);
       goto fail;
     }
+    state->env = NULL;
     THREAD_LOCAL_STORAGE_SET_QUICK(state);
 
     state->env = getGlobalJNIEnv();
     mutexUnlock(&jvmMutex);
 
     if (!state->env) {
+        goto fail;
+    }
+
+    // when the env is created, the state can be set.
+    if (threadLocalStorageSet(state)) {
+        mutexUnlock(&jvmMutex);
         goto fail;
     }
 
@@ -841,7 +844,10 @@ JNIEnv* getJNIEnv(void)
 
 fail:
     fprintf(stderr, "getJNIEnv: getGlobalJNIEnv failed\n");
-    hdfsThreadDestructor(state);
+    THREAD_LOCAL_STORAGE_SET_QUICK(NULL);
+    if (state) {
+        hdfsThreadDestructor(state);
+    }
     return NULL;
 }
 

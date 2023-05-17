@@ -59,6 +59,8 @@ typedef enum {
     JC_BYTE_BUFFER,
     JC_ENUM_SET,
     JC_EXCEPTION_UTILS,
+    JC_SYSTEM,
+    JC_SECURITY_CONFIGURATION,
     // A special marker enum that counts the number of cached jclasses
     NUM_CACHED_CLASSES
 } CachedJavaClass;
@@ -97,6 +99,7 @@ const char *getClassName(CachedJavaClass cachedJavaClass);
 #define HADOOP_HDISTRM  "org/apache/hadoop/hdfs/client/HdfsDataInputStream"
 #define HADOOP_RO       "org/apache/hadoop/fs/ReadOption"
 #define HADOOP_DS       "org/apache/hadoop/net/unix/DomainSocket"
+#define HADOOP_USER_INFORMATION "org/apache/hadoop/security/UserGroupInformation"
 
 /* Some frequently used Java class names */
 #define JAVA_NET_ISA    "java/net/InetSocketAddress"
@@ -104,6 +107,7 @@ const char *getClassName(CachedJavaClass cachedJavaClass);
 #define JAVA_BYTEBUFFER "java/nio/ByteBuffer"
 #define JAVA_STRING     "java/lang/String"
 #define JAVA_ENUMSET    "java/util/EnumSet"
+#define JAVA_SYSTEM     "java/lang/System"
 
 /* Some frequently used third-party class names */
 
