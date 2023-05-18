@@ -108,6 +108,10 @@ jthrowable initCachedClasses(JNIEnv* env) {
                 "java/util/EnumSet";
         cachedJavaClasses[JC_EXCEPTION_UTILS].className =
                 "org/apache/commons/lang3/exception/ExceptionUtils";
+        cachedJavaClasses[JC_SYSTEM].className =
+                "java/lang/System";
+        cachedJavaClasses[JC_SECURITY_CONFIGURATION].className =
+                "org/apache/hadoop/security/UserGroupInformation";
 
         // Create and set the jclass objects based on the class names set above
         jthrowable jthr;
