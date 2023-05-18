@@ -62,7 +62,7 @@ ADD_EXECUTABLE(abnormal EXCLUDE_FROM_ALL
 )
 TARGET_LINK_LIBRARIES(abnormal clucene-core-static clucene-shared-static clucene-contribs-lib ic ${EXTRA_LIBS})
 
-ADD_EXECUTABLE(search
+ADD_EXECUTABLE(search EXCLUDE_FROM_ALL
         ./search.cpp
         ${clucene-shared_SOURCE_DIR}/CLucene/util/Misc.cpp
         ${clucene-shared_SOURCE_DIR}/CLucene/util/dirent.cpp
@@ -96,3 +96,12 @@ ADD_EXECUTABLE(pointSearch8 EXCLUDE_FROM_ALL
         ${demo_HEADERS}
 )
 TARGET_LINK_LIBRARIES(pointSearch8 clucene-core-static clucene-shared-static clucene-contribs-lib ic ${EXTRA_LIBS})
+
+ADD_EXECUTABLE(demo EXCLUDE_FROM_ALL
+        ./demo.cpp
+        ./simdjson.cpp
+        ${clucene-shared_SOURCE_DIR}/CLucene/util/Misc.cpp
+        ${clucene-shared_SOURCE_DIR}/CLucene/util/dirent.cpp
+        ${demo_HEADERS}
+)
+TARGET_LINK_LIBRARIES(demo clucene-core-static clucene-shared-static clucene-contribs-lib ic ${EXTRA_LIBS})

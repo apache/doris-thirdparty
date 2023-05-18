@@ -102,7 +102,7 @@ void DefaultSkipListWriter::setSkipData(int32_t doc, bool storePayloads, int32_t
     this->curStorePayloads = storePayloads;
     this->curPayloadLength = payloadLength;
     this->curFreqPointer = freqOutput->getFilePointer();
-    if (proxOutput != nullptr) {
+    if (hasProx) {
         this->curProxPointer = proxOutput->getFilePointer();
     }
 }
@@ -111,7 +111,7 @@ void DefaultSkipListWriter::resetSkip() {
     MultiLevelSkipListWriter::resetSkip();
     memset(lastSkipDoc, 0, numberOfSkipLevels * sizeof(int32_t));
     Arrays<int32_t>::fill(lastSkipPayloadLength, numberOfSkipLevels, -1);// we don't have to write the first length in the skip list
-    if (proxOutput != nullptr) {
+    if (hasProx) {
         Arrays<int64_t>::fill(lastSkipProxPointer, numberOfSkipLevels, proxOutput->getFilePointer());
     }
     Arrays<int64_t>::fill(lastSkipFreqPointer, numberOfSkipLevels, freqOutput->getFilePointer());
@@ -156,7 +156,7 @@ void DefaultSkipListWriter::writeSkipData(int32_t level, IndexOutput *skipBuffer
         skipBuffer->writeVInt(curDoc - lastSkipDoc[level]);
     }
     skipBuffer->writeVInt((int32_t) (curFreqPointer - lastSkipFreqPointer[level]));
-    if (curProxPointer != -1) {
+    if (hasProx) {
         skipBuffer->writeVInt((int32_t) (curProxPointer - lastSkipProxPointer[level]));
     }
 
@@ -164,12 +164,16 @@ void DefaultSkipListWriter::writeSkipData(int32_t level, IndexOutput *skipBuffer
     //System.out.println("write doc at level " + level + ": " + curDoc);
 
     lastSkipFreqPointer[level] = curFreqPointer;
-    if (curProxPointer != -1) {
+    if (hasProx) {
         lastSkipProxPointer[level] = curProxPointer;
     }
 }
 
-DefaultSkipListWriter::DefaultSkipListWriter(int32_t skipInterval, int32_t numberOfSkipLevels, int32_t docCount, IndexOutput *freqOutput, IndexOutput *proxOutput) : MultiLevelSkipListWriter(skipInterval, numberOfSkipLevels, docCount) {
+DefaultSkipListWriter::DefaultSkipListWriter(int32_t skipInterval, int32_t numberOfSkipLevels,
+                                             int32_t docCount, IndexOutput* freqOutput,
+                                             IndexOutput* proxOutput)
+        : MultiLevelSkipListWriter(skipInterval, numberOfSkipLevels, docCount),
+          hasProx(proxOutput != nullptr) {
     this->freqOutput = freqOutput;
     this->proxOutput = proxOutput;
     this->curDoc = this->curPayloadLength = 0;
@@ -178,12 +182,16 @@ DefaultSkipListWriter::DefaultSkipListWriter(int32_t skipInterval, int32_t numbe
     lastSkipDoc = _CL_NEWARRAY(int32_t, numberOfSkipLevels);
     lastSkipPayloadLength = _CL_NEWARRAY(int32_t, numberOfSkipLevels);
     lastSkipFreqPointer = _CL_NEWARRAY(int64_t, numberOfSkipLevels);
-    lastSkipProxPointer = _CL_NEWARRAY(int64_t, numberOfSkipLevels);
+    if (hasProx) {
+        lastSkipProxPointer = _CL_NEWARRAY(int64_t, numberOfSkipLevels);
+    }
 }
 DefaultSkipListWriter::~DefaultSkipListWriter() {
     _CLDELETE_ARRAY(lastSkipDoc);
     _CLDELETE_ARRAY(lastSkipPayloadLength);
     _CLDELETE_ARRAY(lastSkipFreqPointer);
-    _CLDELETE_ARRAY(lastSkipProxPointer);
+    if (hasProx) {
+        _CLDELETE_ARRAY(lastSkipProxPointer);
+    }
 }
 CL_NS_END

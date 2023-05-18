@@ -56,6 +56,7 @@ private:
 
 protected:
   bool currentFieldStoresPayloads;
+  bool hasProx = false;
 
 public:
   ///\param Parent must be a segment reader

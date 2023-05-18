@@ -204,7 +204,7 @@ CL_NS_DEF(search)
 			Query* termQuery = _CLNEW TermQuery(term);
 			termQuery->setBoost(getBoost());
 			Weight* ret = termQuery->_createWeight(searcher);
-			_CLLDELETE(termQuery);
+			// _CLLDELETE(termQuery);
 			return ret;
 		}
 		return _CLNEW PhraseWeight(searcher,this);

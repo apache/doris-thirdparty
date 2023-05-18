@@ -184,7 +184,7 @@ public:
         return _CLNEW SimpleTokenizer<T>(reader);
     }
     TokenStream* reusableTokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader) override{
-        auto* tokenizer = dynamic_cast<Tokenizer*>(getPreviousTokenStream());
+        auto* tokenizer = static_cast<Tokenizer*>(getPreviousTokenStream());
         if (tokenizer == nullptr) {
             tokenizer = _CLNEW SimpleTokenizer<T>(reader);
             setPreviousTokenStream(tokenizer);

@@ -144,6 +144,8 @@ protected:
 class DefaultSkipListReader: public MultiLevelSkipListReader {
 private:
 	bool currentFieldStoresPayloads;
+	bool hasProx = false;
+
 	int64_t* freqPointer{nullptr};
 	int64_t* proxPointer{nullptr};
 	int32_t* payloadLength;
@@ -156,9 +158,11 @@ public:
 	DefaultSkipListReader(CL_NS(store)::IndexInput* _skipStream, const int32_t maxSkipLevels, const int32_t _skipInterval);
 	virtual ~DefaultSkipListReader();
 
-	void init(const int64_t _skipPointer, const int64_t freqBasePointer, const int64_t proxBasePointer, const int32_t df, const bool storesPayloads);
+	void init(const int64_t _skipPointer, const int64_t freqBasePointer,
+						const int64_t proxBasePointer, const int32_t df, const bool hasProx,
+						const bool storesPayloads);
 
-	/** Returns the freq pointer of the doc to which the last call of
+  /** Returns the freq pointer of the doc to which the last call of
 	* {@link MultiLevelSkipListReader#skipTo(int)} has skipped.  */
 	int64_t getFreqPointer() const;
 

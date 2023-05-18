@@ -50,6 +50,7 @@ private:
     bool closed{};
     std::string segment;// Current segment we are working on
     std::vector<uint32_t> docDeltaBuffer;
+    std::vector<uint32_t> freqBuffer;
     std::ostream* infoStream{};
     int64_t ramBufferSize;
 
@@ -59,11 +60,11 @@ public:
     struct Posting {
         int32_t textStart;   // Address into char[] blocks where our text is stored
         int32_t textLen;     // our text length
-        //int32_t docFreq;     // # times this term occurs in the current doc
+        int32_t docFreq = 0;     // # times this term occurs in the current doc
         int32_t freqStart;   // Address of first uint8_t[] slice for freq
         int32_t freqUpto;    // Next write address for freq
-        //int32_t proxStart;   // Address of first uint8_t[] slice
-        //int32_t proxUpto;    // Next write address for prox
+        int32_t proxStart = 0;   // Address of first uint8_t[] slice
+        int32_t proxUpto = 0;    // Next write address for prox
         int32_t lastDocID;   // Last docID where this term occurred
         int32_t lastDocCode; // Code for prior doc
         int32_t lastPosition;// Last position where this term occurred
@@ -598,7 +599,9 @@ public:
             else
                 freq.bufferOffset = freq.upto = freq.endIndex = 0;
 
-            //prox.init(field->threadState->postingsPool, p->proxStart, p->proxUpto);
+            if (field->fieldInfo->hasProx) {
+                prox.init(field->threadState->postingsPool, p->proxStart, p->proxUpto);
+            }
 
             // Should always be true
             bool result = nextDoc();
@@ -612,7 +615,13 @@ public:
                 if (p->lastDocCode != -1) {
                     // Return last doc
                     docID = p->lastDocID;
-                    termFreq = 1;//p->docFreq;
+
+                    if (field->fieldInfo->hasProx) {
+                        termFreq = p->docFreq;
+                    } else {
+                        termFreq = 1;
+                    }
+                    
                     p->lastDocCode = -1;
                     return true;
                 } else
@@ -780,6 +789,8 @@ public:
     bool bufferDeleteTerms(const CL_NS(util)::ArrayBase<Term *> *terms) override {_CLTHROW_NOT_IMPLEMENT}
     int64_t getRAMUsed() override {_CLTHROW_NOT_IMPLEMENT}
     const std::vector<int32_t> *getBufferedDeleteDocIDs() override {_CLTHROW_NOT_IMPLEMENT}
+
+    bool hasProx() override;
 
 private:
     std::vector<std::string>* _files = nullptr;

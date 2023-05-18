@@ -134,6 +134,17 @@ void Field::setOmitNorms(const bool omitNorms) {
         config &= ~INDEX_NONORMS;
 }
 
+bool Field::getOmitTermFreqAndPositions() const {
+  return (config & INDEX_NOTERMFREQANDPOSITIONS) != 0;
+}
+
+void Field::setOmitTermFreqAndPositions(const bool OmitTermFreqAndPositions) {
+	if (OmitTermFreqAndPositions)
+		config |= INDEX_NOTERMFREQANDPOSITIONS;
+	else
+		config &= ~INDEX_NOTERMFREQANDPOSITIONS;
+}
+
 bool Field::isLazy() const { return lazy; }
 
 void Field::setValue(TCHAR* value, const bool duplicateValue) {
@@ -201,14 +212,19 @@ void Field::setConfig(const uint32_t x){
 			newConfig |= INDEX_NONORMS;
 			index = true;
 		}
-        if ( x & INDEX_TOKENIZED ){
+    if ( x & INDEX_TOKENIZED ){
 			newConfig |= INDEX_TOKENIZED;
 			index = true;
 			if ( x & INDEX_CHS )
 			    newConfig |= INDEX_CHS;
+			if (x & INDEX_NOTERMFREQANDPOSITIONS)
+          newConfig |= INDEX_NOTERMFREQANDPOSITIONS;
 		}
 		else if ( x & INDEX_UNTOKENIZED ){
 			newConfig |= INDEX_UNTOKENIZED;
+			index = true;
+		} else if (x & INDEX_NOTERMFREQANDPOSITIONS) {
+			newConfig |= INDEX_NOTERMFREQANDPOSITIONS;
 			index = true;
 		}
 

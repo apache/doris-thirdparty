@@ -196,7 +196,7 @@ void SegmentReader::initialize(SegmentInfo *si, int32_t readBufferSize, bool doO
         // so that if an index update removes them we'll still have them
         freqStream = cfsDir->openInput((segment + ".frq").c_str(), readBufferSize);
         // TODO: should be true when we could set writing terms positions in field conf flag.
-        if (0) {
+        if (_fieldInfos->hasProx()) {
             proxStream = cfsDir->openInput((segment + ".prx").c_str(), readBufferSize);
         }
         // we do not need norms, so we don't read it at all.

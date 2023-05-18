@@ -22,6 +22,7 @@
 #include "CLucene/store/_RAMDirectory.h"
 #include "CLucene/util/Array.h"
 #include "CLucene/util/PriorityQueue.h"
+#include "CLucene/index/CodeMode.h"
 #include "MergePolicy.h"
 #include "MergeScheduler.h"
 #include "SDocumentWriter.h"
@@ -40,9 +41,11 @@
 #include <iostream>
 
 #if defined(USE_AVX2) && defined(__x86_64__)
-#define P4ENC p4nd1enc256v32
+#define  P4ENC     p4nd1enc256v32
+#define  P4NZENC   p4nzenc256v32
 #else
-#define P4ENC p4nd1enc128v32
+#define  P4ENC     p4nd1enc128v32
+#define  P4NZENC   p4nzenc128v32
 #endif
 
 CL_NS_USE(store)
@@ -1278,6 +1281,21 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         message(string("index compaction total doc count: ") + Misc::toString(totDocCount));
     }
 
+    // check hasProx
+    bool hasProx = false;
+    {
+        if (!readers.empty()) {
+            auto reader = static_cast<SegmentReader*>(readers[0]);
+            hasProx = reader->getFieldInfos()->hasProx();
+            for (int32_t i = 1; i < readers.size(); i++) {
+                if (hasProx != reader->getFieldInfos()->hasProx()) {
+                    _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs hasProx inconformity");
+                }
+            }
+        }
+    }
+    // std::cout << "hasProx: " << hasProx << std::endl;
+
     numDestIndexes = dest_dirs.size();
 
     // print dest index files
@@ -1297,7 +1315,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     std::vector<lucene::index::IndexWriter *> destIndexWriterList;
     try {
         /// merge fields
-        mergeFields();
+        mergeFields(hasProx);
 
         /// write fields and create files writers
         for (int j = 0; j < numDestIndexes; j++) {
@@ -1321,11 +1339,13 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
             /// create file writers
             // Open an IndexOutput to the new Frequency File
             IndexOutput *freqOut = dest_dir->createOutput((Misc::segmentname(segment.c_str(), ".frq").c_str()));
+            freqPointers.push_back(0);
             freqOutputList.push_back(freqOut);
             // Open an IndexOutput to the new Prox File
             IndexOutput *proxOut = nullptr;
-            if (0) {
+            if (hasProx) {
                 proxOut = dest_dir->createOutput(Misc::segmentname(segment.c_str(), ".prx").c_str());
+                proxPointers.push_back(0);
             }
             proxOutputList.push_back(proxOut);
             // Instantiate a new termInfosWriter which will write in directory
@@ -1339,7 +1359,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         }
 
         /// merge terms
-        mergeTerms();
+        mergeTerms(hasProx);
     } catch (CLuceneError &e) {
         throw e;
     }
@@ -1515,7 +1535,7 @@ void IndexWriter::addIndexesSegments(std::vector<lucene::store::Directory *> &di
     }
 }
 
-void IndexWriter::mergeFields() {
+void IndexWriter::mergeFields(bool hasProx) {
     //Create a new FieldInfos
     fieldInfos = _CLNEW FieldInfos();
     //Condition check to see if fieldInfos points to a valid instance
@@ -1532,7 +1552,7 @@ void IndexWriter::mergeFields() {
             FieldInfo *fi = segmentReader->getFieldInfos()->fieldInfo(j);
             fieldInfos->add(fi->name, fi->isIndexed, fi->storeTermVector,
                             fi->storePositionWithTermVector, fi->storeOffsetWithTermVector,
-                            !reader->hasNorms(fi->name), fi->storePayloads);
+                            !reader->hasNorms(fi->name), hasProx, fi->storePayloads);
         }
     }
 }
@@ -1546,6 +1566,8 @@ struct DestDoc {
     uint32_t srcIdx{};
     uint32_t destIdx{};
     uint32_t destDocId{};
+    uint32_t destFreq{};
+    std::vector<uint32_t> destPositions{};
 
     DestDoc() = default;;
     DestDoc(uint32_t srcIdx, uint32_t destIdx, uint32_t destDocId) : srcIdx(srcIdx), destIdx(destIdx), destDocId(destDocId) {}
@@ -1575,7 +1597,7 @@ protected:
 
 };
 
-void IndexWriter::mergeTerms() {
+void IndexWriter::mergeTerms(bool hasProx) {
     auto queue = _CLNEW SegmentMergeQueue(readers.size());
     auto numSrcIndexes = readers.size();
     //std::vector<TermPositions *> postingsList(numSrcIndexes);
@@ -1606,6 +1628,9 @@ void IndexWriter::mergeTerms() {
 
         match[matchSize++] = queue->pop();
         Term *smallestTerm = match[0]->term;
+        // std::wstring ws = smallestTerm->text();
+        // std::string name = std::string(ws.begin(), ws.end());
+        // std::cout << name << std::endl;
 
         SegmentMergeInfo *top = queue->top();
         while (top != nullptr && smallestTerm->equals(top->term)) {
@@ -1614,6 +1639,7 @@ void IndexWriter::mergeTerms() {
         }
 
         std::vector<std::vector<uint32_t>> docDeltaBuffers(numDestIndexes);
+        std::vector<std::vector<uint32_t>> freqBuffers(numDestIndexes);
         auto destPostingQueues = _CLNEW postingQueue(matchSize);
         std::vector<DestDoc> destDocs(matchSize);
         for (int i = 0; i < matchSize; ++i) {
@@ -1630,24 +1656,97 @@ void IndexWriter::mergeTerms() {
                 destDocs[i].srcIdx = i;
                 destDocs[i].destIdx = destIdx;
                 destDocs[i].destDocId = destDocId;
+
+                if (hasProx) {
+                    int32_t freq = postings->freq();
+                    destDocs[i].destFreq = freq;
+                    destDocs[i].destPositions.resize(freq);
+
+                    for (int32_t j = 0; j < freq; j++) {
+                        int32_t position = postings->nextPosition();
+                        destDocs[i].destPositions[j] = position;
+                    }
+                }
+
                 destPostingQueues->put(&destDocs[i]);
             }
         }
+
+        auto encode = [](IndexOutput* out, std::vector<uint32_t>& buffer, bool isDoc) {
+            std::vector<uint8_t> compress(4 * buffer.size() + PFOR_BLOCK_SIZE);
+            size_t size = 0;
+            if (isDoc) {
+                size = P4ENC(buffer.data(), buffer.size(), compress.data());
+            } else {
+                size = P4NZENC(buffer.data(), buffer.size(), compress.data());
+            }
+            out->writeVInt(size);
+            out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
+            buffer.resize(0);
+        };
+
+        std::vector<int32_t> dfs(numDestIndexes, 0);
+        std::vector<int32_t> lastDocs(numDestIndexes, 0);
         while (destPostingQueues->size()) {
             if (destPostingQueues->top() != nullptr) {
                 auto destDoc = destPostingQueues->pop();
                 auto destIdx = destDoc->destIdx;
                 auto destDocId = destDoc->destDocId;
+                auto destFreq = destDoc->destFreq;
+                auto& descPositions = destDoc->destPositions;
 
-                docDeltaBuffers[destIdx].push_back(destDocId);
-                if (docDeltaBuffers[destIdx].size() == PFOR_BLOCK_SIZE) {
-                    std::vector<uint8_t> compresseddata(4 * docDeltaBuffers[destIdx].size() + PFOR_BLOCK_SIZE);
-                    auto size = P4ENC(docDeltaBuffers[destIdx].data(), docDeltaBuffers[destIdx].size(), compresseddata.data());
-                    freqOutputList[destIdx]->writeVInt(docDeltaBuffers[destIdx].size());
-                    freqOutputList[destIdx]->writeVInt(size);
-                    freqOutputList[destIdx]->writeBytes(reinterpret_cast<const uint8_t *>(compresseddata.data()), size);
-                    docDeltaBuffers[destIdx].resize(0);
+                auto freqOut = freqOutputList[destIdx];         
+                auto proxOut = proxOutputList[destIdx];
+                auto& docDeltaBuffer = docDeltaBuffers[destIdx];
+                auto& freqBuffer = freqBuffers[destIdx];
+                auto skipWriter = skipListWriterList[destIdx];
+                auto& df = dfs[destIdx];
+                auto& lastDoc = lastDocs[destIdx];
+
+                if (df == 0) {
+                    freqPointers[destIdx] = freqOut->getFilePointer();
+                    if (hasProx) {
+                        proxPointers[destIdx] = proxOut->getFilePointer();
+                    }
+                    skipWriter->resetSkip();
                 }
+
+                if ((++df % skipInterval) == 0) {
+                    if (hasProx) {
+                        freqOut->writeByte((char)CodeMode::kPfor);
+                        freqOut->writeVInt(docDeltaBuffer.size());
+                        // doc
+                        encode(freqOut, docDeltaBuffer, true);
+                        // freq
+                        encode(freqOut, freqBuffer, false);
+                    }
+                    skipWriter->setSkipData(lastDoc, false, -1);
+                    skipWriter->bufferSkip(df);
+                }
+
+                assert(destDocId > lastDoc || df == 1);
+                lastDoc = destDocId;
+
+                if (hasProx) {
+                    // position
+                    int32_t lastPosition = 0;
+                    for (int32_t i = 0; i < descPositions.size(); i++) {
+                        int32_t position = descPositions[i];
+                        int32_t delta = position - lastPosition;
+                        proxOut->writeVInt(delta);
+                        lastPosition = position;
+                    }
+
+                    docDeltaBuffer.push_back(destDocId);
+                    freqBuffer.push_back(destFreq);
+                } else {
+                    docDeltaBuffer.push_back(destDocId);
+                    if (docDeltaBuffer.size() == PFOR_BLOCK_SIZE) {
+                        freqOut->writeVInt(docDeltaBuffer.size());
+                        encode(freqOut, docDeltaBuffer, true);
+                    }
+                }
+
                 smi = match[destDoc->srcIdx];
                 TermPositions *postings = smi->getPositions();
                 if (postings->next()) {
@@ -1655,6 +1754,18 @@ void IndexWriter::mergeTerms() {
                     std::pair<int32_t, uint32_t> p = _trans_vec[smi->readerIndex][srcDoc];
                     destDoc->destIdx = p.first;
                     destDoc->destDocId = p.second;
+
+                    if (hasProx) {
+                        int32_t freq = postings->freq();
+                        destDoc->destFreq = freq;
+                        destDoc->destPositions.resize(freq);
+
+                        for (int32_t j = 0; j < freq; j++) {
+                            int32_t position = postings->nextPosition();
+                            destDoc->destPositions[j] = position;
+                        }
+                    }
+
                     destPostingQueues->put(destDoc);
                 }
             }
@@ -1668,33 +1779,47 @@ void IndexWriter::mergeTerms() {
             CL_NS(store)::IndexOutput *freqOutput = freqOutputList[i];
             CL_NS(store)::IndexOutput *proxOutput = proxOutputList[i];
             TermInfosWriter *termInfosWriter = termInfosWriterList[i];
-
-            int32_t docNums = docDeltaBuffers[i].size();
-            if (docNums <= 0) {
-                continue;
-            }
-
-            // Get the file pointer of the IndexOutput to the Frequency File
-            int64_t freqPointer = freqOutput->getFilePointer();
-            // Get the file pointer of the IndexOutput to the Prox File
+            int64_t freqPointer = freqPointers[i];
             int64_t proxPointer = 0;
-            if (proxOutput != nullptr) {
-                proxPointer = proxOutput->getFilePointer();
+            if (hasProx) {
+                proxPointer = proxPointers[i];
             }
 
-            freqOutput->writeVInt(docDeltaBuffers[i].size());
+            if (hasProx) {
+                auto& docDeltaBuffer = docDeltaBuffers[i];
+                auto& freqBuffer = freqBuffers[i];
 
-            uint32_t lDoc = 0;
-            for (auto &docDelta: docDeltaBuffers[i]) {
-                freqOutput->writeVInt(docDelta - lDoc);
-                lDoc = docDelta;
+                freqOutput->writeByte((char)CodeMode::kDefault);
+                freqOutput->writeVInt(docDeltaBuffer.size());
+                uint32_t lastDoc = 0;
+                for (int32_t i = 0; i < docDeltaBuffer.size(); i++) {
+                    uint32_t newDocCode = (docDeltaBuffer[i] - lastDoc) << 1;
+                    lastDoc = docDeltaBuffer[i];
+                    uint32_t freq = freqBuffer[i];
+                    if (1 == freq) {
+                        freqOutput->writeVInt(newDocCode | 1);
+                    } else {
+                        freqOutput->writeVInt(newDocCode);
+                        freqOutput->writeVInt(freq);
+                    }
+                }
+                docDeltaBuffer.resize(0);
+                freqBuffer.resize(0);
+            } else {
+                freqOutput->writeVInt(docDeltaBuffers[i].size());
+                uint32_t lDoc = 0;
+                for (auto &docDelta: docDeltaBuffers[i]) {
+                    freqOutput->writeVInt(docDelta - lDoc);
+                    lDoc = docDelta;
+                }
+                docDeltaBuffers[i].resize(0);
             }
-            docDeltaBuffers[i].resize(0);
+            
             int64_t skipPointer = skipListWriter->writeSkip(freqOutput);
 
             // write terms
             TermInfo termInfo;
-            termInfo.set(docNums, freqPointer, proxPointer, (int32_t) (skipPointer - freqPointer));
+            termInfo.set(dfs[i], freqPointer, proxPointer, (int32_t) (skipPointer - freqPointer));
             // Write a new TermInfo
             termInfosWriter->add(smallestTerm, &termInfo);
         }
