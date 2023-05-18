@@ -237,6 +237,7 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
                     <CUSTOM_OPENSSL_PREFIX>${openssl.prefix}</CUSTOM_OPENSSL_PREFIX>
                     <CUSTOM_OPENSSL_LIB>${openssl.lib}</CUSTOM_OPENSSL_LIB>
                     <CUSTOM_OPENSSL_INCLUDE>${openssl.include}</CUSTOM_OPENSSL_INCLUDE>
+                    <CUSTOM_THIRDPARTY_INSTALLED>${thirdparty.installed}</CUSTOM_THIRDPARTY_INSTALLED>
                   </vars>
                   <output>${project.build.directory}</output>
                 </configuration>
@@ -306,6 +307,7 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
                     <CUSTOM_OPENSSL_PREFIX>${openssl.prefix}</CUSTOM_OPENSSL_PREFIX>
                     <CUSTOM_OPENSSL_LIB>${openssl.lib}</CUSTOM_OPENSSL_LIB>
                     <CUSTOM_OPENSSL_INCLUDE>${openssl.include}</CUSTOM_OPENSSL_INCLUDE>
+                    <CUSTOM_THIRDPARTY_INSTALLED>${thirdparty.installed}</CUSTOM_THIRDPARTY_INSTALLED>
                   </vars>
                   <output>${project.build.directory}/clang</output>
                 </configuration>
