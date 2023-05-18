@@ -61,6 +61,8 @@ typedef enum {
     JC_ENUM_SET,
     JC_EXCEPTION_UTILS,
     JC_CFUTURE,
+    JC_SYSTEM,
+    JC_SECURITY_CONFIGURATION,
     // A special marker enum that counts the number of cached jclasses
     NUM_CACHED_CLASSES
 } CachedJavaClass;
@@ -101,6 +103,7 @@ const char *getClassName(CachedJavaClass cachedJavaClass);
 #define HADOOP_FS_BLDR  "org/apache/hadoop/fs/FSBuilder"
 #define HADOOP_RO       "org/apache/hadoop/fs/ReadOption"
 #define HADOOP_DS       "org/apache/hadoop/net/unix/DomainSocket"
+#define HADOOP_USER_INFORMATION "org/apache/hadoop/security/UserGroupInformation"
 
 /* Some frequently used Java class names */
 #define JAVA_NET_ISA    "java/net/InetSocketAddress"
@@ -111,6 +114,7 @@ const char *getClassName(CachedJavaClass cachedJavaClass);
 #define JAVA_CFUTURE    "java/util/concurrent/CompletableFuture"
 #define JAVA_TIMEUNIT   "java/util/concurrent/TimeUnit"
 #define JAVA_OBJECT     "java/lang/Object"
+#define JAVA_SYSTEM     "java/lang/System"
 
 /* Some frequently used third-party class names */
 
