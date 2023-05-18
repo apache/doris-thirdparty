@@ -238,7 +238,7 @@ jthrowable invokeMethod(JNIEnv *env, jvalue *retval, MethType methType,
 static jthrowable constructNewObjectOfJclass(JNIEnv *env,
         jobject *out, jclass cls, const char *className,
                 const char *ctorSignature, va_list args) {
-    jmethodID mid;
+    jmethodID mid = 0;
     jobject jobj;
     jthrowable jthr;
 
