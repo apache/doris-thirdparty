@@ -17,15 +17,24 @@ void ChineseTokenizer::init(const std::string &dictPath) {
 
 CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
     // try to read all words
+    const TCHAR *initBuffer;
     if (dataLen == 0 || bufferIndex >= dataLen) {
-        auto bufferLen = input->read((const void **) &ioBuffer, 1, 0);
-        if (bufferLen == -1) {
-            dataLen = 0;
-            bufferIndex = 0;
-            return NULL;
-        }
-        char tmp_buffer[4 * bufferLen];
-        lucene_wcsntoutf8(tmp_buffer, ioBuffer, bufferLen, 4 * bufferLen);
+        int totalLen = 0;
+        do {
+            auto bufferLen = input->read((const void**)&ioBuffer, 1, LUCENE_IO_BUFFER_SIZE);
+            if (bufferLen == -1) {
+                dataLen = 0;
+                bufferIndex = 0;
+                break;
+            }
+            if (totalLen < LUCENE_IO_BUFFER_SIZE) {
+                initBuffer = ioBuffer;
+            }
+            totalLen+=bufferLen;
+        } while (true);
+
+        char tmp_buffer[4 * totalLen];
+        lucene_wcsntoutf8(tmp_buffer, initBuffer, totalLen, 4 * totalLen);
         JiebaSingleton::getInstance().Cut(tmp_buffer, tokens_text, true);
         dataLen = tokens_text.size();
     }
