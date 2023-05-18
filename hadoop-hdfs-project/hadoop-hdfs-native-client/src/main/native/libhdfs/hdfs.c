@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define JAVA_VOID       "V"
@@ -495,6 +496,11 @@ done:
     return ret;
 }
 
+struct hdfsBuilderConfFileOpt {
+    struct hdfsBuilderConfFileOpt *next;
+    const char *currentPath;
+};
+
 struct hdfsBuilderConfOpt {
     struct hdfsBuilderConfOpt *next;
     const char *key;
@@ -506,9 +512,25 @@ struct hdfsBuilder {
     const char *nn;
     tPort port;
     const char *kerbTicketCachePath;
+    const char *kerb5ConfPath;
+    const char *keyTabFile;
     const char *userName;
     struct hdfsBuilderConfOpt *opts;
+    struct hdfsBuilderConfFileOpt *fileOpts;
 };
+
+void hdfsBuilderSetKerb5Conf(struct hdfsBuilder *bld, const char *kerb5ConfPath) {
+    bld->kerb5ConfPath = kerb5ConfPath;
+    if (bld->kerb5ConfPath) {
+        systemPropertySetStr("java.security.krb5.conf", bld->kerb5ConfPath);
+        hdfsBuilderConfSetStr(bld, "hadoop.security.authorization", "true");
+        hdfsBuilderConfSetStr(bld, "hadoop.security.authentication", "kerberos");
+    }
+}
+
+void hdfsBuilderSetKeyTabFile(struct hdfsBuilder *bld, const char *keyTabFile) {
+    bld->keyTabFile = keyTabFile;
+}
 
 struct hdfsBuilder *hdfsNewBuilder(void)
 {
@@ -518,6 +540,42 @@ struct hdfsBuilder *hdfsNewBuilder(void)
         return NULL;
     }
     return bld;
+}
+
+int systemPropertySetStr(const char *key, const char *val) {
+    JNIEnv *env = 0;
+    jobject jRet = NULL;
+    jvalue  jVal;
+    jthrowable jthr;
+    int ret = EINTERNAL;
+    jstring jkey = NULL, jvalue0 = NULL;
+    env = getJNIEnv();
+    if (env == NULL) {
+        ret = EINTERNAL;
+        return ret;
+    }
+    jthr = newJavaStr(env, key, &jkey);
+    if (jthr) {
+        ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,"System::setProperty::new String");
+        goto done;
+    }
+    jthr = newJavaStr(env, val, &jvalue0);
+    if (jthr) {
+        ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,"System::setProperty::new String");
+        goto done;
+    }
+    jthr = invokeMethod(env, &jVal, STATIC, NULL, JC_SYSTEM, "setProperty", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;", jkey, jvalue0);
+    jRet = jVal.l;
+    ret = 0;
+    if (jthr) {
+        ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,"System::setProperty");
+        goto done;
+    }
+    done:
+        destroyLocalReference(env, jRet);
+        destroyLocalReference(env, jkey);
+        destroyLocalReference(env, jvalue0);
+        return ret;
 }
 
 int hdfsBuilderConfSetStr(struct hdfsBuilder *bld, const char *key,
@@ -545,6 +603,13 @@ void hdfsFreeBuilder(struct hdfsBuilder *bld)
         next = cur->next;
         free(cur);
         cur = next;
+    }
+    struct hdfsBuilderConfFileOpt *cur0, *next0;
+    cur0 = bld->fileOpts;
+    for (cur0 = bld->fileOpts; cur0;) {
+        next0 = cur0->next;
+        free(cur0);
+        cur0 = next0;
     }
     free(bld);
 }
@@ -688,17 +753,32 @@ static const char *hdfsBuilderToStr(const struct hdfsBuilder *bld,
     return buf;
 }
 
+jthrowable hadoopConfFileAdd(JNIEnv *env, jobject jConfiguration, const char *path) {
+    /* Create an object of org.apache.hadoop.fs.Path */
+    jobject jPath = NULL;
+    jthrowable jthr;
+    jthr = constructNewObjectOfPath(env, path, &jPath);
+    if (jthr) {
+        goto done;
+    }
+    jthr = invokeMethod(env, NULL, INSTANCE, jConfiguration, JC_CONFIGURATION, "addResource", JMETHOD1(JPARAM(HADOOP_PATH), JAVA_VOID), jPath);
+    done:
+    destroyLocalReference(env, jPath);
+    return jthr;
+}
+
 hdfsFS hdfsBuilderConnect(struct hdfsBuilder *bld)
 {
     JNIEnv *env = 0;
     jobject jConfiguration = NULL, jFS = NULL, jURI = NULL, jCachePath = NULL;
-    jstring jURIString = NULL, jUserString = NULL;
+    jstring jURIString = NULL, jUserString = NULL, jKeyTabString = NULL;
     jvalue  jVal;
     jthrowable jthr = NULL;
     char *cURI = 0, buf[512];
     int ret;
     jobject jRet = NULL;
     struct hdfsBuilderConfOpt *opt;
+    struct hdfsBuilderConfFileOpt *fileOpt;
 
     //Get the JNIEnv* corresponding to current thread
     env = getJNIEnv();
@@ -715,6 +795,18 @@ hdfsFS hdfsBuilderConnect(struct hdfsBuilder *bld)
             "hdfsBuilderConnect(%s)", hdfsBuilderToStr(bld, buf, sizeof(buf)));
         goto done;
     }
+
+    for (fileOpt = bld->fileOpts; fileOpt; fileOpt = fileOpt->next) {
+        // conf.addResource(new Path(fileOpt->path))
+        jthr = hadoopConfFileAdd(env, jConfiguration, fileOpt->currentPath);
+        if (jthr) {
+            ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,
+                                        "hdfsBuilderConnect(%s): error adding conffile '%s'",
+                                        hdfsBuilderToStr(bld, buf, sizeof(buf)), fileOpt->currentPath);
+            goto done;
+        }
+    }
+
     // set configuration values
     for (opt = bld->opts; opt; opt = opt->next) {
         jthr = hadoopConfSetStr(env, jConfiguration, opt->key, opt->val);
@@ -794,7 +886,30 @@ hdfsFS hdfsBuilderConnect(struct hdfsBuilder *bld)
             jURI = jVal.l;
         }
 
-        if (bld->kerbTicketCachePath) {
+        jthr = newJavaStr(env, bld->userName, &jUserString);
+        if (jthr) {
+            ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,
+                                        "hdfsBuilderConnect(%s)",
+                                        hdfsBuilderToStr(bld, buf, sizeof(buf)));
+            goto done;
+        }
+        if (bld->kerb5ConfPath && bld->keyTabFile) {
+            jthr = invokeMethod(env, NULL, STATIC, NULL, JC_SECURITY_CONFIGURATION, "setConfiguration", JMETHOD1(JPARAM(HADOOP_CONF),JAVA_VOID), jConfiguration);
+            if (jthr) {
+                ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,"hdfsBuilderConnect(%s)", hdfsBuilderToStr(bld, buf, sizeof(buf)));
+                goto done;
+            }
+            jthr = newJavaStr(env, bld->keyTabFile, &jKeyTabString);
+            if (jthr) {
+                ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,"hdfsBuilderConnect(%s)", hdfsBuilderToStr(bld, buf, sizeof(buf)));
+                goto done;
+            }
+            jthr = invokeMethod(env, NULL, STATIC, NULL, JC_SECURITY_CONFIGURATION, "loginUserFromKeytab", JMETHOD2(JPARAM(JAVA_STRING), JPARAM(JAVA_STRING), JAVA_VOID), jUserString, jKeyTabString);
+            if (jthr) {
+                ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,"hdfsBuilderConnect(%s)", hdfsBuilderToStr(bld, buf, sizeof(buf)));
+                goto done;
+            }
+        } else if (bld->kerbTicketCachePath) {
             jthr = hadoopConfSetStr(env, jConfiguration,
                 KERBEROS_TICKET_CACHE_PATH, bld->kerbTicketCachePath);
             if (jthr) {
@@ -803,13 +918,8 @@ hdfsFS hdfsBuilderConnect(struct hdfsBuilder *bld)
                     hdfsBuilderToStr(bld, buf, sizeof(buf)));
                 goto done;
             }
-        }
-        jthr = newJavaStr(env, bld->userName, &jUserString);
-        if (jthr) {
-            ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,
-                "hdfsBuilderConnect(%s)",
-                hdfsBuilderToStr(bld, buf, sizeof(buf)));
-            goto done;
+            invokeMethod(env, &jVal, STATIC, NULL, JC_SECURITY_CONFIGURATION, "setConfiguration",
+            JMETHOD1(JPARAM(HADOOP_CONF),JAVA_VOID), jConfiguration);
         }
         if (bld->forceNewInstance) {
             jthr = invokeMethod(env, &jVal, STATIC, NULL,
@@ -825,11 +935,15 @@ hdfsFS hdfsBuilderConnect(struct hdfsBuilder *bld)
             }
             jFS = jVal.l;
         } else {
-            jthr = invokeMethod(env, &jVal, STATIC, NULL,
-                    JC_FILE_SYSTEM, "get",
-                    JMETHOD3(JPARAM(JAVA_NET_URI), JPARAM(HADOOP_CONF),
-                            JPARAM(JAVA_STRING), JPARAM(HADOOP_FS)), jURI,
-                            jConfiguration, jUserString);
+            if (bld->keyTabFile && bld->kerb5ConfPath) {
+                jthr = invokeMethod(env, &jVal, STATIC, NULL, JC_FILE_SYSTEM, "get", JMETHOD1(JPARAM(HADOOP_CONF),
+                JPARAM(HADOOP_FS)), jConfiguration);
+            } else {
+                jthr = invokeMethod(env, &jVal, STATIC, NULL, JC_FILE_SYSTEM, "get",
+                                    JMETHOD3(JPARAM(JAVA_NET_URI), JPARAM(HADOOP_CONF),
+                                             JPARAM(JAVA_STRING), JPARAM(HADOOP_FS)),
+                                    jURI, jConfiguration, jUserString);
+            }
             if (jthr) {
                 ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,
                     "hdfsBuilderConnect(%s)",
@@ -856,6 +970,7 @@ done:
     destroyLocalReference(env, jCachePath);
     destroyLocalReference(env, jURIString);
     destroyLocalReference(env, jUserString);
+    destroyLocalReference(env, jKeyTabString);
     free(cURI);
     hdfsFreeBuilder(bld);
 

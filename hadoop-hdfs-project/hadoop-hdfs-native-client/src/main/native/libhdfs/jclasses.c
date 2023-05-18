@@ -112,6 +112,10 @@ jthrowable initCachedClasses(JNIEnv* env) {
                 "org/apache/commons/lang3/exception/ExceptionUtils";
         cachedJavaClasses[JC_CFUTURE].className =
                 "java/util/concurrent/CompletableFuture";
+        cachedJavaClasses[JC_SYSTEM].className =
+                "java/lang/System";
+        cachedJavaClasses[JC_SECURITY_CONFIGURATION].className =
+                "org/apache/hadoop/security/UserGroupInformation";
 
         // Create and set the jclass objects based on the class names set above
         jthrowable jthr;
