@@ -80,7 +80,7 @@ class CLuceneThreadIdCompare;
 					};
 
           #ifdef _CL_HAVE_GCC_ATOMIC_FUNCTIONS
-            #define _LUCENE_ATOMIC_INT uint32_t
+            #define _LUCENE_ATOMIC_INT int32_t
             #define _LUCENE_ATOMIC_INT_SET(x,v) x=v
             #define _LUCENE_ATOMIC_INT_GET(x) x
           #else
