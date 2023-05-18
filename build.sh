@@ -50,9 +50,11 @@ echo "Finished. Begin to pacakge for libhdfs..."
 mkdir -p ${LIBHDFS_DIST_DIR}/common
 mkdir -p ${LIBHDFS_DIST_DIR}/hdfs
 mkdir -p ${LIBHDFS_DIST_DIR}/include
+mkdir -p ${LIBHDFS_DIST_DIR}/native
 cp -r ${DIST_DIR}/share/hadoop/common/* ${LIBHDFS_DIST_DIR}/common/
 cp -r ${DIST_DIR}/share/hadoop/hdfs/* ${LIBHDFS_DIST_DIR}/hdfs/
 cp -r ${DIST_DIR}/include/hdfs.h ${LIBHDFS_DIST_DIR}/include/
+cp -r ${DIST_DIR}/lib/native/libhdfs.a ${LIBHDFS_DIST_DIR}/native/
 
 echo "Done!"
 echo "The full dist package is under: ${DIST_DIR}"
