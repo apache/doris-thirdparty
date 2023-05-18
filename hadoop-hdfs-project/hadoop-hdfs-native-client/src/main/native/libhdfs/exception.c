@@ -90,6 +90,16 @@ static const struct ExceptionInfo gExceptionInfo[] = {
         0,
         ESTALE,
     },
+    {
+        "org.apache.hadoop.security.KerberosAuthException",
+        NOPRINT_EXC_ACCESS_CONTROL,
+        ETIME
+    },
+    {
+        "java.net.ConnectException",
+        0,
+        EFAULT
+    },
 };
 
 void getExceptionInfo(const char *excName, int noPrintFlags,

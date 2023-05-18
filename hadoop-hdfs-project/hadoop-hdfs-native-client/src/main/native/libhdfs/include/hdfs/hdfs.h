@@ -294,6 +294,9 @@ extern  "C" {
     LIBHDFS_EXTERNAL
     struct hdfsBuilder *hdfsNewBuilder(void);
 
+    LIBHDFS_EXTERNAL
+    int systemPropertySetStr(const char *key, const char *val);
+
     /**
      * Force the builder to always create a new instance of the FileSystem,
      * rather than possibly finding one in the cache.
@@ -356,6 +359,12 @@ extern  "C" {
     LIBHDFS_EXTERNAL
     void hdfsBuilderSetKerbTicketCachePath(struct hdfsBuilder *bld,
                                    const char *kerbTicketCachePath);
+
+    LIBHDFS_EXTERNAL
+    void hdfsBuilderSetKerb5Conf(struct hdfsBuilder *bld, const char *kerb5ConfPath);
+
+    LIBHDFS_EXTERNAL
+    void hdfsBuilderSetKeyTabFile(struct hdfsBuilder *bld, const char *keyTabFile);
 
     /**
      * Free an HDFS builder.
