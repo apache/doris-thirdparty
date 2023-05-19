@@ -39,7 +39,7 @@
 #include <assert.h>
 #include <iostream>
 
-#if defined(USE_AVX2)
+#if defined(USE_AVX2) && defined(__x86_64__)
 #define P4ENC p4nd1enc256v32
 #else
 #define P4ENC p4nd1enc128v32
