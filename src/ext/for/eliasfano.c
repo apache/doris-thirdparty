@@ -24,6 +24,7 @@
 
 //   eliasfano.c - "Integer Compression" Elias Fano
 #ifndef USIZE
+#include <stdlib.h>
 #include <string.h>
 #include "include_/conf.h"
 #include "include_/bitpack.h"

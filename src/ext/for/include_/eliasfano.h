@@ -1,5 +1,7 @@
 //--  eliasfano.h - "Integer Compression" Elias Fano c/c++ header ---------------------------------------------------------
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
