@@ -1120,6 +1120,13 @@ namespace orc {
       rowsInCurrentStripe = currentStripeInfo.numberofrows();
       processingStripe = currentStripe;
 
+      std::unique_ptr<StripeInformation> currentStripeInformation(new StripeInformationImpl(
+          currentStripeInfo.offset(), currentStripeInfo.indexlength(),
+          currentStripeInfo.datalength(), currentStripeInfo.footerlength(),
+          currentStripeInfo.numberofrows(), contents->stream.get(), *contents->pool,
+          contents->compression, contents->blockSize, contents->readerMetrics));
+      contents->stream->beforeReadStripe(std::move(currentStripeInformation), selectedColumns);
+
       if (sargsApplier) {
         bool isStripeNeeded = true;
         if (contents->metadata) {
@@ -1648,5 +1655,8 @@ namespace orc {
   InputStream::~InputStream(){
       // PASS
   };
+
+  void InputStream::beforeReadStripe(std::unique_ptr<StripeInformation> currentStripeInformation,
+                                     std::vector<bool> selectedColumns) {}
 
 }  // namespace orc
