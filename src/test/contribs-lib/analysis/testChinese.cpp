@@ -149,6 +149,142 @@ std::string get_dict_path() {
     return "";
 }
 
+void testSimpleJiebaSearchModeTokenizer2(CuTest* tc) {
+    LanguageBasedAnalyzer a;
+    CL_NS(util)::StringReader reader(_T("冰咒龙"));
+    reader.mark(50);
+    TokenStream* ts;
+    Token t;
+
+    //test with chinese
+    a.setLanguage(_T("chinese"));
+    a.setStem(false);
+    a.setMode(lucene::analysis::AnalyzerMode::Search);
+    a.initDict(get_dict_path());
+    ts = a.tokenStream(_T("contents"), &reader);
+
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("冰咒")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("龙")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) == NULL);
+    _CLDELETE(ts);
+}
+
+void testSimpleJiebaAllModeTokenizer2(CuTest* tc) {
+    LanguageBasedAnalyzer a;
+    CL_NS(util)::StringReader reader(_T("冰咒龙"));
+    reader.mark(50);
+    TokenStream* ts;
+    Token t;
+
+    //test with chinese
+    a.setLanguage(_T("chinese"));
+    a.setStem(false);
+    a.setMode(lucene::analysis::AnalyzerMode::All);
+    a.initDict(get_dict_path());
+    ts = a.tokenStream(_T("contents"), &reader);
+
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("冰")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("咒")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("龙")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) == NULL);
+    _CLDELETE(ts);
+}
+
+void testSimpleJiebaAllModeTokenizer(CuTest* tc) {
+    LanguageBasedAnalyzer a;
+    CL_NS(util)::StringReader reader(_T("我来到北京清华大学"));
+    reader.mark(50);
+    TokenStream* ts;
+    Token t;
+
+    //test with chinese
+    a.setLanguage(_T("chinese"));
+    a.setStem(false);
+    a.setMode(lucene::analysis::AnalyzerMode::All);
+    a.initDict(get_dict_path());
+    ts = a.tokenStream(_T("contents"), &reader);
+
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("我")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("来到")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("北京")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("清华")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("清华大学")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("华大")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("大学")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) == NULL);
+    _CLDELETE(ts);
+}
+
+void testSimpleJiebaDefaultModeTokenizer(CuTest* tc) {
+    LanguageBasedAnalyzer a;
+    CL_NS(util)::StringReader reader(_T("我来到北京清华大学"));
+    reader.mark(50);
+    TokenStream* ts;
+    Token t;
+
+    //test with chinese
+    a.setLanguage(_T("chinese"));
+    a.setStem(false);
+    a.setMode(lucene::analysis::AnalyzerMode::Default);
+    a.initDict(get_dict_path());
+    ts = a.tokenStream(_T("contents"), &reader);
+
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("我")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("来到")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("北京")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("清华大学")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) == NULL);
+    _CLDELETE(ts);
+}
+
+void testSimpleJiebaSearchModeTokenizer(CuTest* tc) {
+    LanguageBasedAnalyzer a;
+    CL_NS(util)::StringReader reader(_T("我来到北京清华大学"));
+    reader.mark(50);
+    TokenStream* ts;
+    Token t;
+
+    //test with chinese
+    a.setLanguage(_T("chinese"));
+    a.setStem(false);
+    a.setMode(lucene::analysis::AnalyzerMode::Search);
+    a.initDict(get_dict_path());
+    ts = a.tokenStream(_T("contents"), &reader);
+
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("我")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("来到")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("北京")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("清华")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("华大")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("大学")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("清华大学")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) == NULL);
+    _CLDELETE(ts);
+}
+
 void testSimpleJiebaTokenizer(CuTest* tc) {
     LanguageBasedAnalyzer a;
     CL_NS(util)::StringReader reader(_T("我爱你中国"));
@@ -159,6 +295,7 @@ void testSimpleJiebaTokenizer(CuTest* tc) {
     //test with chinese
     a.setLanguage(_T("chinese"));
     a.setStem(false);
+    a.setMode(lucene::analysis::AnalyzerMode::Default);
     a.initDict(get_dict_path());
     ts = a.tokenStream(_T("contents"), &reader);
 
@@ -180,6 +317,7 @@ void testSimpleJiebaTokenizer2(CuTest* tc) {
     //test with chinese
     a.setLanguage(_T("chinese"));
     a.setStem(false);
+    a.setMode(lucene::analysis::AnalyzerMode::Default);
     ts = a.tokenStream(_T("contents"), &reader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -208,6 +346,7 @@ void testSimpleJiebaTokenizer3(CuTest* tc) {
     //test with chinese
     a.setLanguage(_T("chinese"));
     a.setStem(false);
+    a.setMode(lucene::analysis::AnalyzerMode::Default);
     ts = a.tokenStream(_T("contents"), &reader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -316,7 +455,7 @@ void testJiebaMatch(CuTest* tc) {
 
     auto analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
     analyzer->setLanguage(L"chinese");
-
+    analyzer->setMode(lucene::analysis::AnalyzerMode::Default);
     IndexWriter w(&dir, analyzer, true);
     auto field_name = lucene::util::Misc::_charToWide("chinese");
 
@@ -395,6 +534,7 @@ void testJiebaMatch2(CuTest* tc) {
 
     auto analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
     analyzer->setLanguage(L"chinese");
+    analyzer->setMode(lucene::analysis::AnalyzerMode::Default);
 
     IndexWriter w(&dir, analyzer, true);
     auto field_name = lucene::util::Misc::_charToWide("chinese");
@@ -474,6 +614,7 @@ void testJiebaMatchHuge(CuTest* tc) {
 
     auto analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
     analyzer->setLanguage(L"chinese");
+    analyzer->setMode(lucene::analysis::AnalyzerMode::Default);
     analyzer->initDict(get_dict_path());
 
     IndexWriter w(&dir, analyzer, true);
@@ -1127,6 +1268,11 @@ CuSuite *testchinese(void) {
     SUITE_ADD_TEST(suite, testJiebaMatch);
     SUITE_ADD_TEST(suite, testJiebaMatch2);
     SUITE_ADD_TEST(suite, testJiebaMatchHuge);
+    SUITE_ADD_TEST(suite, testSimpleJiebaAllModeTokenizer);
+    SUITE_ADD_TEST(suite, testSimpleJiebaDefaultModeTokenizer);
+    SUITE_ADD_TEST(suite, testSimpleJiebaSearchModeTokenizer);
+    SUITE_ADD_TEST(suite, testSimpleJiebaAllModeTokenizer2);
+    SUITE_ADD_TEST(suite, testSimpleJiebaSearchModeTokenizer2);
 
     return suite;
 }
