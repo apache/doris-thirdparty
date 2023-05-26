@@ -17,7 +17,7 @@ void ChineseTokenizer::init(const std::string &dictPath) {
 
 CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
     // try to read all words
-    const TCHAR *initBuffer;
+    const char *initBuffer;
     if (dataLen == 0 || bufferIndex >= dataLen) {
         int totalLen = 0;
         do {
@@ -33,17 +33,18 @@ CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
             totalLen+=bufferLen;
         } while (true);
 
-        char tmp_buffer[4 * totalLen];
-        lucene_wcsntoutf8(tmp_buffer, initBuffer, totalLen, 4 * totalLen);
+        //char tmp_buffer[4 * totalLen + 1];
+        //lucene_wcsntoutf8(tmp_buffer, initBuffer, totalLen, 4 * totalLen);
+	std::string s(initBuffer, totalLen);
         switch (mode) {
         case AnalyzerMode::Search:
-            JiebaSingleton::getInstance().CutForSearch(tmp_buffer, tokens_text, true);
+            JiebaSingleton::getInstance().CutForSearch(s, tokens_text, true);
             break;
         case AnalyzerMode::All:
-            JiebaSingleton::getInstance().CutAll(tmp_buffer, tokens_text);
+            JiebaSingleton::getInstance().CutAll(s, tokens_text);
             break;
         case AnalyzerMode::Default:
-            JiebaSingleton::getInstance().Cut(tmp_buffer, tokens_text, true);
+            JiebaSingleton::getInstance().Cut(s, tokens_text, true);
             break;
         }
         dataLen = tokens_text.size();

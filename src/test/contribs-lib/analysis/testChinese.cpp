@@ -151,8 +151,9 @@ std::string get_dict_path() {
 
 void testSimpleJiebaSearchModeTokenizer2(CuTest* tc) {
     LanguageBasedAnalyzer a;
-    CL_NS(util)::StringReader reader(_T("冰咒龙"));
-    reader.mark(50);
+    const char* field_value_data = "冰咒龙";
+    auto stringReader =
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     TokenStream* ts;
     Token t;
 
@@ -161,7 +162,7 @@ void testSimpleJiebaSearchModeTokenizer2(CuTest* tc) {
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Search);
     a.initDict(get_dict_path());
-    ts = a.tokenStream(_T("contents"), &reader);
+    ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("冰咒")) == 0);
@@ -173,8 +174,9 @@ void testSimpleJiebaSearchModeTokenizer2(CuTest* tc) {
 
 void testSimpleJiebaAllModeTokenizer2(CuTest* tc) {
     LanguageBasedAnalyzer a;
-    CL_NS(util)::StringReader reader(_T("冰咒龙"));
-    reader.mark(50);
+    const char* field_value_data = "冰咒龙";
+    auto stringReader =
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     TokenStream* ts;
     Token t;
 
@@ -183,7 +185,7 @@ void testSimpleJiebaAllModeTokenizer2(CuTest* tc) {
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::All);
     a.initDict(get_dict_path());
-    ts = a.tokenStream(_T("contents"), &reader);
+    ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("冰")) == 0);
@@ -197,8 +199,9 @@ void testSimpleJiebaAllModeTokenizer2(CuTest* tc) {
 
 void testSimpleJiebaAllModeTokenizer(CuTest* tc) {
     LanguageBasedAnalyzer a;
-    CL_NS(util)::StringReader reader(_T("我来到北京清华大学"));
-    reader.mark(50);
+    const char* field_value_data = "我来到北京清华大学";
+    auto stringReader =
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     TokenStream* ts;
     Token t;
 
@@ -207,7 +210,7 @@ void testSimpleJiebaAllModeTokenizer(CuTest* tc) {
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::All);
     a.initDict(get_dict_path());
-    ts = a.tokenStream(_T("contents"), &reader);
+    ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("我")) == 0);
@@ -229,8 +232,9 @@ void testSimpleJiebaAllModeTokenizer(CuTest* tc) {
 
 void testSimpleJiebaDefaultModeTokenizer(CuTest* tc) {
     LanguageBasedAnalyzer a;
-    CL_NS(util)::StringReader reader(_T("我来到北京清华大学"));
-    reader.mark(50);
+    const char* field_value_data = "我来到北京清华大学";
+    auto stringReader =
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     TokenStream* ts;
     Token t;
 
@@ -239,7 +243,7 @@ void testSimpleJiebaDefaultModeTokenizer(CuTest* tc) {
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Default);
     a.initDict(get_dict_path());
-    ts = a.tokenStream(_T("contents"), &reader);
+    ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("我")) == 0);
@@ -255,8 +259,9 @@ void testSimpleJiebaDefaultModeTokenizer(CuTest* tc) {
 
 void testSimpleJiebaSearchModeTokenizer(CuTest* tc) {
     LanguageBasedAnalyzer a;
-    CL_NS(util)::StringReader reader(_T("我来到北京清华大学"));
-    reader.mark(50);
+    const char* field_value_data = "我来到北京清华大学";
+    auto stringReader =
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     TokenStream* ts;
     Token t;
 
@@ -265,7 +270,7 @@ void testSimpleJiebaSearchModeTokenizer(CuTest* tc) {
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Search);
     a.initDict(get_dict_path());
-    ts = a.tokenStream(_T("contents"), &reader);
+    ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("我")) == 0);
@@ -287,8 +292,9 @@ void testSimpleJiebaSearchModeTokenizer(CuTest* tc) {
 
 void testSimpleJiebaTokenizer(CuTest* tc) {
     LanguageBasedAnalyzer a;
-    CL_NS(util)::StringReader reader(_T("我爱你中国"));
-    reader.mark(50);
+    const char* field_value_data = "我爱你中国";
+    auto stringReader =
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     TokenStream* ts;
     Token t;
 
@@ -297,7 +303,7 @@ void testSimpleJiebaTokenizer(CuTest* tc) {
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Default);
     a.initDict(get_dict_path());
-    ts = a.tokenStream(_T("contents"), &reader);
+    ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("我爱你")) == 0);
@@ -309,8 +315,9 @@ void testSimpleJiebaTokenizer(CuTest* tc) {
 
 void testSimpleJiebaTokenizer2(CuTest* tc) {
     LanguageBasedAnalyzer a;
-    CL_NS(util)::StringReader reader(_T("人民可以得到更多实惠"));
-    reader.mark(50);
+    const char* field_value_data = "人民可以得到更多实惠";
+    auto stringReader =
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     TokenStream* ts;
     Token t;
 
@@ -318,7 +325,7 @@ void testSimpleJiebaTokenizer2(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Default);
-    ts = a.tokenStream(_T("contents"), &reader);
+    ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("人民")) == 0);
@@ -338,8 +345,10 @@ void testSimpleJiebaTokenizer2(CuTest* tc) {
 
 void testSimpleJiebaTokenizer3(CuTest* tc) {
     LanguageBasedAnalyzer a;
-    CL_NS(util)::StringReader reader(_T("中国人民银行"));
-    reader.mark(50);
+    const char* field_value_data = "中国人民银行";
+    auto stringReader =
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
+
     TokenStream* ts;
     Token t;
 
@@ -347,7 +356,7 @@ void testSimpleJiebaTokenizer3(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Default);
-    ts = a.tokenStream(_T("contents"), &reader);
+    ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("中国人民银行")) == 0);
@@ -357,15 +366,16 @@ void testSimpleJiebaTokenizer3(CuTest* tc) {
 
 void testSimpleJiebaTokenizer4(CuTest* tc) {
     LanguageBasedAnalyzer a;
-    CL_NS(util)::StringReader reader(_T("人民，银行"));
-    reader.mark(50);
+    const char* field_value_data = "人民，银行";
+    auto stringReader =
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     TokenStream* ts;
     Token t;
 
     //test with chinese
     a.setLanguage(_T("chinese"));
     a.setStem(false);
-    ts = a.tokenStream(_T("contents"), &reader);
+    ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("人民")) == 0);
@@ -466,25 +476,25 @@ void testJiebaMatch(CuTest* tc) {
 
     const char* field_value_data = "人民可以得到更多实惠";
     auto stringReader =
-            _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(field_value_data), lucene::util::SimpleInputStreamReader::UTF8);
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     field->setValue(stringReader);
     w.addDocument(&doc);
 
     const char* field_value_data1 = "中国人民银行";
     auto stringReader1 =
-            _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(field_value_data1), lucene::util::SimpleInputStreamReader::UTF8);
+            _CLNEW lucene::util::SStringReader<char>(field_value_data1, strlen(field_value_data1), false);
     field->setValue(stringReader1);
     w.addDocument(&doc);
 
     const char* field_value_data2 = "洛杉矶人，洛杉矶居民";
     auto stringReader2 =
-            _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(field_value_data2), lucene::util::SimpleInputStreamReader::UTF8);
+            _CLNEW lucene::util::SStringReader<char>(field_value_data2, strlen(field_value_data2), false);
     field->setValue(stringReader2);
     w.addDocument(&doc);
 
     const char* field_value_data3 = "民族，人民";
     auto stringReader3 =
-            _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(field_value_data3), lucene::util::SimpleInputStreamReader::UTF8);
+            _CLNEW lucene::util::SStringReader<char>(field_value_data3, strlen(field_value_data3), false);
     field->setValue(stringReader3);
     w.addDocument(&doc);
 
@@ -496,7 +506,7 @@ void testJiebaMatch(CuTest* tc) {
     std::vector<std::wstring> analyse_result;
     const char* value = "民族";
     analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer(L"chinese", false);
-    reader = _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(value), lucene::util::SimpleInputStreamReader::UTF8);
+    reader = _CLNEW lucene::util::SStringReader<char>(value, strlen(value), false);
 
     lucene::analysis::TokenStream* token_stream = analyzer->tokenStream(field_name, reader);
 
@@ -546,25 +556,25 @@ void testJiebaMatch2(CuTest* tc) {
 
     const char* field_value_data = "人民可以得到更多实惠";
     auto stringReader =
-            _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(field_value_data), lucene::util::SimpleInputStreamReader::UTF8);
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     field->setValue(stringReader);
     w.addDocument(&doc);
 
     const char* field_value_data1 = "中国人民银行";
     auto stringReader1 =
-            _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(field_value_data1), lucene::util::SimpleInputStreamReader::UTF8);
+            _CLNEW lucene::util::SStringReader<char>(field_value_data1, strlen(field_value_data1), false);
     field->setValue(stringReader1);
     w.addDocument(&doc);
 
     const char* field_value_data2 = "洛杉矶人，洛杉矶居民";
     auto stringReader2 =
-            _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(field_value_data2), lucene::util::SimpleInputStreamReader::UTF8);
+            _CLNEW lucene::util::SStringReader<char>(field_value_data2, strlen(field_value_data2), false);
     field->setValue(stringReader2);
     w.addDocument(&doc);
 
     const char* field_value_data3 = "民族，人民";
     auto stringReader3 =
-            _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(field_value_data3), lucene::util::SimpleInputStreamReader::UTF8);
+            _CLNEW lucene::util::SStringReader<char>(field_value_data3, strlen(field_value_data3), false);
     field->setValue(stringReader3);
     w.addDocument(&doc);
 
@@ -576,7 +586,7 @@ void testJiebaMatch2(CuTest* tc) {
     std::vector<std::wstring> analyse_result;
     const char* value = "人民";
     analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer(L"chinese", false);
-    reader = _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(value), lucene::util::SimpleInputStreamReader::UTF8);
+    reader = _CLNEW lucene::util::SStringReader<char>(value, strlen(value), false);
 
     lucene::analysis::TokenStream* token_stream = analyzer->tokenStream(field_name, reader);
 
@@ -1096,7 +1106,7 @@ void testJiebaMatchHuge(CuTest* tc) {
             "Unique 模型仅支持整行更新，如果用户既需要唯一主键约束，又需要更新部分列（例如将多张源表导入到一张 doris 表的情形），则可以考虑使用 Aggregate 模型，同时将非主键列的聚合类型设置为 REPLACE_IF_NOT_NULL。具体的用法可以参考语法手册\n"
             "Duplicate 适合任意维度的 Ad-hoc 查询。虽然同样无法利用预聚合的特性，但是不受聚合模型的约束，可以发挥列存模型的优势（只读取相关列，而不需要读取所有 Key 列）。";
     auto stringReader =
-            _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(field_value_data), lucene::util::SimpleInputStreamReader::UTF8);
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
     field->setValue(stringReader);
     w.addDocument(&doc);
 
@@ -1108,7 +1118,7 @@ void testJiebaMatchHuge(CuTest* tc) {
     std::vector<std::wstring> analyse_result;
     const char* value = "相关";
     analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer(L"chinese", false);
-    reader = _CLNEW lucene::util::SimpleInputStreamReader(new lucene::util::AStringReader(value), lucene::util::SimpleInputStreamReader::UTF8);
+    reader = _CLNEW lucene::util::SStringReader<char>(value, strlen(value), false);
 
     lucene::analysis::TokenStream* token_stream = analyzer->tokenStream(field_name, reader);
 
