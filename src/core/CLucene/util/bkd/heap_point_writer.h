@@ -52,7 +52,7 @@ namespace bkd
         void destroy() override;
         std::string to_string();
 
-        ~heap_point_writer();
+        ~heap_point_writer() override;
     };
 } // namespace bkd
 CL_NS_END

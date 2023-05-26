@@ -12,6 +12,7 @@ protected:
     explicit index_tree(std::shared_ptr<bkd_reader>& reader);
 
 public:
+    virtual ~index_tree() = default;
     virtual void push_left();
     virtual void push_right();
     virtual void pop();
@@ -24,7 +25,6 @@ public:
     virtual std::shared_ptr<index_tree> clone() = 0;
     virtual std::shared_ptr<BytesRef> get_split_dim_value() = 0;
     virtual int64_t get_leaf_blockFP() = 0;
-
 private:
     int32_t GetNumLeavesSlow(int32_t node);
 

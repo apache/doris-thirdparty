@@ -11,6 +11,7 @@ CL_NS_DEF(util)
 
 class IReader {
 public:
+    virtual ~IReader() = default;
     virtual int32_t read(const void **start, int32_t min, int32_t max) = 0;
     virtual int64_t skip(int64_t ntoskip) = 0;
     virtual int64_t position() = 0;

@@ -52,6 +52,7 @@ public:
 public:
     class intersect_visitor {
     public:
+        virtual ~intersect_visitor() = default;
         virtual void visit(int docid) = 0;
 
         /** Called for all documents in a leaf cell that crosses the query.  The
