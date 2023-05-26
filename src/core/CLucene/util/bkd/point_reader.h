@@ -10,6 +10,7 @@
 CL_NS_DEF2(util, bkd)
 class point_reader {
 public:
+    virtual ~point_reader() = default;
     virtual bool next() = 0;
     virtual const std::vector<uint8_t> &packed_value() = 0;
     virtual uint8_t* packed_value_raw() = 0;

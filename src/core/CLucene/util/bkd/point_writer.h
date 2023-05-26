@@ -10,7 +10,7 @@ class point_reader;
  class point_writer {
     public:
         point_writer(/* args */)= default;;
-        ~point_writer() { close(); };
+        virtual ~point_writer() { close(); };
 
         virtual void append(const std::vector<uint8_t> &packed_value, int64_t ord, int32_t doc_id) = 0;
         virtual void append(const uint8_t* packedValue, uint32_t value_length, int64_t ord, int32_t docid) = 0;
