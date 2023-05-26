@@ -39,7 +39,7 @@ rm -rf ${DIST_DIR}
 rm -rf ${LIBHDFS_DIST_DIR}
 
 export PATH=${THIRDPARTY_INSTALLED}/bin:$PATH
-mvn clean package -Pnative,dist -DskipTests -Dthirdparty.installed=${THIRDPARTY_INSTALLED}/ -Dopenssl.lib=${THIRDPARTY_INSTALLED}/lib/ -e
+mvn clean package -Pnative,dist -DskipTests -Dmaven.javadoc.skip=true -Dthirdparty.installed=${THIRDPARTY_INSTALLED}/ -Dopenssl.lib=${THIRDPARTY_INSTALLED}/lib/ -e
 
 if [[ ! -d "${DIST_DIR}" ]]; then
     echo "${DIST_DIR} is missing. Build failed."
