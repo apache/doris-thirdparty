@@ -8,16 +8,20 @@
 #include "_SegmentHeader.h"
 
 #include "CLucene/store/IndexInput.h"
+#include "CLucene/index/CodeMode.h"
 #include "Term.h"
 #include "vp4.h"
 
 #include <assert.h>
 #include <memory>
+#include <iostream>
 
 #if defined(USE_AVX2) && defined(__x86_64__)
 #define  P4DEC     p4nd1dec256v32
+#define  P4NZDEC   p4nzdec256v32
 #else
 #define  P4DEC     p4nd1dec128v32 
+#define  P4NZDEC   p4nzdec128v32
 #endif
 
 CL_NS_DEF(index)
@@ -67,6 +71,7 @@ void SegmentTermDocs::seek(const TermInfo *ti, Term *term) {
     count = 0;
     FieldInfo *fi = parent->_fieldInfos->fieldInfo(term->field());
     currentFieldStoresPayloads = (fi != NULL) ? fi->storePayloads : false;
+    hasProx = (fi != nullptr) && fi->hasProx;
     if (ti == NULL) {
         df = 0;
     } else {// punt case
@@ -132,47 +137,100 @@ bool SegmentTermDocs::next()  {
 
 int32_t SegmentTermDocs::read(int32_t *docs, int32_t *freqs, int32_t length) {
     int32_t i = 0;
-    //todo: one optimization would be to get the pointer buffer for ram or mmap dirs
-    //and iterate over them instead of using readByte() intensive functions.
-    if (i < length && count < df) {
-        uint32_t arraySize = freqStream->readVInt();
-        if (arraySize < PFOR_BLOCK_SIZE) {
-            int32_t _docDelta{0};
-            while (i < length && count < df && i < arraySize) {
-                // manually inlined call to next() for speed
-                uint32_t docCode = freqStream->readVInt();
-                _docDelta += docCode;
-                _doc = _docDelta;
-                _freq = 1;         // _freq is one
-                count++;
 
-                if (deletedDocs == NULL || (_doc >= 0 && !deletedDocs->get(_doc))) {
-                    docs[i] = _doc;
-                    freqs[i] = _freq;
-                    i++;
+    if (hasProx) {
+        if (count == df) {
+            return i;
+        }
+
+        char mode = freqStream->readByte();
+
+        uint32_t arraySize = freqStream->readVInt();
+        std::vector<uint32_t> _docs(arraySize);
+        std::vector<uint32_t> _freqs(arraySize);
+
+        if (mode == (char)CodeMode::kDefault) {
+            uint32_t docDelta = 0;
+            for (uint32_t i = 0; i < arraySize; i++) {
+                uint32_t docCode = freqStream->readVInt();
+                docDelta += (docCode >> 1);
+                _docs[i] = docDelta;
+                if ((docCode & 1) != 0) {
+                    _freqs[i] = 1;
+                } else {
+                    _freqs[i] = freqStream->readVInt();
                 }
             }
         } else {
-	    // need one more space for decode, otherwise will buffer overflow when decoding
-            std::vector<uint32_t> arr(arraySize + 1);
-            uint32_t serializedSize = freqStream->readVInt();
-	    // need more space for decode, otherwise will buffer overflow when decoding
-            std::vector<uint8_t> buf(serializedSize + PFOR_BLOCK_SIZE);
-            freqStream->readBytes(buf.data(), serializedSize);
-            P4DEC(buf.data(), arraySize, arr.data());
+            {
+                uint32_t SerializedSize = freqStream->readVInt();
+                std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+                freqStream->readBytes(buf.data(), SerializedSize);
+                P4DEC(buf.data(), arraySize, _docs.data());
+            }
+            {
+                uint32_t SerializedSize = freqStream->readVInt();
+                std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+                freqStream->readBytes(buf.data(), SerializedSize);
+                P4NZDEC(buf.data(), arraySize, _freqs.data());
+            }
+        }
 
-            while (i < length && count < df && i < arraySize) {
-                _doc = arr[i];
-                _freq = 1;// _freq is one
-                if (deletedDocs == NULL || (_doc >= 0 && !deletedDocs->get(_doc))) {
-                    docs[i] = _doc;
-                    freqs[i] = _freq;
-                    i++;
+        while (i < arraySize && count < df) {
+            _doc = _docs[i];
+            _freq = _freqs[i];
+            count++;
+            if (deletedDocs == NULL || (_doc >= 0 && !deletedDocs->get(_doc))) {
+                docs[i] = _doc;
+                freqs[i] = _freq;
+                i++;
+            }
+        }
+
+    } else {
+        //todo: one optimization would be to get the pointer buffer for ram or mmap dirs
+        //and iterate over them instead of using readByte() intensive functions.
+            if (i < length && count < df) {
+                uint32_t arraySize = freqStream->readVInt();
+                if (arraySize < PFOR_BLOCK_SIZE) {
+                    int32_t _docDelta{0};
+                    while (i < length && count < df && i < arraySize) {
+                        // manually inlined call to next() for speed
+                        uint32_t docCode = freqStream->readVInt();
+                        _docDelta += docCode;
+                        _doc = _docDelta;
+                        _freq = 1;         // _freq is one
+                        count++;
+
+                        if (deletedDocs == NULL || (_doc >= 0 && !deletedDocs->get(_doc))) {
+                            docs[i] = _doc;
+                            freqs[i] = _freq;
+                            i++;
+                        }
+                    }
+                } else {
+                // need one more space for decode, otherwise will buffer overflow when decoding
+                    std::vector<uint32_t> arr(arraySize + 1);
+                    uint32_t serializedSize = freqStream->readVInt();
+                // need more space for decode, otherwise will buffer overflow when decoding
+                    std::vector<uint8_t> buf(serializedSize + PFOR_BLOCK_SIZE);
+                    freqStream->readBytes(buf.data(), serializedSize);
+                    P4DEC(buf.data(), arraySize, arr.data());
+
+                    while (i < length && count < df && i < arraySize) {
+                        _doc = arr[i];
+                        _freq = 1;// _freq is one
+                        if (deletedDocs == NULL || (_doc >= 0 && !deletedDocs->get(_doc))) {
+                            docs[i] = _doc;
+                            freqs[i] = _freq;
+                            i++;
+                        }
+                        count++;
                 }
-                count++;
             }
         }
     }
+
     return i;
 }
 
@@ -184,7 +242,7 @@ bool SegmentTermDocs::skipTo(const int32_t target) {
             skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval);// lazily clone
 
         if (!haveSkipped) {// lazily initialize skip stream
-            skipListReader->init(skipPointer, freqBasePointer, proxBasePointer, df, currentFieldStoresPayloads);
+            skipListReader->init(skipPointer, freqBasePointer, proxBasePointer, df, hasProx, currentFieldStoresPayloads);
             haveSkipped = true;
         }
 
@@ -195,6 +253,7 @@ bool SegmentTermDocs::skipTo(const int32_t target) {
 
             _doc = skipListReader->getDoc();
             count = newCount;
+            pointer = pointerMax;
         }
     }
 

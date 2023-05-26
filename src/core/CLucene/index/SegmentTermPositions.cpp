@@ -9,6 +9,8 @@
 
 #include "Terms.h"
 
+#include <iostream>
+
 CL_NS_USE(util)
 CL_NS_DEF(index)
 
@@ -52,7 +54,7 @@ void SegmentTermPositions::close() {
 
 int32_t SegmentTermPositions::nextPosition() {
     // TODO:need to do like this:    if (indexOptions != IndexOptions.DOCS_AND_FREQS_AND_POSITIONS)
-    if (parent->proxStream== NULL){
+    if (!hasProx){
         return 0;
     }
     // perform lazy skips if neccessary

@@ -22,6 +22,7 @@
 #include <errno.h>
 
 #include <assert.h>
+#include <iostream>
 
 #include "FSDirectory.h"
 #include "LockFactory.h"
@@ -240,6 +241,12 @@ void FSDirectory::FSIndexInput::readInternal(uint8_t* b, const int32_t len) {
 	CND_PRECONDITION(handle!=NULL,"shared file handle has closed");
 	CND_PRECONDITION(handle->fhandle>=0,"file is not open");
 	SCOPED_LOCK_MUTEX(*handle->SHARED_LOCK)
+
+	// todo: The file pointer may be wrong
+	int64_t position = getFilePointer();
+	if (_pos != position) {
+		_pos = position;
+	}
 
 	if ( handle->_fpos != _pos ){
 		if ( fileSeek(handle->fhandle,_pos,SEEK_SET) != _pos ){

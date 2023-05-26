@@ -82,30 +82,31 @@ public:
 		* to have the above described effect on a field, all instances of that
 		* field must be indexed with NO_NORMS from the beginning.
 		*/
-		INDEX_NONORMS=128
+		INDEX_NONORMS=128,
+		INDEX_NOTERMFREQANDPOSITIONS=256
 	};
 
 	enum TermVector{
 		/** Do not store term vectors. */
-		TERMVECTOR_NO=256, 
+		TERMVECTOR_NO=512, 
 
 		/** Store the term vectors of each document. A term vector is a list
 		* of the document's terms and their number of occurences in that document. */
-		TERMVECTOR_YES=512,
+		TERMVECTOR_YES=1024,
 
 		/**
 		* Store the term vector + token position information
 		* 
 		* @see #YES
 		*/ 
-		TERMVECTOR_WITH_POSITIONS = TERMVECTOR_YES | 1024,
+		TERMVECTOR_WITH_POSITIONS = TERMVECTOR_YES | 2048,
 
 		/**
 		* Store the term vector + Token offset information
 		* 
 		* @see #YES
 		*/ 
-		TERMVECTOR_WITH_OFFSETS = TERMVECTOR_YES | 2048,
+		TERMVECTOR_WITH_OFFSETS = TERMVECTOR_YES | 4096,
 
 		/**
 		* Store the term vector + Token position and offset information
@@ -260,6 +261,9 @@ public:
 	* This effectively disables indexing boosts and length normalization for this field.
 	*/
 	void setOmitNorms(const bool omitNorms);
+	
+	bool getOmitTermFreqAndPositions() const;
+	void setOmitTermFreqAndPositions(bool omitTermFreqAndPositions);
 
 	/**
 	* Indicates whether a Field is Lazy or not.  The semantics of Lazy loading are such that if a Field is lazily loaded, retrieving

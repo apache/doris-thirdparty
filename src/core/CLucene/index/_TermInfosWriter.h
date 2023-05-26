@@ -45,7 +45,7 @@ public:
     int32_t maxSkipLevels;
 
     LUCENE_STATIC_CONSTANT(int32_t, FORMAT = -3);
-    LUCENE_STATIC_CONSTANT(int32_t, DEFAULT_TERMDOCS_SKIP_INTERVAL = 16);
+    LUCENE_STATIC_CONSTANT(int32_t, DEFAULT_TERMDOCS_SKIP_INTERVAL = PFOR_BLOCK_SIZE);
 
     int32_t indexInterval;// = 128
     int32_t skipInterval;// = 16
@@ -103,7 +103,7 @@ public:
     //smaller indices, greater acceleration, but fewer accelerable cases, while
     //smaller values result in bigger indices, less acceleration and more
     //accelerable cases. More detailed experiments would be useful here. */
-    LUCENE_STATIC_CONSTANT(int32_t, DEFAULT_TERMDOCS_SKIP_INTERVAL = 16);
+    LUCENE_STATIC_CONSTANT(int32_t, DEFAULT_TERMDOCS_SKIP_INTERVAL = PFOR_BLOCK_SIZE);
 
 
     /**
