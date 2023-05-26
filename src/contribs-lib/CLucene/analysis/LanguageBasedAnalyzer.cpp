@@ -22,21 +22,33 @@ CL_NS_USE2(analysis, snowball)
 
 CL_NS_DEF(analysis)
 
-LanguageBasedAnalyzer::LanguageBasedAnalyzer(const TCHAR *language, bool stem) {
+LanguageBasedAnalyzer::LanguageBasedAnalyzer(const TCHAR *language, bool stem, AnalyzerMode mode) {
+    stopSet = _CLNEW CLTCSetList;
+
     if (language == NULL)
         _tcsncpy(lang, LUCENE_BLANK_STRING, 100);
     else
         _tcsncpy(lang, language, 100);
     this->stem = stem;
+    this->mode = mode;
 }
 
 LanguageBasedAnalyzer::~LanguageBasedAnalyzer() = default;
+
+void LanguageBasedAnalyzer::setStopWords(const TCHAR** stopwords) {
+    StopFilter::fillStopTable(stopSet, stopwords);
+}
+
 void LanguageBasedAnalyzer::setLanguage(const TCHAR *language) {
     _tcsncpy(lang, language, 100);
 }
 
 void LanguageBasedAnalyzer::setStem(bool s) {
     this->stem = s;
+}
+
+void LanguageBasedAnalyzer::setMode(AnalyzerMode m) {
+    this->mode = m;
 }
 
 void LanguageBasedAnalyzer::initDict(const std::string &dictPath) {
@@ -46,65 +58,68 @@ void LanguageBasedAnalyzer::initDict(const std::string &dictPath) {
 }
 
 TokenStream *LanguageBasedAnalyzer::reusableTokenStream(const TCHAR * /*fieldName*/, CL_NS(util)::Reader *reader) {
-    TokenStream *tokenizer = getPreviousTokenStream();
-    if (tokenizer == nullptr) {
+    SavedStreams* streams = reinterpret_cast<SavedStreams*>(getPreviousTokenStream());
+
+    if (streams == nullptr) {
+        streams = _CLNEW SavedStreams();
         if (_tcscmp(lang, _T("cjk")) == 0) {
-            tokenizer = _CLNEW CL_NS2(analysis, cjk)::CJKTokenizer(reader);
+            streams->tokenStream = _CLNEW CL_NS2(analysis, cjk)::CJKTokenizer(reader);
+            streams->filteredTokenStream =
+                    _CLNEW StopFilter(streams->tokenStream, true, stopSet);
         } else if (_tcscmp(lang, _T("chinese")) == 0) {
-            tokenizer = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader);
+            streams->tokenStream = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader, mode);
+            streams->filteredTokenStream =
+                    _CLNEW StopFilter(streams->tokenStream, true, stopSet);
         } else {
-            BufferedReader *bufferedReader = reader->__asBufferedReader();
-            if (bufferedReader == NULL)
-                tokenizer = _CLNEW StandardTokenizer(_CLNEW FilteredBufferedReader(reader, false), true);
-            else
-                tokenizer = _CLNEW StandardTokenizer(bufferedReader);
+            CL_NS(util)::BufferedReader* bufferedReader = reader->__asBufferedReader();
 
-            tokenizer = _CLNEW StandardFilter(tokenizer, true);
+            if (bufferedReader == nullptr) {
+                streams->tokenStream = _CLNEW StandardTokenizer(
+                        _CLNEW CL_NS(util)::FilteredBufferedReader(reader, false), true);
+            } else {
+                streams->tokenStream = _CLNEW StandardTokenizer(bufferedReader);
+            }
 
-            if (stem)
-                tokenizer = _CLNEW SnowballFilter(tokenizer, lang, true);//todo: should check whether snowball supports the language
-
-            if (stem)                                                     //hmm... this could be configured seperately from stem
-                tokenizer = _CLNEW ISOLatin1AccentFilter(tokenizer, true);//todo: this should really only be applied to latin languages...
-
-            //lower case after the latin1 filter
-            tokenizer = _CLNEW LowerCaseFilter(tokenizer, true);
+            streams->filteredTokenStream = _CLNEW StandardFilter(streams->tokenStream, true);
+            if (stem) {
+                streams->filteredTokenStream = _CLNEW SnowballFilter( streams->filteredTokenStream, lang, true);//todo: should check whether snowball supports the language
+            }
+            streams->filteredTokenStream =
+                    _CLNEW LowerCaseFilter(streams->filteredTokenStream, true);
+            streams->filteredTokenStream =
+                    _CLNEW StopFilter(streams->filteredTokenStream, true, stopSet);
         }
-        setPreviousTokenStream(tokenizer);
+        setPreviousTokenStream(streams);
     } else {
-        auto t = dynamic_cast<Tokenizer *>(tokenizer);
-        if (t != nullptr) {
-            t->reset(reader);
-        }
+        streams->tokenStream->reset(reader);
     }
-    return tokenizer;
+
+    return streams->filteredTokenStream;
 }
 
 TokenStream *LanguageBasedAnalyzer::tokenStream(const TCHAR *fieldName, Reader *reader) {
-    TokenStream *ret = NULL;
+    TokenStream *ret = nullptr;
     if (_tcscmp(lang, _T("cjk")) == 0) {
         ret = _CLNEW CL_NS2(analysis, cjk)::CJKTokenizer(reader);
     } else if (_tcscmp(lang, _T("chinese")) == 0) {
-        ret = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader);
+        ret = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader, mode);
     } else {
-        BufferedReader *bufferedReader = reader->__asBufferedReader();
-        if (bufferedReader == NULL)
-            ret = _CLNEW StandardTokenizer(_CLNEW FilteredBufferedReader(reader, false), true);
-        else
+        CL_NS(util)::BufferedReader* bufferedReader = reader->__asBufferedReader();
+
+        if (bufferedReader == nullptr) {
+            ret = _CLNEW StandardTokenizer(
+                    _CLNEW CL_NS(util)::FilteredBufferedReader(reader, false), true);
+        } else {
             ret = _CLNEW StandardTokenizer(bufferedReader);
+        }
 
         ret = _CLNEW StandardFilter(ret, true);
-
-        if (stem)
+        if (stem) {
             ret = _CLNEW SnowballFilter(ret, lang, true);//todo: should check whether snowball supports the language
-
-        if (stem)                                         //hmm... this could be configured seperately from stem
-            ret = _CLNEW ISOLatin1AccentFilter(ret, true);//todo: this should really only be applied to latin languages...
-
-        //lower case after the latin1 filter
+        }
         ret = _CLNEW LowerCaseFilter(ret, true);
     }
-    //todo: could add a stop filter based on the language - need to fix the stoplist loader first
+    ret = _CLNEW StopFilter(ret, true, stopSet);
 
     return ret;
 }

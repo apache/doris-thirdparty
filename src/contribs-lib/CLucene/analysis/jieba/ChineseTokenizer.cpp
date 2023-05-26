@@ -7,7 +7,7 @@ CL_NS_DEF2(analysis, jieba)
 CL_NS_USE(analysis)
 CL_NS_USE(util)
 
-ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader) : Tokenizer(reader) {
+ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m) : Tokenizer(reader), mode(m) {
     buffer[0] = 0;
 }
 
@@ -22,7 +22,7 @@ CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
         int totalLen = 0;
         do {
             auto bufferLen = input->read((const void**)&ioBuffer, 1, LUCENE_IO_BUFFER_SIZE);
-            if (bufferLen == -1) {
+            if (bufferLen <= 0) {
                 dataLen = 0;
                 bufferIndex = 0;
                 break;
@@ -35,17 +35,26 @@ CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
 
         char tmp_buffer[4 * totalLen];
         lucene_wcsntoutf8(tmp_buffer, initBuffer, totalLen, 4 * totalLen);
-        JiebaSingleton::getInstance().Cut(tmp_buffer, tokens_text, true);
+        switch (mode) {
+        case AnalyzerMode::Search:
+            JiebaSingleton::getInstance().CutForSearch(tmp_buffer, tokens_text, true);
+            break;
+        case AnalyzerMode::All:
+            JiebaSingleton::getInstance().CutAll(tmp_buffer, tokens_text);
+            break;
+        case AnalyzerMode::Default:
+            JiebaSingleton::getInstance().Cut(tmp_buffer, tokens_text, true);
+            break;
+        }
         dataLen = tokens_text.size();
     }
     if (bufferIndex < dataLen) {
-        auto token_text = tokens_text[bufferIndex];
-        bufferIndex++;
+        auto token_text = tokens_text[bufferIndex++];
         lucene_utf8towcs(buffer, token_text.c_str(), LUCENE_MAX_WORD_LEN);
         auto length = _tcslen(buffer);
         token->set(buffer, 0, length);
         return token;
     }
-    return NULL;
+    return nullptr;
 }
 CL_NS_END2

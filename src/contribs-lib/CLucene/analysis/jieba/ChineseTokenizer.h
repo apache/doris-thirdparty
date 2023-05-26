@@ -7,6 +7,8 @@
 #include "Jieba.hpp"
 
 #include "CLucene/analysis/AnalysisHeader.h"
+#include "CLucene/analysis/LanguageBasedAnalyzer.h"
+
 
 CL_NS_DEF2(analysis,jieba)
 
@@ -27,6 +29,7 @@ private:
 
 class ChineseTokenizer : public lucene::analysis::Tokenizer {
 private:
+    AnalyzerMode mode{};
     /** word offset, used to imply which character(in ) is parsed */
     int32_t offset{};
 
@@ -52,7 +55,7 @@ private:
 
 public:
     // Constructor
-    explicit ChineseTokenizer(lucene::util::Reader *reader);
+    explicit ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode mode);
     static void init(const std::string& dictPath="");
 
     // Destructor
@@ -60,6 +63,14 @@ public:
 
     // Override the next method to tokenize Chinese text using Jieba
     lucene::analysis::Token* next(lucene::analysis::Token* token) override;
+
+    void reset(lucene::util::Reader *reader) override {
+        this->input = reader;
+        this->offset = 0;
+        this->bufferIndex = 0;
+        this->dataLen = 0;
+        this->tokens_text.clear();
+    }
 };
 
 CL_NS_END2
