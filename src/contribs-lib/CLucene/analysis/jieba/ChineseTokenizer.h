@@ -11,6 +11,7 @@
 
 
 CL_NS_DEF2(analysis,jieba)
+CL_NS_USE(analysis)
 
 class JiebaSingleton {
 public:
