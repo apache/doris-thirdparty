@@ -49,7 +49,7 @@ private:
      * I/O buffer, used to store the content of the input(one of the <br>
      * members of Tokenizer)
      */
-    const TCHAR* ioBuffer{};
+    const char* ioBuffer{};
     std::vector<std::string> tokens_text;
     //std::vector<std::unique_ptr<Token>> tokens;
 
