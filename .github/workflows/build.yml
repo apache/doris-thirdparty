@@ -141,8 +141,8 @@ jobs:
               'zip'
               'unzip'
               'autopoint'
-              'openjdk-11-jdk'
-              'openjdk-11-jdk-headless'
+              'openjdk-8-jdk'
+              'openjdk-8-jdk-headless'
               'maven'
 
     runs-on: ${{ matrix.config.os }}
