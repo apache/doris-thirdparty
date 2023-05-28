@@ -120,7 +120,7 @@ jobs:
               'gettext'
               'wget'
               'pcre'
-              'openjdk@8'
+              'openjdk@11'
               'maven'
               'node'
               'llvm@15'
