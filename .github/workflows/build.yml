@@ -188,9 +188,8 @@ jobs:
             export JAVA_HOME="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 0)"
           fi
 
-          echo "DORIS_TOOLCHAIN=gcc" > custom_env.sh
           cd thirdparty
-          ./build-thirdparty.sh -j "$(nproc)"
+          DORIS_TOOLCHAIN=gcc ./build-thirdparty.sh -j "$(nproc)"
 
           kernel="$(uname -s | awk '{print tolower($0)}')"
           arch="$(uname -m)"
