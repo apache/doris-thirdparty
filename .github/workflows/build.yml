@@ -189,7 +189,7 @@ jobs:
           fi
 
           cd thirdparty
-          ./build-thirdparty.sh -j "$(nproc)"
+          DORIS_TOOLCHAIN=gcc ./build-thirdparty.sh -j "$(nproc)"
 
           kernel="$(uname -s | awk '{print tolower($0)}')"
           arch="$(uname -m)"
