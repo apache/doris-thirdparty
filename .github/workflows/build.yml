@@ -188,6 +188,7 @@ jobs:
             export JAVA_HOME="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 0)"
           fi
 
+          echo "DORIS_TOOLCHAIN=gcc" > custom_env.sh
           cd thirdparty
           ./build-thirdparty.sh -j "$(nproc)"
 
