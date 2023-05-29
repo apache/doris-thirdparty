@@ -198,10 +198,11 @@ jobs:
             export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
             export PATH="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 1 -type d -name 'bin'):${PATH}"
             export JAVA_HOME="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 0)"
+            export DORIS_TOOLCHAIN=gcc
           fi
 
           cd thirdparty
-          DORIS_TOOLCHAIN=gcc ./build-thirdparty.sh -j "$(nproc)"
+          ./build-thirdparty.sh -j "$(nproc)"
 
           kernel="$(uname -s | awk '{print tolower($0)}')"
           arch="$(uname -m)"
