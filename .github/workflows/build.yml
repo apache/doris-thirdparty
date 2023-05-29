@@ -184,6 +184,8 @@ jobs:
           if [[ "${{ matrix.config.name }}" == 'Linux' ]]; then
             export DEFAULT_DIR='/opt/doris'
             export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
+            export PATH="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 1 -type d -name 'bin'):${PATH}"
+            export JAVA_HOME="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 0)"
           fi
 
           cd thirdparty
