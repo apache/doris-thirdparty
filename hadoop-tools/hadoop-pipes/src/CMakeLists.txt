@@ -18,6 +18,8 @@
 
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
+option(LIBRARY_ONLY "Build libraries only" ON)
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/../../../hadoop-common-project/hadoop-common)
 include(HadoopCommon)
 
@@ -49,22 +51,24 @@ include_directories(
     ${OPENSSL_INCLUDE_DIR}
 )
 
-# Example programs
-add_executable(wordcount-simple main/native/examples/impl/wordcount-simple.cc)
-target_link_libraries(wordcount-simple hadooppipes hadooputils)
-hadoop_output_directory(wordcount-simple examples)
+if (NOT LIBRARY_ONLY)
+    # Example programs
+    add_executable(wordcount-simple main/native/examples/impl/wordcount-simple.cc)
+    target_link_libraries(wordcount-simple hadooppipes hadooputils)
+    hadoop_output_directory(wordcount-simple examples)
 
-add_executable(wordcount-part main/native/examples/impl/wordcount-part.cc)
-target_link_libraries(wordcount-part hadooppipes hadooputils)
-hadoop_output_directory(wordcount-part examples)
+    add_executable(wordcount-part main/native/examples/impl/wordcount-part.cc)
+    target_link_libraries(wordcount-part hadooppipes hadooputils)
+    hadoop_output_directory(wordcount-part examples)
 
-add_executable(wordcount-nopipe main/native/examples/impl/wordcount-nopipe.cc)
-target_link_libraries(wordcount-nopipe hadooppipes hadooputils)
-hadoop_output_directory(wordcount-nopipe examples)
+    add_executable(wordcount-nopipe main/native/examples/impl/wordcount-nopipe.cc)
+    target_link_libraries(wordcount-nopipe hadooppipes hadooputils)
+    hadoop_output_directory(wordcount-nopipe examples)
 
-add_executable(pipes-sort main/native/examples/impl/sort.cc)
-target_link_libraries(pipes-sort hadooppipes hadooputils)
-hadoop_output_directory(pipes-sort examples)
+    add_executable(pipes-sort main/native/examples/impl/sort.cc)
+    target_link_libraries(pipes-sort hadooppipes hadooputils)
+    hadoop_output_directory(pipes-sort examples)
+endif()
 
 add_library(hadooputils STATIC
     main/native/utils/impl/StringUtils.cc
