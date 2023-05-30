@@ -18,6 +18,8 @@
 
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
+option(LIBRARY_ONLY "Build libraries only" ON)
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/../../../../hadoop-common-project/hadoop-common/)
 include(HadoopCommon)
 
@@ -27,6 +29,9 @@ set(GTEST_SRC_DIR ${CMAKE_SOURCE_DIR}/../../../../hadoop-common-project/hadoop-c
 # Add extra compiler and linker flags.
 # -Wno-sign-compare
 hadoop_add_compiler_flags("-DNDEBUG -DSIMPLE_MEMCPY -fno-strict-aliasing -fsigned-char")
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    hadoop_add_compiler_flags(-Wno-reserved-user-defined-literal)
+endif()
 set(CMAKE_CXX_STANDARD 11)
 
 # Source location.
@@ -161,41 +166,43 @@ hadoop_add_dual_library(nativetask
 
 target_link_libraries(nativetask ${NT_DEPEND_LIBRARY})
 
-add_library(gtest ${GTEST_SRC_DIR}/gtest-all.cc)
-set_target_properties(gtest PROPERTIES COMPILE_FLAGS "-w")
-add_executable(nttest
-    ${SRC}/test/lib/TestByteArray.cc
-    ${SRC}/test/lib/TestByteBuffer.cc
-    ${SRC}/test/lib/TestComparatorForDualPivotQuickSort.cc
-    ${SRC}/test/lib/TestComparatorForStdSort.cc
-    ${SRC}/test/lib/TestFixSizeContainer.cc
-    ${SRC}/test/lib/TestMemoryPool.cc
-    ${SRC}/test/lib/TestIterator.cc
-    ${SRC}/test/lib/TestKVBuffer.cc
-    ${SRC}/test/lib/TestMemBlockIterator.cc
-    ${SRC}/test/lib/TestMemoryBlock.cc
-    ${SRC}/test/lib/TestPartitionBucket.cc
-    ${SRC}/test/lib/TestReadBuffer.cc
-    ${SRC}/test/lib/TestReadWriteBuffer.cc
-    ${SRC}/test/util/TestChecksum.cc
-    ${SRC}/test/util/TestStringUtil.cc
-    ${SRC}/test/util/TestWritableUtils.cc
-    ${SRC}/test/TestCommand.cc
-    ${SRC}/test/TestConfig.cc
-    ${SRC}/test/TestCounter.cc
-    ${SRC}/test/TestCompressions.cc
-    ${SRC}/test/TestFileSystem.cc
-    ${SRC}/test/TestIFile.cc
-    ${SRC}/test/TestPrimitives.cc
-    ${SRC}/test/TestSort.cc
-    ${SRC}/test/TestMain.cc
-    ${SRC}/test/test_commons.cc)
+if (NOT LIBRARY_ONLY)
+    add_library(gtest ${GTEST_SRC_DIR}/gtest-all.cc)
+    set_target_properties(gtest PROPERTIES COMPILE_FLAGS "-w")
+    add_executable(nttest
+        ${SRC}/test/lib/TestByteArray.cc
+        ${SRC}/test/lib/TestByteBuffer.cc
+        ${SRC}/test/lib/TestComparatorForDualPivotQuickSort.cc
+        ${SRC}/test/lib/TestComparatorForStdSort.cc
+        ${SRC}/test/lib/TestFixSizeContainer.cc
+        ${SRC}/test/lib/TestMemoryPool.cc
+        ${SRC}/test/lib/TestIterator.cc
+        ${SRC}/test/lib/TestKVBuffer.cc
+        ${SRC}/test/lib/TestMemBlockIterator.cc
+        ${SRC}/test/lib/TestMemoryBlock.cc
+        ${SRC}/test/lib/TestPartitionBucket.cc
+        ${SRC}/test/lib/TestReadBuffer.cc
+        ${SRC}/test/lib/TestReadWriteBuffer.cc
+        ${SRC}/test/util/TestChecksum.cc
+        ${SRC}/test/util/TestStringUtil.cc
+        ${SRC}/test/util/TestWritableUtils.cc
+        ${SRC}/test/TestCommand.cc
+        ${SRC}/test/TestConfig.cc
+        ${SRC}/test/TestCounter.cc
+        ${SRC}/test/TestCompressions.cc
+        ${SRC}/test/TestFileSystem.cc
+        ${SRC}/test/TestIFile.cc
+        ${SRC}/test/TestPrimitives.cc
+        ${SRC}/test/TestSort.cc
+        ${SRC}/test/TestMain.cc
+        ${SRC}/test/test_commons.cc)
 
-target_link_libraries(nttest
-     nativetask_static
-     gtest
-     ${NT_DEPEND_LIBRARY}
-)
+    target_link_libraries(nttest
+        nativetask_static
+        gtest
+        ${NT_DEPEND_LIBRARY}
+    )
+endif()
 
 # By embedding '$ORIGIN' into the RPATH of libnativetask.so, dlopen will look in
 # the directory containing libnativetask.so. However, $ORIGIN is not supported by
@@ -207,4 +214,7 @@ endif()
 set(LIBNATIVETASK_VERSION "1.0.0")
 set_target_properties(nativetask PROPERTIES SOVERSION ${LIBNATIVETASK_VERSION})
 hadoop_dual_output_directory(nativetask target/usr/local/lib)
-hadoop_output_directory(nttest test)
+
+if (NOT LIBRARY_ONLY)
+    hadoop_output_directory(nttest test)
+endif()
