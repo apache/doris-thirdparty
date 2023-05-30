@@ -18,7 +18,7 @@
 
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
-option(BUILD_TESTS "Build tests " OFF)
+option(LIBRARY_ONLY "Build libraries only" ON)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/../../../../hadoop-common-project/hadoop-common/)
 include(HadoopCommon)
@@ -166,7 +166,7 @@ hadoop_add_dual_library(nativetask
 
 target_link_libraries(nativetask ${NT_DEPEND_LIBRARY})
 
-if (BUILD_TESTS)
+if (NOT LIBRARY_ONLY)
     add_library(gtest ${GTEST_SRC_DIR}/gtest-all.cc)
     set_target_properties(gtest PROPERTIES COMPILE_FLAGS "-w")
     add_executable(nttest
@@ -215,6 +215,6 @@ set(LIBNATIVETASK_VERSION "1.0.0")
 set_target_properties(nativetask PROPERTIES SOVERSION ${LIBNATIVETASK_VERSION})
 hadoop_dual_output_directory(nativetask target/usr/local/lib)
 
-if (BUILD_TESTS)
+if (NOT LIBRARY_ONLY)
     hadoop_output_directory(nttest test)
 endif()

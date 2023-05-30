@@ -19,8 +19,7 @@
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
 option(CHANGE_FIND_LIBRARY_SUFFIXES "Change suffixes to find library" OFF)
-option(HDFS_LIBRARY_ONLY "Build hdfs library only" ON)
-option(BUILD_TESTS "Build tests " OFF)
+option(LIBRARY_ONLY "Build libraries only" ON)
 
 enable_testing()
 
@@ -83,7 +82,7 @@ endif()
 include(HadoopJNI)
 
 function(build_libhdfs_test NAME LIBRARY)
-    if (BUILD_TESTS)
+    if (NOT LIBRARY_ONLY)
         set(FILES)
         foreach(FIL ${ARGN})
             if (IS_ABSOLUTE ${FIL})
@@ -97,13 +96,13 @@ function(build_libhdfs_test NAME LIBRARY)
 endfunction()
 
 function(add_libhdfs_test NAME LIBRARY)
-    if (BUILD_TESTS)
+    if (NOT LIBRARY_ONLY)
         add_test("test_${NAME}_${LIBRARY}" "${NAME}_${LIBRARY}")
     endif()
 endfunction()
 
 function(link_libhdfs_test NAME LIBRARY)
-    if (BUILD_TESTS)
+    if (NOT LIBRARY_ONLY)
         target_link_libraries("${NAME}_${LIBRARY}" ${LIBRARY} ${ARGN})
     endif()
 endfunction()
@@ -159,7 +158,7 @@ else()
 endif()
 
 add_subdirectory(main/native/libhdfs)
-if (NOT HDFS_LIBRARY_ONLY)
+if (NOT LIBRARY_ONLY)
     add_subdirectory(main/native/libhdfs-tests)
     add_subdirectory(main/native/libhdfs-examples)
 endif()
