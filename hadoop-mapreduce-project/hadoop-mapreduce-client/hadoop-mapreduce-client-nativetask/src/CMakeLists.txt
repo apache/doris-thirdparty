@@ -27,6 +27,9 @@ set(GTEST_SRC_DIR ${CMAKE_SOURCE_DIR}/../../../../hadoop-common-project/hadoop-c
 # Add extra compiler and linker flags.
 # -Wno-sign-compare
 hadoop_add_compiler_flags("-DNDEBUG -DSIMPLE_MEMCPY -fno-strict-aliasing -fsigned-char")
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    hadoop_add_compiler_flags(-Wno-reserved-user-defined-literal)
+endif()
 set(CMAKE_CXX_STANDARD 11)
 
 # Source location.
