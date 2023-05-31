@@ -32,6 +32,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace orc {
@@ -370,6 +371,17 @@ namespace orc {
                         void* arg = nullptr) const = 0;
   };
 
+  class StringDictFilter {
+   public:
+    virtual ~StringDictFilter() = default;
+    virtual void fillDictFilterColumnNames(
+        std::unique_ptr<orc::StripeInformation> current_strip_information,
+        std::list<std::string>& columnNames) const = 0;
+    virtual void onStringDictsLoaded(
+        std::unordered_map<std::string, StringDictionary*>& columnNameToDictMap,
+        bool* isStripeFiltered) const = 0;
+  };
+
   class RowReader;
 
   /**
@@ -555,15 +567,18 @@ namespace orc {
      * Create a RowReader based on this reader with the default options.
      * @return a RowReader to read the rows
      */
-    virtual std::unique_ptr<RowReader> createRowReader(const ORCFilter* filter = nullptr) const = 0;
+    virtual std::unique_ptr<RowReader> createRowReader(
+        const ORCFilter* filter = nullptr,
+        const StringDictFilter* stringDictFilter = nullptr) const = 0;
 
     /**
      * Create a RowReader based on this reader.
      * @param options RowReader Options
      * @return a RowReader to read the rows
      */
-    virtual std::unique_ptr<RowReader> createRowReader(const RowReaderOptions& options,
-                                                       const ORCFilter* filter = nullptr) const = 0;
+    virtual std::unique_ptr<RowReader> createRowReader(
+        const RowReaderOptions& options, const ORCFilter* filter = nullptr,
+        const StringDictFilter* stringDictFilter = nullptr) const = 0;
 
     /**
      * Get the name of the input stream.
