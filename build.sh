@@ -38,9 +38,10 @@ LIBHDFS_DIST_DIR="${SRC_HOME}/hadoop-dist/target/hadoop-libhdfs-3.3.6"
 rm -rf "${DIST_DIR}"
 rm -rf "${LIBHDFS_DIST_DIR}"
 
-export PATH=${THIRDPARTY_INSTALLED}/bin:$PATH
-mvn clean package -Pnative,dist -DskipTests -Dmaven.javadoc.skip=true \
+mvn clean package -Pdist -DskipTests -Dmaven.javadoc.skip -f hadoop-common-project -e
+mvn clean package -Pnative,dist -DskipTests -Dmaven.javadoc.skip -f hadoop-hdfs-project \
 	-Dthirdparty.installed="${THIRDPARTY_INSTALLED}" -Dopenssl.prefix="${THIRDPARTY_INSTALLED}" -e
+mvn clean package -Pdist -DskipTests -Dmaven.javadoc.skip -f hadoop-dist -e
 
 if [[ ! -d "${DIST_DIR}" ]]; then
 	echo "${DIST_DIR} is missing. Build failed."

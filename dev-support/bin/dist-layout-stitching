@@ -142,14 +142,16 @@ run copy "${ROOT}/hadoop-mapreduce-project/target/hadoop-mapreduce-${VERSION}" .
 run cp -pr "${ROOT}/hadoop-hdfs-project/hadoop-hdfs-httpfs/target/hadoop-hdfs-httpfs-${VERSION}"/* .
 run cp -pr "${ROOT}/hadoop-common-project/hadoop-kms/target/hadoop-kms-${VERSION}"/* .
 
-# copy client jars as-is
-run mkdir -p "share/hadoop/client"
-run cp -p "${ROOT}/hadoop-client-modules/hadoop-client-api/target/hadoop-client-api-${VERSION}.jar" share/hadoop/client/
-run cp -p "${ROOT}/hadoop-client-modules/hadoop-client-runtime/target/hadoop-client-runtime-${VERSION}.jar" share/hadoop/client/
-run cp -p "${ROOT}/hadoop-client-modules/hadoop-client-minicluster/target/hadoop-client-minicluster-${VERSION}.jar" share/hadoop/client/
+if ! ${SKIP_HADOOP_CLIENT_AND_TOOLS:-true}; then
+    # copy client jars as-is
+    run mkdir -p "share/hadoop/client"
+    run cp -p "${ROOT}/hadoop-client-modules/hadoop-client-api/target/hadoop-client-api-${VERSION}.jar" share/hadoop/client/
+    run cp -p "${ROOT}/hadoop-client-modules/hadoop-client-runtime/target/hadoop-client-runtime-${VERSION}.jar" share/hadoop/client/
+    run cp -p "${ROOT}/hadoop-client-modules/hadoop-client-minicluster/target/hadoop-client-minicluster-${VERSION}.jar" share/hadoop/client/
 
-run copy "${ROOT}/hadoop-tools/hadoop-tools-dist/target/hadoop-tools-dist-${VERSION}" .
-run copy "${ROOT}/hadoop-tools/hadoop-dynamometer/hadoop-dynamometer-dist/target/hadoop-dynamometer-dist-${VERSION}" .
+    run copy "${ROOT}/hadoop-tools/hadoop-tools-dist/target/hadoop-tools-dist-${VERSION}" .
+    run copy "${ROOT}/hadoop-tools/hadoop-dynamometer/hadoop-dynamometer-dist/target/hadoop-dynamometer-dist-${VERSION}" .
+fi
 
 
 echo

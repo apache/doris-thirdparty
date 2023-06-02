@@ -66,7 +66,6 @@ check_function_exists(strtoul HAVE_STRTOUL)
 
 # Require snappy.
 set(STORED_CMAKE_FIND_LIBRARY_SUFFIXES CMAKE_FIND_LIBRARY_SUFFIXES)
-set(CUSTOM_SNAPPY_PREFIX "${CUSTOM_THIRDPARTY_INSTALLED}")
 hadoop_set_find_shared_library_version("1")
 find_library(SNAPPY_LIBRARY
     NAMES snappy
