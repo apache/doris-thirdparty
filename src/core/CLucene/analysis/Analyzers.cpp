@@ -94,7 +94,7 @@ Token *SimpleTokenizer<char>::next(Token *token) {
             break;            // return 'em
     }
     buffer[length] = 0;
-    token->set(buffer, start, start + length);
+    token->setNoCopy(buffer, start, start + length);
 
     return token;
 };

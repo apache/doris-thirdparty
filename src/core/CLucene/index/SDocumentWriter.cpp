@@ -140,15 +140,18 @@ typename SDocumentsWriter<T>::ThreadState *SDocumentsWriter<T>::getThreadState(D
         threadState = _CLNEW ThreadState(this);
     }
 
-    ThreadState *state = threadState;
-    if (segment.empty())
+    if (segment.empty()) {
         segment = writer->newSegmentName();
-    state->init(doc, nextDocID);
+        threadState->init(doc, nextDocID);
+    }
+
+    threadState->docID = nextDocID;
+
     // Only increment nextDocID & numDocsInRAM on successful init
     nextDocID++;
     numDocsInRAM++;
 
-    return state;
+    return threadState;
 }
 
 template<typename T>
@@ -244,6 +247,7 @@ void SDocumentsWriter<T>::ThreadState::init(Document *doc, int32_t doc_id) {
 
         fp->docFields.values[fp->fieldCount++] = field;
     }
+    _parent->hasProx_ = _parent->fieldInfos->hasProx();
 }
 
 template<typename T>
@@ -313,7 +317,7 @@ void SDocumentsWriter<T>::ThreadState::FieldData::processField(Analyzer *sanalyz
                 threadState->numStoredFields++;
             }
 
-            docFieldsFinal.values[j] = NULL;
+            // docFieldsFinal.values[j] = NULL;
         }
     } catch (exception &ae) {
         throw ae;
@@ -440,10 +444,27 @@ void SDocumentsWriter<T>::ThreadState::writeProxBytes(const uint8_t *b, int32_t 
     }
 }
 
+template <typename T>
+inline bool eq(const std::basic_string_view<T>& a, const std::basic_string_view<T>& b) {
+    if constexpr (std::is_same_v<T, char>) {
+#if defined(__SSE2__)
+        if (a.size() != b.size()) {
+            return false;
+        }
+        return StringUtil::memequalSSE2Wide(a.data(), b.data(), a.size());
+#endif
+    }
+    return a == b;
+}
+
 template<typename T>
 void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
     const T *tokenText = token->termBuffer<T>();
     const int32_t tokenTextLen = token->termLength<T>();
+    std::basic_string_view<T> term(tokenText, tokenTextLen);
+    // if constexpr (std::is_same_v<T, char>) {
+    //     std::cout << term << std::endl;
+    // }
     uint32_t code = 0;
 
     // Compute hashcode
@@ -459,16 +480,14 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
     // Locate Posting in hash
     threadState->p = postingsHash[hashPos];
 
-    if (threadState->p != nullptr && !threadState->postingEquals(tokenText, tokenTextLen)) {
-        // Conflict: keep searching different locations in
-        // the hash table.
+    if (threadState->p != nullptr && !eq(threadState->p->term_, term)) {
         const uint32_t inc = ((code >> 8) + code) | 1;
         do {
             postingsHashConflicts++;
             code += inc;
             hashPos = code & postingsHashMask;
             threadState->p = postingsHash[hashPos];
-        } while (threadState->p != nullptr && !threadState->postingEquals(tokenText, tokenTextLen));
+        } while (threadState->p != nullptr && !eq(threadState->p->term_, term));
     }
 
     int32_t proxCode = 0;
@@ -530,6 +549,7 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
             threadState->scharPool->tUpto += textLen1;
 
             memcpy(textUpto, tokenText, tokenTextLen * sizeof(T));
+            threadState->p->term_ = std::basic_string_view<T>(textUpto, term.size());
             textUpto[tokenTextLen] = CLUCENE_END_OF_WORD;
 
             assert(postingsHash[hashPos] == NULL);
@@ -947,7 +967,7 @@ void SDocumentsWriter<T>::writeSegment(std::vector<std::string> &flushedFiles) {
     IndexOutput *freqOut = directory->createOutput((segmentName + ".frq").c_str());
     // TODO:add options in field index
     IndexOutput *proxOut = nullptr;
-    if (fieldInfos->hasProx()) {
+    if (hasProx_) {
         proxOut = directory->createOutput((segmentName + ".prx").c_str());
     }
 
@@ -1007,7 +1027,7 @@ void SDocumentsWriter<T>::writeSegment(std::vector<std::string> &flushedFiles) {
     // Record all files we have flushed
     flushedFiles.push_back(segmentFileName(IndexFileNames::FIELD_INFOS_EXTENSION));
     flushedFiles.push_back(segmentFileName(IndexFileNames::FREQ_EXTENSION));
-    if (fieldInfos->hasProx()) {
+    if (hasProx_) {
         flushedFiles.push_back(segmentFileName(IndexFileNames::PROX_EXTENSION));
     }
     flushedFiles.push_back(segmentFileName(IndexFileNames::TERMS_EXTENSION));
@@ -1129,7 +1149,7 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
 
         int64_t freqPointer = freqOut->getFilePointer();
         int64_t proxPointer = 0;
-        if (fieldInfos->hasProx()) {
+        if (hasProx_) {
             proxPointer = proxOut->getFilePointer();
         }
 
@@ -1154,7 +1174,7 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
         while (numToMerge > 0) {
 
             if ((++df % skipInterval) == 0) {
-                if (fieldInfos->hasProx()) {
+                if (hasProx_) {
                     freqOut->writeByte((char)CodeMode::kPfor);
                     freqOut->writeVInt(docDeltaBuffer.size());
                     // doc
@@ -1187,7 +1207,7 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
             // changing the format to match Lucene's segment
             // format.
 
-            if (fieldInfos->hasProx()) {
+            if (hasProx_) {
                 // position
                 for (int32_t j = 0; j < termDocFreq; j++) {
                     const int32_t code = prox.readVInt();
@@ -1235,7 +1255,7 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
 
         // Done merging this term
         {
-            if (fieldInfos->hasProx()) {
+            if (hasProx_) {
                 freqOut->writeByte((char)CodeMode::kDefault);
                 freqOut->writeVInt(docDeltaBuffer.size());
                 uint32_t lastDoc = 0;
