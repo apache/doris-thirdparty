@@ -340,7 +340,7 @@ private:
   static const int32_t CHAR_NUM_BYTE;
 
   // Holds free pool of Posting instances
-  CL_NS(util)::ObjectArray<Posting> postingsFreeListDW;
+  CL_NS(util)::ObjectArray<Posting*> postingsFreeListDW;
   int32_t postingsFreeCountDW;
   int32_t postingsAllocCountDW;
 
