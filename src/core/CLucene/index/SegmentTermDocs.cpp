@@ -162,6 +162,10 @@ int32_t SegmentTermDocs::read(int32_t *docs, int32_t *freqs, int32_t length) {
                 }
             }
         } else {
+            // NOTE: Pad arraySize from 511 to 512 for alignment since the first block size is 511, and add one more extra space to prevent overflow.
+            auto paddingSize = (arraySize / PFOR_BLOCK_SIZE) * PFOR_BLOCK_SIZE + PFOR_BLOCK_SIZE;
+            _docs.resize(paddingSize + 1);
+            _freqs.resize(paddingSize + 1);
             {
                 uint32_t SerializedSize = freqStream->readVInt();
                 std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
