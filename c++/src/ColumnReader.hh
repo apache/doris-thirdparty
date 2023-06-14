@@ -168,7 +168,7 @@ namespace orc {
                              const ReadPhase& readPhase = ReadPhase::ALL,
                              uint16_t* sel_rowid_idx = nullptr, size_t sel_size = 0) {
       rowBatch.isEncoded = false;
-      next(rowBatch, numValues, notNull, readPhase, sel_rowid_idx);
+      next(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
     }
 
     /**
@@ -184,6 +184,11 @@ namespace orc {
    */
   std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& stripe,
                                             bool useTightNumericVector = false);
+
+  void loadStringDicts(ColumnReader* columnReader,
+                       const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+                       std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+                       const StringDictFilter* stringDictFilter);
 }  // namespace orc
 
 #endif

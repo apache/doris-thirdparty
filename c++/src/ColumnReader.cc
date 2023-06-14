@@ -715,7 +715,14 @@ namespace orc {
   class StringDictionaryColumnReader : public ColumnReader {
    private:
     std::shared_ptr<StringDictionary> dictionary;
+    std::unordered_map<std::string, int64_t> dictValueToCode;
     std::unique_ptr<RleDecoder> rle;
+    StripeStreams& stripe;
+    //    std::string columnName;
+    bool dictionaryLoaded;
+    uint32_t dictSize;
+    std::unique_ptr<RleDecoder> lengthDecoder;
+    std::unique_ptr<SeekableInputStream> blobStream;
 
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
                       const ReadPhase& readPhase);
@@ -737,13 +744,19 @@ namespace orc {
 
     void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                         const ReadPhase& readPhase) override;
+
+    StringDictionary* loadDictionary();
   };
 
   StringDictionaryColumnReader::StringDictionaryColumnReader(const Type& type,
-                                                             StripeStreams& stripe)
-      : ColumnReader(type, stripe), dictionary(new StringDictionary(stripe.getMemoryPool())) {
+                                                             StripeStreams& _stripe)
+      : ColumnReader(type, _stripe),
+        dictionary(new StringDictionary(_stripe.getMemoryPool())),
+        stripe(_stripe),
+        dictionaryLoaded(false),
+        dictSize(0) {
     RleVersion rleVersion = convertRleVersion(stripe.getEncoding(columnId).kind());
-    uint32_t dictSize = stripe.getEncoding(columnId).dictionarysize();
+    dictSize = stripe.getEncoding(columnId).dictionarysize();
     std::unique_ptr<SeekableInputStream> stream =
         stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) {
@@ -754,26 +767,8 @@ namespace orc {
     if (dictSize > 0 && stream == nullptr) {
       throw ParseError("LENGTH stream not found in StringDictionaryColumn");
     }
-    std::unique_ptr<RleDecoder> lengthDecoder =
-        createRleDecoder(std::move(stream), false, rleVersion, memoryPool, metrics);
-    dictionary->dictionaryOffset.resize(dictSize + 1);
-    int64_t* lengthArray = dictionary->dictionaryOffset.data();
-    lengthDecoder->next(lengthArray + 1, dictSize, nullptr);
-    lengthArray[0] = 0;
-    for (uint32_t i = 1; i < dictSize + 1; ++i) {
-      if (lengthArray[i] < 0) {
-        throw ParseError("Negative dictionary entry length");
-      }
-      lengthArray[i] += lengthArray[i - 1];
-    }
-    int64_t blobSize = lengthArray[dictSize];
-    dictionary->dictionaryBlob.resize(static_cast<uint64_t>(blobSize));
-    std::unique_ptr<SeekableInputStream> blobStream =
-        stripe.getStream(columnId, proto::Stream_Kind_DICTIONARY_DATA, false);
-    if (blobSize > 0 && blobStream == nullptr) {
-      throw ParseError("DICTIONARY_DATA stream not found in StringDictionaryColumn");
-    }
-    readFully(dictionary->dictionaryBlob.data(), blobSize, blobStream.get());
+    lengthDecoder = createRleDecoder(std::move(stream), false, rleVersion, memoryPool, metrics);
+    blobStream = stripe.getStream(columnId, proto::Stream_Kind_DICTIONARY_DATA, false);
   }
 
   StringDictionaryColumnReader::~StringDictionaryColumnReader() {
@@ -802,11 +797,12 @@ namespace orc {
     // update the notNull from the parent class
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     StringVectorBatch& byteBatch = dynamic_cast<StringVectorBatch&>(rowBatch);
-    char* blob = dictionary->dictionaryBlob.data();
-    int64_t* dictionaryOffsets = dictionary->dictionaryOffset.data();
     char** outputStarts = byteBatch.data.data();
     int64_t* outputLengths = byteBatch.length.data();
     rle->next(outputLengths, numValues, notNull);
+    loadDictionary();
+    char* blob = dictionary->dictionaryBlob.data();
+    int64_t* dictionaryOffsets = dictionary->dictionaryOffset.data();
     uint64_t dictionaryCount = dictionary->dictionaryOffset.size() - 1;
     if (notNull) {
       for (uint64_t i = 0; i < numValues; ++i) {
@@ -840,12 +836,14 @@ namespace orc {
     // update the notNull from the parent class
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     StringVectorBatch& byteBatch = dynamic_cast<StringVectorBatch&>(rowBatch);
-    char* blob = dictionary->dictionaryBlob.data();
-    int64_t* dictionaryOffsets = dictionary->dictionaryOffset.data();
     char** outputStarts = byteBatch.data.data();
     int64_t* outputLengths = byteBatch.length.data();
     std::unique_ptr<int64_t[]> tmpOutputLengths(new int64_t[byteBatch.length.size()]);
     rle->next(tmpOutputLengths.get(), numValues, notNull);
+    loadDictionary();
+    char* blob = dictionary->dictionaryBlob.data();
+    int64_t* dictionaryOffsets = dictionary->dictionaryOffset.data();
+
     uint64_t dictionaryCount = dictionary->dictionaryOffset.size() - 1;
     if (notNull) {
       for (size_t i = 0; i < numValues; i++) {
@@ -892,12 +890,40 @@ namespace orc {
 
     // Length buffer is reused to save dictionary entry ids
     rle->next(batch.index.data(), numValues, notNull);
+    loadDictionary();
+    batch.dictionary = this->dictionary;
   }
 
   void StringDictionaryColumnReader::seekToRowGroup(
       std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
     ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
+  }
+
+  StringDictionary* StringDictionaryColumnReader::loadDictionary() {
+    if (dictionaryLoaded) {
+      return dictionary.get();
+    }
+    dictionary->dictionaryOffset.resize(dictSize + 1);
+    int64_t* lengthArray = dictionary->dictionaryOffset.data();
+    lengthDecoder->next(lengthArray + 1, dictSize, nullptr);
+    lengthArray[0] = 0;
+    for (uint32_t i = 1; i < dictSize + 1; ++i) {
+      if (lengthArray[i] < 0) {
+        throw ParseError("Negative dictionary entry length");
+      }
+      lengthArray[i] += lengthArray[i - 1];
+    }
+    int64_t blobSize = lengthArray[dictSize];
+    // For insert_many_strings_overflow
+    static constexpr int MAX_STRINGS_OVERFLOW_SIZE = 128;
+    dictionary->dictionaryBlob.resize(static_cast<uint64_t>(blobSize) + MAX_STRINGS_OVERFLOW_SIZE);
+    if (blobSize > 0 && blobStream == nullptr) {
+      throw ParseError("DICTIONARY_DATA stream not found in StringDictionaryColumn");
+    }
+    readFully(dictionary->dictionaryBlob.data(), blobSize, blobStream.get());
+    dictionaryLoaded = true;
+    return dictionary.get();
   }
 
   class StringDirectColumnReader : public ColumnReader {
@@ -1082,6 +1108,10 @@ namespace orc {
     void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                         const ReadPhase& readPhase) override;
 
+    void loadStringDicts(const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+                         std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+                         const StringDictFilter* stringDictFilter);
+
    private:
     template <bool encoded>
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
@@ -1159,6 +1189,22 @@ namespace orc {
     for (auto& ptr : children) {
       if (shouldProcessChild(ptr->getType().getReaderCategory(), readPhase)) {
         ptr->seekToRowGroup(positions, readPhase);
+      }
+    }
+  }
+
+  void StructColumnReader::loadStringDicts(
+      const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+      std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+      const StringDictFilter* stringDictFilter) {
+    for (auto& ptr : children) {
+      auto iter = columnIdToNameMap.find(ptr->getType().getColumnId());
+      if (iter == columnIdToNameMap.end()) {
+        continue;
+      }
+      auto* stringDictionaryColumnReader = dynamic_cast<StringDictionaryColumnReader*>(ptr.get());
+      if (stringDictionaryColumnReader != nullptr) {
+        (*columnNameToDictMap)[iter->second] = stringDictionaryColumnReader->loadDictionary();
       }
     }
   }
@@ -2294,6 +2340,14 @@ namespace orc {
       default:
         throw NotImplementedYet("buildReader unhandled type");
     }
+  }
+
+  void loadStringDicts(ColumnReader* columnReader,
+                       const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+                       std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+                       const StringDictFilter* stringDictFilter) {
+    auto* structColumnReader = static_cast<StructColumnReader*>(columnReader);
+    structColumnReader->loadStringDicts(columnIdToNameMap, columnNameToDictMap, stringDictFilter);
   }
 
 }  // namespace orc

@@ -247,7 +247,8 @@ namespace orc {
   }
 
   RowReaderImpl::RowReaderImpl(std::shared_ptr<FileContents> _contents,
-                               const RowReaderOptions& opts, const ORCFilter* _filter)
+                               const RowReaderOptions& opts, const ORCFilter* _filter,
+                               const StringDictFilter* _stringDictFilter)
       : localTimezone(getLocalTimezone()),
         contents(_contents),
         throwOnHive11DecimalOverflow(opts.getThrowOnHive11DecimalOverflow()),
@@ -256,7 +257,8 @@ namespace orc {
         firstRowOfStripe(*contents->pool, 0),
         enableEncodedBlock(opts.getEnableLazyDecoding()),
         readerTimezone(getTimezoneByName(opts.getTimezoneName())),
-        filter(_filter) {
+        filter(_filter),
+        stringDictFilter(_stringDictFilter) {
     uint64_t numberOfStripes;
     numberOfStripes = static_cast<uint64_t>(footer->stripes_size());
     currentStripe = numberOfStripes;
@@ -893,18 +895,20 @@ namespace orc {
     }
   }
 
-  std::unique_ptr<RowReader> ReaderImpl::createRowReader(const ORCFilter* filter) const {
+  std::unique_ptr<RowReader> ReaderImpl::createRowReader(
+      const ORCFilter* filter, const StringDictFilter* stringDictFilter) const {
     RowReaderOptions defaultOpts;
-    return createRowReader(defaultOpts, filter);
+    return createRowReader(defaultOpts, filter, stringDictFilter);
   }
 
-  std::unique_ptr<RowReader> ReaderImpl::createRowReader(const RowReaderOptions& opts,
-                                                         const ORCFilter* filter) const {
+  std::unique_ptr<RowReader> ReaderImpl::createRowReader(
+      const RowReaderOptions& opts, const ORCFilter* filter,
+      const StringDictFilter* stringDictFilter) const {
     if (opts.getSearchArgument() && !isMetadataLoaded) {
       // load stripe statistics for PPD
       readMetadata();
     }
-    return std::make_unique<RowReaderImpl>(contents, opts, filter);
+    return std::make_unique<RowReaderImpl>(contents, opts, filter, stringDictFilter);
   }
 
   uint64_t maxStreamsForType(const proto::Type& type) {
@@ -1101,7 +1105,7 @@ namespace orc {
       return;
     }
 
-    do {
+    while (currentStripe < lastStripe) {
       currentStripeInfo = footer->stripes(static_cast<int>(currentStripe));
       uint64_t fileLength = contents->stream->getLength();
       if (currentStripeInfo.offset() + currentStripeInfo.indexlength() +
@@ -1144,21 +1148,16 @@ namespace orc {
           loadStripeIndex();
           // select row groups to read in the current stripe
           sargsApplier->pickRowGroups(rowsInCurrentStripe, rowIndexes, bloomFilterIndex);
-          if (sargsApplier->hasSelectedFrom(currentRowInStripe)) {
-            // current stripe has at least one row group matching the predicate
-            break;
-          }
-          isStripeNeeded = false;
+          isStripeNeeded = sargsApplier->hasSelectedFrom(currentRowInStripe);
         }
         if (!isStripeNeeded) {
           // advance to next stripe when current stripe has no matching rows
           currentStripe += 1;
           currentRowInStripe = 0;
+          continue;
         }
       }
-    } while (sargsApplier && currentStripe < lastStripe);
 
-    if (currentStripe < lastStripe) {
       // get writer timezone info from stripe footer to help understand timestamp values.
       const Timezone& writerTimezone = currentStripeFooter.has_writertimezone()
                                            ? getTimezoneByName(currentStripeFooter.writertimezone())
@@ -1167,6 +1166,35 @@ namespace orc {
                                       currentStripeInfo.offset(), *contents->stream, writerTimezone,
                                       readerTimezone);
       reader = buildReader(*contents->schema, stripeStreams, useTightNumericVector);
+
+      if (stringDictFilter != nullptr) {
+        std::list<std::string> dictFilterColumnNames;
+        std::unique_ptr<StripeInformation> currentStripeInformation(new StripeInformationImpl(
+            currentStripeInfo.offset(), currentStripeInfo.indexlength(),
+            currentStripeInfo.datalength(), currentStripeInfo.footerlength(),
+            currentStripeInfo.numberofrows(), contents->stream.get(), *contents->pool,
+            contents->compression, contents->blockSize, contents->readerMetrics));
+        stringDictFilter->fillDictFilterColumnNames(std::move(currentStripeInformation),
+                                                    dictFilterColumnNames);
+        std::unordered_map<uint64_t, std::string> columnIdToNameMap;
+        for (auto& dictFilterColumnName : dictFilterColumnNames) {
+          columnIdToNameMap[nameTypeMap[dictFilterColumnName]->getColumnId()] =
+              dictFilterColumnName;
+        }
+        std::unordered_map<std::string, StringDictionary*> columnIdToDictMap;
+        loadStringDicts(reader.get(), columnIdToNameMap, &columnIdToDictMap, stringDictFilter);
+        if (!columnIdToNameMap.empty()) {
+          bool isStripeFiltered;
+          stringDictFilter->onStringDictsLoaded(columnIdToDictMap, &isStripeFiltered);
+          if (isStripeFiltered) {
+            reader.reset();
+            // advance to next stripe when current stripe has no matching rows
+            currentStripe += 1;
+            currentRowInStripe = 0;
+            continue;
+          }
+        }
+      }
 
       if (sargsApplier) {
         // move to the 1st selected row group when PPD is enabled.
@@ -1179,7 +1207,9 @@ namespace orc {
                          readPhase);
         }
       }
-    } else {
+      break;
+    }
+    if (currentStripe >= lastStripe) {
       // All remaining stripes are skipped.
       markEndOfFile();
     }

@@ -49,9 +49,19 @@ namespace orc {
       return *this;
     }
 
+    const ORCFilter* getStringDictFilter() const {
+      return filter;
+    }
+
+    ReaderContext& setStringDictFilter(const StringDictFilter* _stringDictFilter) {
+      this->stringDictFilter = _stringDictFilter;
+      return *this;
+    }
+
    private:
     std::unordered_set<int> filterColumnIds;
     const ORCFilter* filter;
+    const StringDictFilter* stringDictFilter;
   };
 
   /**
@@ -202,6 +212,8 @@ namespace orc {
     std::map<std::string, Type*> nameTypeMap;
     std::vector<std::string> columns;
 
+    const StringDictFilter* stringDictFilter;
+
     // load stripe index if not done so
     void loadStripeIndex();
 
@@ -257,7 +269,8 @@ namespace orc {
      * @param options options for reading
      */
     RowReaderImpl(std::shared_ptr<FileContents> contents, const RowReaderOptions& options,
-                  const ORCFilter* filter = nullptr);
+                  const ORCFilter* filter = nullptr,
+                  const StringDictFilter* stringDictFilter = nullptr);
 
     // Select the columns from the options object
     const std::vector<bool> getSelectedColumns() const override;
@@ -357,10 +370,13 @@ namespace orc {
 
     std::unique_ptr<StripeStatistics> getStripeStatistics(uint64_t stripeIndex) const override;
 
-    std::unique_ptr<RowReader> createRowReader(const ORCFilter* filter = nullptr) const override;
+    std::unique_ptr<RowReader> createRowReader(
+        const ORCFilter* filter = nullptr,
+        const StringDictFilter* stringDictFilter = nullptr) const override;
 
-    std::unique_ptr<RowReader> createRowReader(const RowReaderOptions& options,
-                                               const ORCFilter* filter = nullptr) const override;
+    std::unique_ptr<RowReader> createRowReader(
+        const RowReaderOptions& options, const ORCFilter* filter = nullptr,
+        const StringDictFilter* stringDictFilter = nullptr) const override;
 
     uint64_t getContentLength() const override;
     uint64_t getStripeStatisticsLength() const override;
