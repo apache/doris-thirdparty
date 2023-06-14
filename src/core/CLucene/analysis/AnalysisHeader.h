@@ -10,6 +10,7 @@
 #include "CLucene/index/Payload.h"
 #include "CLucene/util/VoidList.h"
 #include "CLucene/LuceneThreads.h"
+#include "CLucene/config/repl_tchar.h"
 
 CL_CLASS_DEF(util,Reader)
 CL_CLASS_DEF(util,IReader)
@@ -220,6 +221,13 @@ template <>
 inline size_t Token::termLength<char>(){
     if ( _termTextLen == -1 ) //it was invalidated by growBuffer
         _termTextLen = strlen((char*)_buffer);
+    return _termTextLen;
+};
+
+template <>
+inline size_t Token::termLength<TCHAR>(){
+    if ( _termTextLen == -1 ) //it was invalidated by growBuffer
+        _termTextLen = _tcslen((TCHAR*)_buffer);
     return _termTextLen;
 };
 

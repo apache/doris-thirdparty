@@ -36,13 +36,6 @@ TokenStream* Analyzer::reusableTokenStream(const TCHAR* fieldName, CL_NS(util)::
     return tokenStream(fieldName, reader);
 }
 
-template <>
-size_t Token::termLength<TCHAR>(){
-    if ( _termTextLen == -1 ) //it was invalidated by growBuffer
-        _termTextLen = _tcslen((TCHAR*)_buffer);
-    return _termTextLen;
-};
-
 ///Compares the Token for their order
 class OrderCompare:LUCENE_BASE, public CL_NS(util)::Compare::_base //<Token*>
 {
