@@ -43,13 +43,6 @@ size_t Token::termLength<TCHAR>(){
     return _termTextLen;
 };
 
-template <>
-size_t Token::termLength<char>(){
-    if ( _termTextLen == -1 ) //it was invalidated by growBuffer
-        _termTextLen = strlen((char*)_buffer);
-    return _termTextLen;
-};
-
 ///Compares the Token for their order
 class OrderCompare:LUCENE_BASE, public CL_NS(util)::Compare::_base //<Token*>
 {

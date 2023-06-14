@@ -53,6 +53,7 @@ private:
     std::vector<uint32_t> freqBuffer;
     std::ostream* infoStream{};
     int64_t ramBufferSize;
+    bool hasProx_ = false;
 
 public:
     class FieldMergeState;
@@ -68,6 +69,7 @@ public:
         int32_t lastDocID;   // Last docID where this term occurred
         int32_t lastDocCode; // Code for prior doc
         int32_t lastPosition;// Last position where this term occurred
+        std::basic_string_view<T> term_;
     };
 
     /* Stores norms, buffered in RAM, until they are flushed
@@ -671,7 +673,6 @@ public:
         this->threadState = nullptr;
         this->infoStream = nullptr;
         fieldInfos = _CLNEW FieldInfos();
-
 
         this->closed = this->flushPending = false;
         postingsFreeCountDW = postingsAllocCountDW = 0;

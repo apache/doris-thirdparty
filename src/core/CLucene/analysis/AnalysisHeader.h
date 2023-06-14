@@ -68,6 +68,7 @@ private:
     size_t bufferTextLen;
     void *_buffer;       ///< the text of the term
     int32_t _termTextLen;///< the length of termText. Internal use only
+    bool isNoCopy = false;
 
     CL_NS(index)::Payload *payload;
 
@@ -84,7 +85,10 @@ public:
         bufferTextLen = 0;
     };
     virtual ~Token() {
-        free(_buffer);
+        if (!isNoCopy) {
+            free(_buffer);
+            _buffer = nullptr;
+        }
         _CLLDELETE(payload);
     };
 
@@ -97,6 +101,15 @@ public:
         _type = (typ == NULL ? getDefaultType() : typ);
         positionIncrement = 1;
         setText(text, end - start);
+    };
+
+    template<typename T>
+    void setNoCopy(const T *text, const int32_t start, const int32_t end, const TCHAR *typ = NULL) {
+        _startOffset = start;
+        _endOffset = end;
+        _type = (typ == NULL ? getDefaultType() : typ);
+        positionIncrement = 1;
+        setTextNoCopy(text, end - start);
     };
 
     size_t bufferLength() const {
@@ -132,12 +145,12 @@ public:
     int32_t getPositionIncrement() const { return positionIncrement; }
 
     template<typename T>
-    T *termBuffer() const {
+    inline T *termBuffer() const {
         return (T *) _buffer;
     }
 
     template<typename T>
-    size_t termLength();//< Length of the the termBuffer. See #termBuffer
+    inline size_t termLength();//< Length of the the termBuffer. See #termBuffer
 
     void resetTermTextLen() {
         _termTextLen = -1;
@@ -150,6 +163,13 @@ public:
         memcpy(_buffer, text, l*sizeof(T));
         _termTextLen = l;
         ((T *) _buffer)[_termTextLen] = 0;//make sure null terminated
+    };
+
+    template<typename T>
+    void setTextNoCopy(const T *text, int32_t l) {
+        _termTextLen = l;
+        _buffer = (void*)text;
+        isNoCopy = true;
     };
 
     int32_t startOffset() const {
@@ -194,6 +214,13 @@ public:
         // startOffset = endOffset = 0;
         // type = DEFAULT_TYPE;
     }
+};
+
+template <>
+inline size_t Token::termLength<char>(){
+    if ( _termTextLen == -1 ) //it was invalidated by growBuffer
+        _termTextLen = strlen((char*)_buffer);
+    return _termTextLen;
 };
 
 class CLUCENE_EXPORT TokenStream {

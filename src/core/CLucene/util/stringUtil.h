@@ -111,4 +111,98 @@ public:
     return (char)LUT[c];
 }
 
+class StringUtil {
+public:
+    template <typename T>
+    static inline T unaligned_load(const void* address) {
+        T res {};
+        memcpy(&res, address, sizeof(res));
+        return res;
+    }
+
+#if defined(__SSE2__)
+
+    static inline bool compareSSE2(const char* p1, const char* p2) {
+        return 0xFFFF == _mm_movemask_epi8(_mm_cmpeq_epi8(
+                                 _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1)),
+                                 _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2))));
+    }
+
+    static inline bool compareSSE2x4(const char* p1, const char* p2) {
+        return 0xFFFF ==
+               _mm_movemask_epi8(_mm_and_si128(
+                       _mm_and_si128(
+                               _mm_cmpeq_epi8(
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1)),
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2))),
+                               _mm_cmpeq_epi8(
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1) + 1),
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2) + 1))),
+                       _mm_and_si128(
+                               _mm_cmpeq_epi8(
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1) + 2),
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2) + 2)),
+                               _mm_cmpeq_epi8(
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1) + 3),
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2) +
+                                                       3)))));
+    }
+
+    static inline bool memequalSSE2Wide(const char* p1, const char* p2, size_t size) {
+        if (size <= 16) {
+            if (size >= 8) {
+                /// Chunks of [8,16] bytes.
+                return unaligned_load<uint64_t>(p1) == unaligned_load<uint64_t>(p2) &&
+                       unaligned_load<uint64_t>(p1 + size - 8) ==
+                               unaligned_load<uint64_t>(p2 + size - 8);
+            } else if (size >= 4) {
+                /// Chunks of [4,7] bytes.
+                return unaligned_load<uint32_t>(p1) == unaligned_load<uint32_t>(p2) &&
+                       unaligned_load<uint32_t>(p1 + size - 4) ==
+                               unaligned_load<uint32_t>(p2 + size - 4);
+            } else if (size >= 2) {
+                /// Chunks of [2,3] bytes.
+                return unaligned_load<uint16_t>(p1) == unaligned_load<uint16_t>(p2) &&
+                       unaligned_load<uint16_t>(p1 + size - 2) ==
+                               unaligned_load<uint16_t>(p2 + size - 2);
+            } else if (size >= 1) {
+                /// A single byte.
+                return *p1 == *p2;
+            }
+            return true;
+        }
+
+        while (size >= 64) {
+            if (compareSSE2x4(p1, p2)) {
+                p1 += 64;
+                p2 += 64;
+                size -= 64;
+            } else {
+                return false;
+            }
+        }
+
+        switch (size / 16) {
+        case 3:
+            if (!compareSSE2(p1 + 32, p2 + 32)) {
+                return false;
+            }
+            [[fallthrough]];
+        case 2:
+            if (!compareSSE2(p1 + 16, p2 + 16)) {
+                return false;
+            }
+            [[fallthrough]];
+        case 1:
+            if (!compareSSE2(p1, p2)) {
+                return false;
+            }
+        }
+
+        return compareSSE2(p1 + size - 16, p2 + size - 16);
+    }
+
+#endif
+};
+
 #endif//_lucene_util__stringutil_H

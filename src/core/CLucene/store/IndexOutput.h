@@ -117,7 +117,7 @@ public:
 /** Base implementation class for buffered {@link IndexOutput}. */
 class CLUCENE_EXPORT BufferedIndexOutput : public IndexOutput{
 public:
-	LUCENE_STATIC_CONSTANT(int32_t, BUFFER_SIZE=16384);
+	LUCENE_STATIC_CONSTANT(int32_t, BUFFER_SIZE=65536);
 private:
 	uint8_t* buffer;
 	int64_t bufferStart;			  // position in file of buffer
