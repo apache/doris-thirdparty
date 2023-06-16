@@ -242,7 +242,7 @@ class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
   SegmentsToOptimizeType* segmentsToOptimize;           // used by optimize to note those needing optimization
 
 
-  CL_NS(store)::LuceneLock* writeLock;
+  CL_NS(store)::LuceneLock* writeLock = nullptr;
 
   void init(CL_NS(store)::Directory* d, CL_NS(analysis)::Analyzer* a, bool closeDir, IndexDeletionPolicy* deletionPolicy, bool autoCommit);
   void init(CL_NS(store)::Directory* d, CL_NS(analysis)::Analyzer* a, bool create, bool closeDir, IndexDeletionPolicy* deletionPolicy, bool autoCommit);

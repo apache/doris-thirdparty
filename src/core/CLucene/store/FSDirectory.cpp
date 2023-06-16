@@ -379,7 +379,7 @@ void FSDirectory::FSIndexInput::readInternal(uint8_t* b, const int32_t len) {
 
     if ( lockFactory == NULL ) {
     	if ( disableLocks ) {
-    		lockFactory = NoLockFactory::getNoLockFactory();
+				lockFactory = _CLNEW NoLockFactory();
     	} else {
     		lockFactory = _CLNEW FSLockFactory( directory.c_str(), this->filemode );
     		doClearLockID = true;

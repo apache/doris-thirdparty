@@ -70,29 +70,12 @@ void SingleInstanceLockFactory::clearLock( const char* lockName )
 	}
 }
 
-
-NoLockFactory* NoLockFactory::singleton = NULL;
-NoLock* NoLockFactory::singletonLock = NULL;
-
 void NoLockFactory::_shutdown(){
-	_CLDELETE(NoLockFactory::singleton);
-	_CLDELETE(NoLockFactory::singletonLock);
-}
-
-NoLockFactory* NoLockFactory::getNoLockFactory()
-{
-	if ( singleton == NULL ) {
-		singleton = _CLNEW NoLockFactory();
-	}
-	return singleton;
 }
 
 LuceneLock* NoLockFactory::makeLock( const char* /*lockName*/ )
 {
-	if ( singletonLock == NULL ) {
-		singletonLock = _CLNEW NoLock();
-	}
-	return singletonLock;
+	return _CLNEW NoLock();
 }
 
 void NoLockFactory::clearLock( const char* /*lockName*/ )
