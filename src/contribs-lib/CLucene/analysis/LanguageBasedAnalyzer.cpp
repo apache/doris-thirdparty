@@ -33,7 +33,13 @@ LanguageBasedAnalyzer::LanguageBasedAnalyzer(const TCHAR *language, bool stem, A
     this->mode = mode;
 }
 
-LanguageBasedAnalyzer::~LanguageBasedAnalyzer() = default;
+LanguageBasedAnalyzer::~LanguageBasedAnalyzer() {
+    if (streams) {
+        _CLDELETE(streams->filteredTokenStream);
+        _CLDELETE(streams);
+    }
+    _CLLDELETE(stopSet);
+}
 
 void LanguageBasedAnalyzer::setStopWords(const TCHAR** stopwords) {
     StopFilter::fillStopTable(stopSet, stopwords);
@@ -58,8 +64,6 @@ void LanguageBasedAnalyzer::initDict(const std::string &dictPath) {
 }
 
 TokenStream *LanguageBasedAnalyzer::reusableTokenStream(const TCHAR * /*fieldName*/, CL_NS(util)::Reader *reader) {
-    SavedStreams* streams = reinterpret_cast<SavedStreams*>(getPreviousTokenStream());
-
     if (streams == nullptr) {
         streams = _CLNEW SavedStreams();
         if (_tcscmp(lang, _T("cjk")) == 0) {
@@ -89,7 +93,6 @@ TokenStream *LanguageBasedAnalyzer::reusableTokenStream(const TCHAR * /*fieldNam
             streams->filteredTokenStream =
                     _CLNEW StopFilter(streams->filteredTokenStream, true, stopSet);
         }
-        setPreviousTokenStream(streams);
     } else {
         streams->tokenStream->reset(reader);
     }
