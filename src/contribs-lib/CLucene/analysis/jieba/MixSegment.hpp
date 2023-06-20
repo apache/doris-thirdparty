@@ -15,8 +15,9 @@ class MixSegment: public SegmentTagged {
     : mpSeg_(mpSegDict, userDict), 
       hmmSeg_(hmmSegDict) {
   }
-  MixSegment(const DictTrie* dictTrie, const HMMModel* model) 
+  MixSegment(const DictTrie* dictTrie, const HMMModel* model, const string& stopWordPath = "") 
     : mpSeg_(dictTrie), hmmSeg_(model) {
+    LoadStopWordDict(stopWordPath);
   }
   ~MixSegment() {
   }
@@ -27,7 +28,9 @@ class MixSegment: public SegmentTagged {
   void Cut(const string& sentence, vector<string>& words, bool hmm) const {
     vector<Word> tmp;
     Cut(sentence, tmp, hmm);
-    GetStringsFromWords(tmp, words);
+    GetStringsFromWords(tmp, words, [this](const std::string& word) {
+      return stopWords_.count(word);
+    });
   }
   void Cut(const string& sentence, vector<Word>& words, bool hmm = true) const {
     PreFilter pre_filter(symbols_, sentence);
@@ -97,10 +100,23 @@ class MixSegment: public SegmentTagged {
     return tagger_.LookupTag(str, (SegmentTagged &)*this);
   }
 
+  void LoadStopWordDict(const string& filePath) {
+    ifstream ifs(filePath.c_str());
+    if (ifs.is_open()) {
+      string line;
+      while (getline(ifs, line)) {
+        stopWords_.insert(line);
+      }
+      assert(stopWords_.size());
+    }
+  }
+
  private:
   MPSegment mpSeg_;
   HMMSegment hmmSeg_;
   PosTagger tagger_;
+
+  unordered_set<string> stopWords_;
 
 }; // class MixSegment
 

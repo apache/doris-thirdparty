@@ -222,6 +222,15 @@ inline void GetStringsFromWords(const vector<Word>& words, vector<string>& strs)
   }
 }
 
+inline void GetStringsFromWords(const vector<Word>& words, vector<string>& strs, const std::function<bool(const std::string& word)>& cb) {
+  strs.clear();
+  for (size_t i = 0; i < words.size(); ++i) {
+    if (!cb(words[i].word)) {
+      strs.push_back(words[i].word);
+    }
+  }
+}
+
 } // namespace cppjieba
 
 #endif // CPPJIEBA_UNICODE_H

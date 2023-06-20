@@ -16,9 +16,10 @@ class FullSegment: public SegmentBase {
     dictTrie_ = new DictTrie(dictPath);
     isNeedDestroy_ = true;
   }
-  FullSegment(const DictTrie* dictTrie)
+  FullSegment(const DictTrie* dictTrie, const string& stopWordPath = "")
     : dictTrie_(dictTrie), isNeedDestroy_(false) {
     assert(dictTrie_);
+    LoadStopWordDict(stopWordPath);
   }
   ~FullSegment() {
     if (isNeedDestroy_) {
@@ -29,7 +30,9 @@ class FullSegment: public SegmentBase {
         vector<string>& words) const {
     vector<Word> tmp;
     Cut(sentence, tmp);
-    GetStringsFromWords(tmp, words);
+    GetStringsFromWords(tmp, words, [this](const std::string& word) {
+      return stopWords_.count(word);
+    });
   }
   void Cut(const string& sentence, 
         vector<Word>& words) const {
@@ -84,9 +87,24 @@ class FullSegment: public SegmentBase {
       uIdx++;
     }
   }
+
+  void LoadStopWordDict(const string& filePath) {
+    ifstream ifs(filePath.c_str());
+    if (ifs.is_open()) {
+      string line;
+      while (getline(ifs, line)) {
+        stopWords_.insert(line);
+      }
+      assert(stopWords_.size());
+    }
+  }
+
  private:
   const DictTrie* dictTrie_;
   bool isNeedDestroy_;
+
+  unordered_set<string> stopWords_;
+
 };
 }
 

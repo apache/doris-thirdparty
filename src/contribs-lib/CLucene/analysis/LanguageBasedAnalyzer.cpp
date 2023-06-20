@@ -72,8 +72,7 @@ TokenStream *LanguageBasedAnalyzer::reusableTokenStream(const TCHAR * /*fieldNam
                     _CLNEW StopFilter(streams->tokenStream, true, stopSet);
         } else if (_tcscmp(lang, _T("chinese")) == 0) {
             streams->tokenStream = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader, mode);
-            streams->filteredTokenStream =
-                    _CLNEW StopFilter(streams->tokenStream, true, stopSet);
+            streams->filteredTokenStream = streams->tokenStream;
         } else {
             CL_NS(util)::BufferedReader* bufferedReader = reader->__asBufferedReader();
 
