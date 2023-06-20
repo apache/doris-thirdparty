@@ -17,8 +17,8 @@ class Jieba {
       model_(model_path),
       mp_seg_(&dict_trie_),
       hmm_seg_(&model_),
-      mix_seg_(&dict_trie_, &model_),
-      full_seg_(&dict_trie_),
+      mix_seg_(&dict_trie_, &model_, stopWordPath),
+      full_seg_(&dict_trie_, stopWordPath),
       query_seg_(&dict_trie_, &model_),
       extractor(&dict_trie_, &model_, idfPath, stopWordPath) {
   }
