@@ -48,6 +48,9 @@ public:
     void initDict(const std::string &dictPath);
     TokenStream *tokenStream(const TCHAR *fieldName, CL_NS(util)::Reader *reader) override;
     TokenStream *reusableTokenStream(const TCHAR * /*fieldName*/, CL_NS(util)::Reader *reader) override;
+
+public:
+    SavedStreams* streams = nullptr;
 };
 
 CL_NS_END
