@@ -66,7 +66,7 @@ CL_NS_DEF2(analysis,standard)
   /* otherMatches is a condition (possibly compound) under which a character
   ** that's not an ALNUM or UNDERSCORE can be considered not to break the
   ** span.  Callers should pass false if only ALNUM/UNDERSCORE are acceptable. */
-  #define CONSUME_WORD                  _CONSUME_AS_LONG_AS(ALNUM || UNDERSCORE)
+  #define CONSUME_WORD                  _CONSUME_AS_LONG_AS((ALNUM || UNDERSCORE) && !_CJK)
   
   /*
   ** Consume CJK characters
@@ -150,7 +150,7 @@ CL_NS_DEF2(analysis,standard)
         continue;
       } else if (SPACE) {
         continue;
-      } else if (ALPHA || UNDERSCORE) {
+      } else if ((ALPHA || UNDERSCORE) && !_CJK) {
         tokenStart = rdPos;
         t = ReadAlphaNum(ch,t);
         if ( t != NULL) return t;
@@ -265,6 +265,9 @@ CL_NS_DEF2(analysis,standard)
 		  int ch = prev;
 
 		  CONSUME_WORD;
+                  if (_CJK) {
+                      unReadChar();
+                  }
 		  if (!EOS && str.len < LUCENE_MAX_WORD_LEN-1 ) { //still have space for 1 more character?
 			  switch(ch) { /* What follows the first alphanum segment? */
 				  case '.':
@@ -293,7 +296,7 @@ CL_NS_DEF2(analysis,standard)
 		  str.appendChar(prev);
 		  int ch = prev;
 
-		  CONSUME_CJK;
+		  //CONSUME_CJK;
 	  }
 	  return setToken(t,&str,CL_NS2(analysis,standard)::CJK);
   }
