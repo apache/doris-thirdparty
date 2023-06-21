@@ -8,7 +8,7 @@ CL_NS_USE(analysis)
 CL_NS_USE(util)
 
 ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m) : Tokenizer(reader), mode(m) {
-    buffer[0] = 0;
+    memset(buffer, 0, LUCENE_MAX_WORD_LEN + 1);
 }
 
 void ChineseTokenizer::init(const std::string &dictPath) {
