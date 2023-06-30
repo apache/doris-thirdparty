@@ -15,6 +15,7 @@
 #include "_FieldInfos.h"
 #include "_TermInfosWriter.h"
 #include <assert.h>
+#include <iostream>
 
 CL_NS_USE(util)
 CL_NS_USE(store)
@@ -176,20 +177,64 @@ void STermInfosWriter<T>::close() {
 
 template <typename T>
 void STermInfosWriter<T>::writeTerm(int32_t fieldNumber, const T *termText, int32_t termTextLength) {
-    int32_t start = 0;
-    const int32_t limit = termTextLength < lastTermTextLength ? termTextLength : lastTermTextLength;
-    while (start < limit) {
-        if (termText[start] != lastTermText.values[start])
-            break;
-        start++;
+    if constexpr (std::is_same_v<T, char>) {
+        std::string_view utf8Str(termText, termTextLength);
+        int32_t utf8Length = 0;
+        {
+            size_t i = 0;
+            for (; i < utf8Str.size();) {
+                int32_t n = StringUtil::utf8_byte_count(utf8Str[i]);
+                i += n;
+                utf8Length++;
+            }
+            assert(i == utf8Str.size());
+        }
+
+        int32_t start = 0;
+        int32_t utf8Start = 0;
+        int32_t limit = termTextLength < lastTermTextLength ? termTextLength : lastTermTextLength;
+        auto prefixCompare = [this, &utf8Str, &termText](int32_t& start, int32_t& utf8Start, int32_t limit) {
+            while (start < limit) {
+                int32_t n = StringUtil::utf8_byte_count(utf8Str[start]);
+                for (int32_t j = 0; j < n; j++) {
+                    int32_t cur = start + j;
+                    if (termText[cur] != lastTermText.values[cur]) {
+                        return;
+                    }
+                }
+                start += n;
+                utf8Start++;
+            }
+        };
+
+        prefixCompare(start, utf8Start, limit);
+        assert(start <= termTextLength);
+        assert(utf8Start <= utf8Length);
+        int32_t length = termTextLength - start;
+        utf8Length -= utf8Start;
+
+        // std::cout << "term: " << utf8Str << ", utf8Start: " << utf8Start << ", utf8Length: " << utf8Length << ", length: " << length << std::endl;
+
+        output->writeVInt(utf8Start);
+        output->writeVInt(utf8Length);
+        output->writeU8SChars(termText + start, length);
+        output->writeVInt(fieldNumber);
+    } else {
+        int32_t start = 0;
+        const int32_t limit = termTextLength < lastTermTextLength ? termTextLength : lastTermTextLength;
+        while (start < limit) {
+            if (termText[start] != lastTermText.values[start])
+                break;
+            start++;
+        }
+
+        int32_t length = termTextLength - start;
+
+        output->writeVInt(start);                    // write shared prefix length
+        output->writeVInt(length);                   // write delta length
+        output->writeSChars(termText + start, length);// write delta chars
+        output->writeVInt(fieldNumber);              // write field num
     }
-
-    int32_t length = termTextLength - start;
-
-    output->writeVInt(start);                    // write shared prefix length
-    output->writeVInt(length);                   // write delta length
-    output->writeSChars(termText + start, length);// write delta chars
-    output->writeVInt(fieldNumber);              // write field num
 }
 
 template class STermInfosWriter<char>;

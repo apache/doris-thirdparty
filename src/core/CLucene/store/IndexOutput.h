@@ -83,6 +83,8 @@ public:
 	void writeChars(const TCHAR* s, const int32_t length);
     template<typename T>
     void writeSChars(const T* s, int32_t length);
+	
+	void writeU8SChars(const char* s, const int32_t length);
 
     /** Closes this stream to further operations. */
 	virtual void close() = 0;
