@@ -739,8 +739,8 @@ int32_t SDocumentsWriter<T>::ThreadState::comparePostings(Posting *p1, Posting *
     const T *pos1 = scharPool->buffers[p1->textStart >> CHAR_BLOCK_SHIFT] + (p1->textStart & CHAR_BLOCK_MASK);
     const T *pos2 = scharPool->buffers[p2->textStart >> CHAR_BLOCK_SHIFT] + (p2->textStart & CHAR_BLOCK_MASK);
     while (true) {
-        const T c1 = *pos1++;
-        const T c2 = *pos2++;
+        const auto c1 = static_cast<typename std::make_unsigned<T>::type>(*pos1++);
+        const auto c2 = static_cast<typename std::make_unsigned<T>::type>(*pos2++);
         if (c1 < c2)
             if (CLUCENE_END_OF_WORD == c2)
                 return 1;
@@ -753,8 +753,8 @@ int32_t SDocumentsWriter<T>::ThreadState::comparePostings(Posting *p1, Posting *
                 return 1;
         else if (CLUCENE_END_OF_WORD == c1)
             return 0;
+        }
     }
-}
 
 template<typename T>
 void SDocumentsWriter<T>::ThreadState::quickSort(Posting **postings, int32_t lo, int32_t hi) {
