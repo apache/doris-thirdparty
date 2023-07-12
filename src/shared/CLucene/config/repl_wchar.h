@@ -30,6 +30,7 @@ CLUCENE_SHARED_EXPORT size_t lucene_wcsntoutf8 (char *,  const wchar_t *, size_t
 #define lucene_wcstoutf8string(str,strlen) str
 #else
 CLUCENE_SHARED_EXPORT std::string lucene_wcstoutf8string(const wchar_t* str, size_t strlen);
+CLUCENE_SHARED_EXPORT std::wstring lucene_utf8stows(const std::string& s);
 #endif
 CLUCENE_SHARED_EXPORT size_t lucene_utf8charlen(const unsigned char p); //< the number of characters that this first utf8 character will expect
 
