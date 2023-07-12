@@ -88,12 +88,12 @@ ENDIF()
 file(GLOB_RECURSE HEADERS ${clucene-contribs-lib_SOURCE_DIR}/*.h)
 
 #add extra capabilities
-find_package(ZLIB)
-IF ( NOT ZLIB_FOUND )
-  MESSAGE ( FATAL "ZLib not found" )
-ENDIF ( NOT ZLIB_FOUND )
-INCLUDE_DIRECTORIES( ${ZLIB_INCLUDE_DIR} )
-SET ( clucene_contrib_extra_libs "${clucene_contrib_extra_libs}" ${ZLIB_LIBRARIES} )
+#find_package(ZLIB)
+#IF ( NOT ZLIB_FOUND )
+#  MESSAGE ( FATAL "ZLib not found" )
+#ENDIF ( NOT ZLIB_FOUND )
+#INCLUDE_DIRECTORIES( ${ZLIB_INCLUDE_DIR} )
+#SET ( clucene_contrib_extra_libs "${clucene_contrib_extra_libs}" ${ZLIB_LIBRARIES} )
 
 find_package(Iconv)
 #find_package(Strigi)
