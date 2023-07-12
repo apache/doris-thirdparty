@@ -213,8 +213,6 @@ void testSimpleJiebaAllModeTokenizer(CuTest* tc) {
     ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
-    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("我")) == 0);
-    CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("来到")) == 0);
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("北京")) == 0);
@@ -226,6 +224,43 @@ void testSimpleJiebaAllModeTokenizer(CuTest* tc) {
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("华大")) == 0);
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("大学")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) == NULL);
+    _CLDELETE(ts);
+}
+
+void testSimpleJiebaDefaultModeTokenizer2(CuTest* tc) {
+    LanguageBasedAnalyzer a;
+    const char* field_value_data = "中国的科技发展在世界上处于领先";
+    auto stringReader =
+            _CLNEW lucene::util::SStringReader<char>(field_value_data, strlen(field_value_data), false);
+    TokenStream* ts;
+    Token t;
+
+    //test with chinese
+    a.setLanguage(_T("chinese"));
+    a.setStem(false);
+    a.setMode(lucene::analysis::AnalyzerMode::Default);
+    a.initDict(get_dict_path());
+    ts = a.tokenStream(_T("contents"), stringReader);
+
+    /*char tmp[255] = {};
+    while(ts->next(&t) != nullptr) {
+        lucene_wcstoutf8(tmp, t.termBuffer<TCHAR>(), 254);
+        std::cout << tmp << std::endl;
+    }*/
+
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("中国")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("科技")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("发展")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("在世界上")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("处于")) == 0);
+    CLUCENE_ASSERT(ts->next(&t) != NULL);
+    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("领先")) == 0);
     CLUCENE_ASSERT(ts->next(&t) == NULL);
     _CLDELETE(ts);
 }
@@ -245,8 +280,6 @@ void testSimpleJiebaDefaultModeTokenizer(CuTest* tc) {
     a.initDict(get_dict_path());
     ts = a.tokenStream(_T("contents"), stringReader);
 
-    CLUCENE_ASSERT(ts->next(&t) != NULL);
-    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("我")) == 0);
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("来到")) == 0);
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -330,13 +363,9 @@ void testSimpleJiebaTokenizer2(CuTest* tc) {
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("人民")) == 0);
     CLUCENE_ASSERT(ts->next(&t) != NULL);
-    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("可以")) == 0);
-    CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("得到")) == 0);
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("更")) == 0);
-    CLUCENE_ASSERT(ts->next(&t) != NULL);
-    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("多")) == 0);
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("实惠")) == 0);
     CLUCENE_ASSERT(ts->next(&t) == NULL);
@@ -379,8 +408,6 @@ void testSimpleJiebaTokenizer4(CuTest* tc) {
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("人民")) == 0);
-    CLUCENE_ASSERT(ts->next(&t) != NULL);
-    CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("，")) == 0);
     CLUCENE_ASSERT(ts->next(&t) != NULL);
     CLUCENE_ASSERT(_tcscmp(t.termBuffer<TCHAR>(), _T("银行")) == 0);
     CLUCENE_ASSERT(ts->next(&t) == NULL);
@@ -1280,6 +1307,7 @@ CuSuite *testchinese(void) {
     SUITE_ADD_TEST(suite, testJiebaMatchHuge);
     SUITE_ADD_TEST(suite, testSimpleJiebaAllModeTokenizer);
     SUITE_ADD_TEST(suite, testSimpleJiebaDefaultModeTokenizer);
+    SUITE_ADD_TEST(suite, testSimpleJiebaDefaultModeTokenizer2);
     SUITE_ADD_TEST(suite, testSimpleJiebaSearchModeTokenizer);
     SUITE_ADD_TEST(suite, testSimpleJiebaAllModeTokenizer2);
     SUITE_ADD_TEST(suite, testSimpleJiebaSearchModeTokenizer2);
