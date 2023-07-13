@@ -258,4 +258,18 @@ std::string lucene_wcstoutf8string(const wchar_t* str, size_t strlen){
 
   return result;
 }
+
+std::wstring lucene_utf8stows(const std::string& s) {
+  std::wstring ws;
+  size_t size = 0;
+  for (size_t i = 0; i < s.size();) {
+    size_t n = lucene_utf8charlen(s[i]);
+    size++;
+    i += n;
+  }
+  ws.resize(size);
+  lucene_utf8towcs(ws.data(), s.data(), s.length());
+  return ws;
+}
+
 #endif
