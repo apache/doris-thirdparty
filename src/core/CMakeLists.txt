@@ -69,6 +69,7 @@ SET(clucene_core_Files
     ./CLucene/analysis/standard/StandardAnalyzer.cpp
     ./CLucene/analysis/standard/StandardFilter.cpp
     ./CLucene/analysis/standard/StandardTokenizer.cpp
+    ./CLucene/analysis/standard95/StandardTokenizerImpl.cpp
     ./CLucene/analysis/Analyzers.cpp
     ./CLucene/analysis/AnalysisHeader.cpp
     ./CLucene/store/MMapInput.cpp

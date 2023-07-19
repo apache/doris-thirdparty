@@ -37,6 +37,7 @@ SET(test_files ./tests.cpp
         ./queryParser/TestMultiFieldQueryParser.cpp
         ./analysis/TestAnalysis.cpp
         ./analysis/TestAnalyzers.cpp
+        ./analysis/TestStandard95.cpp
         ./debug/TestError.cpp
         ./document/TestDateTools.cpp
         ./document/TestDocument.cpp

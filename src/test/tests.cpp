@@ -13,6 +13,7 @@ unittest tests[] = {
 //        {"reuters", testreuters},
         {"analysis", testanalysis},
         {"analyzers", testanalyzers},
+        {"analysis", teststandard95},
         {"document", testdocument},
         {"field", testField},
 //        {"numbertools", testNumberTools},
