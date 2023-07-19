@@ -209,7 +209,7 @@ class DictTrie {
 
   void LoadDict(const string& filePath) {
     ifstream ifs(filePath.c_str());
-    XCHECK(ifs.is_open()) << "open " << filePath << " failed.";
+    XCHECK(ifs.is_open()) << "open " << filePath << " failed. " << strerror(errno);
     string line;
     vector<string> buf;
 
