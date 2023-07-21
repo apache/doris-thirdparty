@@ -742,6 +742,10 @@
                 <goals><goal>cmake-compile</goal></goals>
                 <configuration>
                   <source>${basedir}/src</source>
+                  <env>
+                    <CFLAGS>-Wno-implicit-function-declaration</CFLAGS>
+                    <CXXFLAGS>-Wno-implicit-function-declaration</CXXFLAGS>
+                  </env>
                   <vars>
                     <GENERATED_JAVAH>${project.build.directory}/native/javah</GENERATED_JAVAH>
                     <JVM_ARCH_DATA_MODEL>${sun.arch.data.model}</JVM_ARCH_DATA_MODEL>
