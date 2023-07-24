@@ -19,7 +19,8 @@ static std::unordered_set<std::string_view> stop_words = {
 
 class StandardTokenizer : public Tokenizer {
  public:
-  StandardTokenizer(lucene::util::Reader* in) : Tokenizer(in) {
+  StandardTokenizer(lucene::util::Reader* in, bool useStopWords)
+      : Tokenizer(in), useStopWords_(useStopWords) {
     scanner_ = std::make_unique<StandardTokenizerImpl>(in);
   }
 
@@ -39,7 +40,7 @@ class StandardTokenizer : public Tokenizer {
           std::transform(term.begin(), term.end(),
                          const_cast<char*>(term.data()),
                          [](char c) { return to_lower(c); });
-          if (stop_words.count(term)) {
+          if (useStopWords_ && stop_words.count(term)) {
             skippedPositions++;
             continue;
           }
@@ -62,6 +63,8 @@ class StandardTokenizer : public Tokenizer {
   };
 
  private:
+  bool useStopWords_ = true;
+
   std::unique_ptr<StandardTokenizerImpl> scanner_;
 
   int32_t skippedPositions = 0;

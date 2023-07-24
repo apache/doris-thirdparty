@@ -36,13 +36,18 @@ class FullSegment: public SegmentBase {
   }
   void Cut(const string& sentence, 
         vector<Word>& words) const {
-    PreFilter pre_filter(symbols_, sentence);
+    PreFilter pre_filter(symbols_, sentence, true);
     PreFilter::Range range;
     vector<WordRange> wrs;
     wrs.reserve(sentence.size()/2);
     while (pre_filter.HasNext()) {
       range = pre_filter.Next();
-      Cut(range.begin, range.end, wrs);
+      if (range.type == PreFilter::Language::CHINESE) {
+        Cut(range.begin, range.end, wrs);
+      } else {
+
+        CutAlnum(range.begin, range.end, wrs);
+      }
     }
     words.clear();
     words.reserve(wrs.size());
@@ -86,6 +91,46 @@ class FullSegment: public SegmentBase {
       }
       uIdx++;
     }
+  }
+
+  void CutAlnum(RuneStrArray::const_iterator begin,
+                RuneStrArray::const_iterator end,
+                vector<WordRange>& res) const {
+    WordRange wr(begin, end - 1);
+    res.push_back(wr);
+
+    auto cursor = begin;
+    while (cursor != end) {
+      if (PreFilter::IsNumber(cursor->rune)) {
+        FindRange(PreFilter::IsNumber, cursor, begin, end, res);
+        continue;
+      }
+      if (PreFilter::IsLetter(cursor->rune)) {
+        FindRange(PreFilter::IsLetter, cursor, begin, end, res);
+        continue;
+      }
+      cursor++;
+    }
+  }
+
+  template <typename Predicate>
+  void FindRange(Predicate pred, RuneStrArray::const_iterator& cursor,
+                 RuneStrArray::const_iterator begin,
+                 RuneStrArray::const_iterator end,
+                 vector<WordRange>& res) const {
+    auto wrBegin = cursor;
+    while (cursor != end && pred(cursor->rune)) {
+      cursor++;
+    }
+    auto wrEnd = cursor;
+    if (wrBegin == begin && wrEnd == end) {
+      return;
+    }
+    if (wrEnd - wrBegin <= 1) {
+      return;
+    }
+    WordRange wr(wrBegin, wrEnd - 1);
+    res.push_back(wr);
   }
 
   void LoadStopWordDict(const string& filePath) {
