@@ -206,7 +206,7 @@ public:
 
     static inline int32_t utf8_byte_count(uint8_t c) {
         static constexpr int32_t LUT[256] = {
-            2,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+            1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
             1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
             1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
             1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
@@ -222,6 +222,46 @@ public:
             2,  2,  2,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,
             3,  3,  4,  4,  4,  4,  4,  4,  4,  4,  -1, -1, -1, -1, -1, -1, -1};
         return LUT[c];
+    }
+
+    static inline bool is_valid_codepoint(uint32_t code_point) {
+        return code_point < 0xD800u ||
+               (code_point >= 0xE000u && code_point <= 0x10FFFFu);
+    }
+
+    static inline int32_t validate_utf8(const std::string_view& str) {
+        int32_t bytes_in_char = 0;
+        int32_t surplus_bytes = 0;
+        uint32_t codepoint = 0;
+        for (uint8_t c : str) {
+        if (bytes_in_char == 0) {
+            if ((c & 0x80) == 0) {
+                codepoint = c;
+                continue;
+            } else if ((c & 0xE0) == 0xC0) {
+                codepoint = c & 0x1F;
+                bytes_in_char = 1;
+            } else if ((c & 0xF0) == 0xE0) {
+                codepoint = c & 0x0F;
+                bytes_in_char = 2;
+            } else if ((c & 0xF8) == 0xF0) {
+                codepoint = c & 0x07;
+                bytes_in_char = 3;
+            } else {
+                return -1;
+            }
+            surplus_bytes = 1;
+        } else {
+            if ((c & 0xC0) != 0x80) return -1;
+            codepoint = (codepoint << 6) | (c & 0x3F);
+            if (!is_valid_codepoint(codepoint)) {
+                return -1;
+            }
+            bytes_in_char--;
+            surplus_bytes++;
+        }
+        }
+        return bytes_in_char == 0 ? 0 : surplus_bytes;
     }
 };
 

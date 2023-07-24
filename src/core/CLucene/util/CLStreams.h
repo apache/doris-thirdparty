@@ -7,6 +7,10 @@
 #ifndef _lucene_util_CLStreams_
 #define _lucene_util_CLStreams_
 
+#include <algorithm>
+
+#include "CLucene/debug/error.h"
+
 CL_NS_DEF(util)
 
 class IReader {
@@ -85,6 +89,9 @@ public:
 	 *			if an error occurs.
      **/
 	virtual int32_t read(const void ** start, int32_t min, int32_t max) = 0;
+    virtual int32_t readCopy(void* start, int32_t off, int32_t len) {
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::read");
+    }
     /**
      * @brief Skip @p ntoskip items.
      *
@@ -225,6 +232,16 @@ public:
         pos += r;
         return r;
     }
+
+    int32_t readCopy(void* start, int32_t off, int32_t len) override {
+        if (len == 0) return 0;
+        if (pos >= m_size) return -1;
+        int32_t n = std::min(static_cast<int32_t>(m_size - pos), len);
+        std::copy_n(value + pos, n, static_cast<T*>(start) + off);
+        pos += n;
+        return n;
+    }
+
     int64_t position() override {
         return pos;
     }

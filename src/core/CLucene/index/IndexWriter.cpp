@@ -23,6 +23,7 @@
 #include "CLucene/util/Array.h"
 #include "CLucene/util/PriorityQueue.h"
 #include "CLucene/index/CodeMode.h"
+#include "CLucene/analysis/standard95/StandardAnalyzer.h"
 #include "MergePolicy.h"
 #include "MergeScheduler.h"
 #include "SDocumentWriter.h"
@@ -285,6 +286,8 @@ void IndexWriter::init(Directory *d, Analyzer *a, const bool create, const bool 
         }
         if (analyzer != nullptr) {
             if (auto *sa = dynamic_cast<SimpleAnalyzer<char> *>(analyzer); sa != nullptr) {
+                docWriter = _CLNEW SDocumentsWriter<char>(directory, this);
+            } else if (auto *sa = dynamic_cast<standard95::StandardAnalyzer*>(analyzer); sa != nullptr) {
                 docWriter = _CLNEW SDocumentsWriter<char>(directory, this);
             } else {
                 docWriter = _CLNEW DocumentsWriter(directory, this);
