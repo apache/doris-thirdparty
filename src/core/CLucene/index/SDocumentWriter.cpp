@@ -471,7 +471,7 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
     //int32_t downto = tokenTextLen;
     int32_t upto = 0;
     //while (downto > 0)
-    while (upto < tokenTextLen)
+    while (upto < tokenTextLen && tokenText[upto] != CLUCENE_END_OF_WORD)
         code = (code * 31) + tokenText[upto++];
     uint32_t hashPos = code & postingsHashMask;
 
