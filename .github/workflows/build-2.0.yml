@@ -18,7 +18,8 @@
 name: Build (2.0)
 
 on:
-  push
+  schedule:
+    - cron: '*/30 * * * *'
 
 jobs:
   prerelease:
