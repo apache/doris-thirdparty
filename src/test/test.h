@@ -80,6 +80,7 @@ CuSuite *testSpanQueries(void);
 CuSuite *testStringBuffer(void);
 CuSuite *testTermVectorsReader(void);
 CuSuite *teststandard95(void);
+CuSuite *testStrConvert(void);
 
 #ifdef TEST_CONTRIB_LIBS
 //CuSuite *testGermanAnalyzer(void);

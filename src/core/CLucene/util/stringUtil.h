@@ -11,6 +11,8 @@
 #include <sse2neon.h>
 #endif
 
+#include <cstring>
+
 template <typename T>
 const T* LUCENE_BLANK_SSTRING();
 
@@ -234,34 +236,61 @@ public:
         int32_t surplus_bytes = 0;
         uint32_t codepoint = 0;
         for (uint8_t c : str) {
-        if (bytes_in_char == 0) {
-            if ((c & 0x80) == 0) {
-                codepoint = c;
-                continue;
-            } else if ((c & 0xE0) == 0xC0) {
-                codepoint = c & 0x1F;
-                bytes_in_char = 1;
-            } else if ((c & 0xF0) == 0xE0) {
-                codepoint = c & 0x0F;
-                bytes_in_char = 2;
-            } else if ((c & 0xF8) == 0xF0) {
-                codepoint = c & 0x07;
-                bytes_in_char = 3;
+            if (bytes_in_char == 0) {
+                if ((c & 0x80) == 0) {
+                    codepoint = c;
+                    continue;
+                } else if ((c & 0xE0) == 0xC0) {
+                    codepoint = c & 0x1F;
+                    bytes_in_char = 1;
+                } else if ((c & 0xF0) == 0xE0) {
+                    codepoint = c & 0x0F;
+                    bytes_in_char = 2;
+                } else if ((c & 0xF8) == 0xF0) {
+                    codepoint = c & 0x07;
+                    bytes_in_char = 3;
+                } else {
+                    return -1;
+                }
+                surplus_bytes = 1;
             } else {
-                return -1;
+                if ((c & 0xC0) != 0x80) return -1;
+                codepoint = (codepoint << 6) | (c & 0x3F);
+                if (!is_valid_codepoint(codepoint)) {
+                    return -1;
+                }
+                bytes_in_char--;
+                surplus_bytes++;
             }
-            surplus_bytes = 1;
-        } else {
-            if ((c & 0xC0) != 0x80) return -1;
-            codepoint = (codepoint << 6) | (c & 0x3F);
-            if (!is_valid_codepoint(codepoint)) {
-                return -1;
-            }
-            bytes_in_char--;
-            surplus_bytes++;
-        }
         }
         return bytes_in_char == 0 ? 0 : surplus_bytes;
+    }
+
+    // utf8: 1-4 char = 1 wchar_t, invalid utf8: 1 char = 1 wchar_t
+    static inline std::wstring string_to_wstring(const std::string_view& utf8_str) {
+        std::wstring wstr;
+        wstr.reserve(utf8_str.size());
+        size_t i = 0;
+        while (i < utf8_str.size()) {
+            wchar_t wc = utf8_str[i];
+            int32_t n = utf8_byte_count(utf8_str[i]);
+            if ((n >= 1 && n <= 4) &&
+                (i + n <= utf8_str.size()) &&
+                validate_utf8(std::string_view(utf8_str.data() + i, n)) == 0) {
+                if (n == 2) {
+                    wc = ((utf8_str[i] & 0x1F) << 6) | (utf8_str[i + 1] & 0x3F);
+                } else if (n == 3) {
+                    wc = ((utf8_str[i] & 0x0F) << 12) | ((utf8_str[i + 1] & 0x3F) << 6) | (utf8_str[i + 2] & 0x3F);
+                } else if (n == 4) {
+                    wc = ((utf8_str[i] & 0x07) << 18) | ((utf8_str[i + 1] & 0x3F) << 12) | ((utf8_str[i + 2] & 0x3F) << 6) | (utf8_str[i + 3] & 0x3F);
+                }
+                i += n;
+            } else {
+                i += 1;
+            }
+            wstr.push_back(wc);
+        }
+        return wstr;
     }
 };
 

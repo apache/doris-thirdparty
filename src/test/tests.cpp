@@ -46,6 +46,7 @@ unittest tests[] = {
 //        {"spanqueries", testSpanQueries},
 //        {"stringbuffer", testStringBuffer},
 //        {"termvectorsreader", testTermVectorsReader},
+          {"strconvert", testStrConvert},      
 #ifdef TEST_CONTRIB_LIBS
         {"chinese", testchinese},
 #endif
