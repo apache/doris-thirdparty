@@ -267,7 +267,7 @@ std::wstring lucene_utf8stows(const std::string_view& s) {
     size++;
     i += n;
   }
-  ws.resize(size);
+  ws.resize(size + 1);
   lucene_utf8towcs(ws.data(), s.data(), s.length());
   return ws;
 }
