@@ -186,19 +186,6 @@ CL_NS_DEF(store)
       writeBytes((const uint8_t*)s, length);
   }
 
-  void IndexOutput::writeU8SChars(const char* s, const int32_t length) {
-    if ( length < 0 )
-      _CLTHROWA(CL_ERR_IllegalArgument, "IO Argument Error. Value must be a positive value.");
-
-    for (int32_t i = 0; i < length;) {
-      auto* chars = (const uint8_t*)s + i;
-      int32_t n = StringUtil::utf8_byte_count(*chars);
-      assert(n >= 1 && n <= 4);
-      writeBytes(chars, (n > 2 ? 3 : n));
-      i += n;
-    }
-  }
-
   void IndexOutput::writeChars(const TCHAR* s, const int32_t length){
     if ( length < 0 )
       _CLTHROWA(CL_ERR_IllegalArgument, "IO Argument Error. Value must be a positive value.");
