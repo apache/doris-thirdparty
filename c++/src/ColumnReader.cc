@@ -1666,7 +1666,7 @@ namespace orc {
       }
     }
 
-    void readInt64(int64_t& value, int32_t currentScale) {
+    void readInt64(int64_t& value) {
       value = 0;
       size_t offset = 0;
       while (true) {
@@ -1679,6 +1679,9 @@ namespace orc {
         }
       }
       value = unZigZag(static_cast<uint64_t>(value));
+    }
+
+    void scaleInt64(int64_t& value, int32_t currentScale) {
       if (scale > currentScale && static_cast<uint64_t>(scale - currentScale) <= MAX_PRECISION_64) {
         value *= POWERS_OF_TEN[scale - currentScale];
       } else if (scale < currentScale &&
@@ -1791,12 +1794,14 @@ namespace orc {
     if (notNull) {
       for (size_t i = 0; i < numValues; ++i) {
         if (notNull[i]) {
-          readInt64(values[i], static_cast<int32_t>(scaleBuffer[i]));
+          readInt64(values[i]);
+          scaleInt64(values[i], static_cast<int32_t>(scaleBuffer[i]));
         }
       }
     } else {
       for (size_t i = 0; i < numValues; ++i) {
-        readInt64(values[i], static_cast<int32_t>(scaleBuffer[i]));
+        readInt64(values[i]);
+        scaleInt64(values[i], static_cast<int32_t>(scaleBuffer[i]));
       }
     }
   }
@@ -1822,8 +1827,8 @@ namespace orc {
           skipInternal(countNonNullRowsInRange(notNull, previousIdx, idx), readPhase);
         }
         if (notNull[idx]) {
-          readInt64(values[idx], static_cast<int32_t>(scaleBuffer[idx]));
-          ;
+          readInt64(values[idx]);
+          scaleInt64(values[idx], static_cast<int32_t>(scaleBuffer[idx]));
         }
         previousIdx = idx + 1;
       }
@@ -1834,7 +1839,8 @@ namespace orc {
         if (idx - previousIdx > 0) {
           skipInternal(idx - previousIdx, readPhase);
         }
-        readInt64(values[idx], static_cast<int32_t>(scaleBuffer[idx]));
+        readInt64(values[idx]);
+        scaleInt64(values[idx], static_cast<int32_t>(scaleBuffer[idx]));
         previousIdx = idx + 1;
       }
       skipInternal(numValues - previousIdx, readPhase);
@@ -1879,7 +1885,7 @@ namespace orc {
               const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override;
 
    private:
-    void readInt128(Int128& value, int32_t currentScale) {
+    void readInt128(Int128& value) {
       value = 0;
       Int128 work;
       uint32_t offset = 0;
@@ -1895,7 +1901,6 @@ namespace orc {
         }
       }
       unZigZagInt128(value);
-      scaleInt128(value, static_cast<uint32_t>(scale), static_cast<uint32_t>(currentScale));
     }
 
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
@@ -1939,12 +1944,15 @@ namespace orc {
     if (notNull) {
       for (size_t i = 0; i < numValues; ++i) {
         if (notNull[i]) {
-          readInt128(values[i], static_cast<int32_t>(scaleBuffer[i]));
+          readInt128(values[i]);
+          scaleInt128(values[i], static_cast<uint32_t>(scale),
+                      static_cast<int32_t>(scaleBuffer[i]));
         }
       }
     } else {
       for (size_t i = 0; i < numValues; ++i) {
-        readInt128(values[i], static_cast<int32_t>(scaleBuffer[i]));
+        readInt128(values[i]);
+        scaleInt128(values[i], static_cast<uint32_t>(scale), static_cast<int32_t>(scaleBuffer[i]));
       }
     }
   }
@@ -1971,7 +1979,9 @@ namespace orc {
           skipInternal(countNonNullRowsInRange(notNull, previousIdx, idx), readPhase);
         }
         if (notNull[idx]) {
-          readInt128(values[idx], static_cast<int32_t>(scaleBuffer[idx]));
+          readInt128(values[idx]);
+          scaleInt128(values[idx], static_cast<uint32_t>(scale),
+                      static_cast<int32_t>(scaleBuffer[idx]));
         }
         previousIdx = idx + 1;
       }
@@ -1982,7 +1992,7 @@ namespace orc {
         if (idx - previousIdx > 0) {
           skipInternal(idx - previousIdx, readPhase);
         }
-        readInt128(values[idx], static_cast<int32_t>(scaleBuffer[idx]));
+        readInt128(values[idx]);
         previousIdx = idx + 1;
       }
       skipInternal(numValues - previousIdx, readPhase);
@@ -2048,7 +2058,7 @@ namespace orc {
     /**
      * Read an Int128 from the stream and correct it to the desired scale.
      */
-    bool readInt128(Int128& value, int32_t currentScale) {
+    bool readInt128(Int128& value) {
       // -/+ 99999999999999999999999999999999999999
       static const Int128 MIN_VALUE(-0x4b3b4ca85a86c47b, 0xf675ddc000000001);
       static const Int128 MAX_VALUE(0x4b3b4ca85a86c47a, 0x098a223fffffffff);
@@ -2078,7 +2088,6 @@ namespace orc {
         return result;
       }
       unZigZagInt128(value);
-      scaleInt128(value, static_cast<uint32_t>(scale), static_cast<uint32_t>(currentScale));
       return value >= MIN_VALUE && value <= MAX_VALUE;
     }
 
@@ -2134,7 +2143,7 @@ namespace orc {
     if (notNull) {
       for (size_t i = 0; i < numValues; ++i) {
         if (notNull[i]) {
-          if (!readInt128(values[i], static_cast<int32_t>(scaleBuffer[i]))) {
+          if (!readInt128(values[i])) {
             if (throwOnOverflow) {
               throw ParseError("Hive 0.11 decimal was more than 38 digits.");
             } else {
@@ -2143,12 +2152,15 @@ namespace orc {
                            << "replaced by NULL.\n";
               notNull[i] = false;
             }
+          } else {
+            scaleInt128(values[i], static_cast<uint32_t>(scale),
+                        static_cast<int32_t>(scaleBuffer[i]));
           }
         }
       }
     } else {
       for (size_t i = 0; i < numValues; ++i) {
-        if (!readInt128(values[i], static_cast<int32_t>(scaleBuffer[i]))) {
+        if (!readInt128(values[i])) {
           if (throwOnOverflow) {
             throw ParseError("Hive 0.11 decimal was more than 38 digits.");
           } else {
@@ -2158,6 +2170,9 @@ namespace orc {
             batch.hasNulls = true;
             batch.notNull[i] = false;
           }
+        } else {
+          scaleInt128(values[i], static_cast<uint32_t>(scale),
+                      static_cast<int32_t>(scaleBuffer[i]));
         }
       }
     }
@@ -2187,7 +2202,7 @@ namespace orc {
           skipInternal(countNonNullRowsInRange(notNull, previousIdx, idx), readPhase);
         }
         if (notNull[idx]) {
-          if (!readInt128(values[idx], static_cast<int32_t>(scaleBuffer[idx]))) {
+          if (!readInt128(values[idx])) {
             if (throwOnOverflow) {
               throw ParseError("Hive 0.11 decimal was more than 38 digits.");
             } else {
@@ -2196,6 +2211,9 @@ namespace orc {
                            << "replaced by NULL.\n";
               notNull[idx] = false;
             }
+          } else {
+            scaleInt128(values[idx], static_cast<uint32_t>(scale),
+                        static_cast<int32_t>(scaleBuffer[idx]));
           }
         }
         previousIdx = idx + 1;
@@ -2207,7 +2225,7 @@ namespace orc {
         if (idx - previousIdx > 0) {
           skipInternal(idx - previousIdx, readPhase);
         }
-        if (!readInt128(values[idx], static_cast<int32_t>(scaleBuffer[idx]))) {
+        if (!readInt128(values[idx])) {
           if (throwOnOverflow) {
             throw ParseError("Hive 0.11 decimal was more than 38 digits.");
           } else {
@@ -2217,6 +2235,9 @@ namespace orc {
             batch.hasNulls = true;
             batch.notNull[idx] = false;
           }
+        } else {
+          scaleInt128(values[idx], static_cast<uint32_t>(scale),
+                      static_cast<int32_t>(scaleBuffer[idx]));
         }
         previousIdx = idx + 1;
       }
