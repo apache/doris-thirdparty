@@ -177,6 +177,11 @@ namespace orc {
      */
     virtual void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                                 const ReadPhase& readPhase = ReadPhase::ALL);
+
+    virtual void loadStringDicts(
+        const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+        std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+        const StringDictFilter* stringDictFilter) {}
   };
 
   /**
