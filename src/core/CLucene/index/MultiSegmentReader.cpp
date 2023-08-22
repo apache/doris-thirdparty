@@ -18,6 +18,8 @@
 #include "MultiReader.h"
 #include "_MultiSegmentReader.h"
 
+#include <algorithm>
+
 CL_NS_USE(document)
 CL_NS_USE(store)
 CL_NS_USE(util)
@@ -609,6 +611,32 @@ int32_t MultiTermDocs::read(int32_t* docs, int32_t* freqs, int32_t length) {
 	      docs[i] += b;
 	    return end;
 	  }
+	}
+}
+
+bool MultiTermDocs::readRange(DocRange* docRange) {
+	while (true) {
+		while (current == NULL) {
+			if (pointer < subReaders->length) {
+				base = starts[pointer];
+				current = termDocs(pointer++);
+			} else {
+				return false;
+			}
+		}
+		if (!current->readRange(docRange)) {
+			current = nullptr;
+		} else {
+			if (docRange->type_ == DocRangeType::kMany) {
+				auto begin = docRange->doc_many.begin();
+				auto end = docRange->doc_many.begin() + docRange->doc_many_size_;
+				std::transform(begin, end, begin, [this](int32_t val) { return val + base; });
+			} else if (docRange->type_ == DocRangeType::kRange) {
+				docRange->doc_range.first += base;
+				docRange->doc_range.second += base;
+			}
+			return true;
+		}
 	}
 }
 
