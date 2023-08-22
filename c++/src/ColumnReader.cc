@@ -729,6 +729,7 @@ namespace orc {
     void nextInternalWithFilter(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
                                 const ReadPhase& readPhase, uint16_t* sel_rowid_idx,
                                 size_t sel_size);
+    StringDictionary* loadDictionary();
 
    public:
     StringDictionaryColumnReader(const Type& type, StripeStreams& stipe);
@@ -745,7 +746,9 @@ namespace orc {
     void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                         const ReadPhase& readPhase) override;
 
-    StringDictionary* loadDictionary();
+    void loadStringDicts(const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+                         std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+                         const StringDictFilter* stringDictFilter) override;
   };
 
   StringDictionaryColumnReader::StringDictionaryColumnReader(const Type& type,
@@ -898,6 +901,17 @@ namespace orc {
       std::unordered_map<uint64_t, PositionProvider>& positions, const ReadPhase& readPhase) {
     ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
+  }
+
+  void StringDictionaryColumnReader::loadStringDicts(
+      const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+      std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+      const StringDictFilter* stringDictFilter) {
+    auto iter = columnIdToNameMap.find(getType().getColumnId());
+    if (iter == columnIdToNameMap.end()) {
+      return;
+    }
+    (*columnNameToDictMap)[iter->second] = loadDictionary();
   }
 
   StringDictionary* StringDictionaryColumnReader::loadDictionary() {
@@ -1110,7 +1124,7 @@ namespace orc {
 
     void loadStringDicts(const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
                          std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
-                         const StringDictFilter* stringDictFilter);
+                         const StringDictFilter* stringDictFilter) override;
 
    private:
     template <bool encoded>
@@ -1198,14 +1212,7 @@ namespace orc {
       std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
       const StringDictFilter* stringDictFilter) {
     for (auto& ptr : children) {
-      auto iter = columnIdToNameMap.find(ptr->getType().getColumnId());
-      if (iter == columnIdToNameMap.end()) {
-        continue;
-      }
-      auto* stringDictionaryColumnReader = dynamic_cast<StringDictionaryColumnReader*>(ptr.get());
-      if (stringDictionaryColumnReader != nullptr) {
-        (*columnNameToDictMap)[iter->second] = stringDictionaryColumnReader->loadDictionary();
-      }
+      ptr->loadStringDicts(columnIdToNameMap, columnNameToDictMap, stringDictFilter);
     }
   }
 
@@ -1228,6 +1235,10 @@ namespace orc {
 
     void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                         const ReadPhase& readPhase) override;
+
+    void loadStringDicts(const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+                         std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+                         const StringDictFilter* stringDictFilter) override;
 
    private:
     template <bool encoded>
@@ -1339,6 +1350,15 @@ namespace orc {
     }
   }
 
+  void ListColumnReader::loadStringDicts(
+      const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+      std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+      const StringDictFilter* stringDictFilter) {
+    if (child.get()) {
+      child->loadStringDicts(columnIdToNameMap, columnNameToDictMap, stringDictFilter);
+    }
+  }
+
   class MapColumnReader : public ColumnReader {
    private:
     std::unique_ptr<ColumnReader> keyReader;
@@ -1359,6 +1379,10 @@ namespace orc {
 
     void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                         const ReadPhase& readPhase) override;
+
+    void loadStringDicts(const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+                         std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+                         const StringDictFilter* stringDictFilter) override;
 
    private:
     template <bool encoded>
@@ -1489,6 +1513,18 @@ namespace orc {
     }
   }
 
+  void MapColumnReader::loadStringDicts(
+      const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+      std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+      const StringDictFilter* stringDictFilter) {
+    if (keyReader.get()) {
+      keyReader->loadStringDicts(columnIdToNameMap, columnNameToDictMap, stringDictFilter);
+    }
+    if (elementReader.get()) {
+      elementReader->loadStringDicts(columnIdToNameMap, columnNameToDictMap, stringDictFilter);
+    }
+  }
+
   class UnionColumnReader : public ColumnReader {
    private:
     std::unique_ptr<ByteRleDecoder> rle;
@@ -1509,6 +1545,10 @@ namespace orc {
 
     void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                         const ReadPhase& readPhase) override;
+
+    void loadStringDicts(const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+                         std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+                         const StringDictFilter* stringDictFilter) override;
 
    private:
     template <bool encoded>
@@ -1620,6 +1660,18 @@ namespace orc {
       if (childrenReader[i] != nullptr &&
           shouldProcessChild(childrenReader[i]->getType().getReaderCategory(), readPhase)) {
         childrenReader[i]->seekToRowGroup(positions, readPhase);
+      }
+    }
+  }
+
+  void UnionColumnReader::loadStringDicts(
+      const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
+      std::unordered_map<std::string, StringDictionary*>* columnNameToDictMap,
+      const StringDictFilter* stringDictFilter) {
+    for (size_t i = 0; i < numChildren; ++i) {
+      if (childrenReader[i] != nullptr) {
+        childrenReader[i]->loadStringDicts(columnIdToNameMap, columnNameToDictMap,
+                                           stringDictFilter);
       }
     }
   }
