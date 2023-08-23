@@ -34,7 +34,7 @@ jobs:
       should_release: ${{ steps.check_diff.outputs.should_release }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: 'apache/doris'
           ref: 'branch-1.2-lts'
@@ -101,9 +101,35 @@ jobs:
     strategy:
       matrix:
         config:
-          - name: macOS
-            os: macos-12
+          - name: macOS-x86_64
+            os: macos-13
             packages: >-
+              'm4'
+              'automake'
+              'autoconf'
+              'libtool'
+              'pkg-config'
+              'texinfo'
+              'coreutils'
+              'gnu-getopt'
+              'python@3'
+              'cmake'
+              'ninja'
+              'ccache'
+              'bison'
+              'byacc'
+              'gettext'
+              'wget'
+              'pcre'
+              'openjdk@11'
+              'maven'
+              'node'
+              'llvm@15'
+
+          - name: macOS-arm64
+            os: macos-14
+            packages: >-
+              'm4'
               'automake'
               'autoconf'
               'libtool'
@@ -157,7 +183,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: 'apache/doris'
           ref: 'branch-1.2-lts'
@@ -174,8 +200,8 @@ jobs:
 
       - name: Prepare for ${{ matrix.config.os }}
         run: |
-          if [[ "${{ matrix.config.name }}" == 'macOS' ]]; then
-            brew install ${{ matrix.config.packages }}
+          if [[ "${{ matrix.config.name }}" =~ macOS-* ]]; then
+            brew install ${{ matrix.config.packages }} || true
           else
             export DEFAULT_DIR='/opt/doris'
             export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
@@ -199,6 +225,8 @@ jobs:
             export PATH="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 1 -type d -name 'bin'):${PATH}"
             export JAVA_HOME="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 0)"
             export DORIS_TOOLCHAIN=gcc
+          else
+            export MACOSX_DEPLOYMENT_TARGET=12.0
           fi
 
           cd thirdparty
