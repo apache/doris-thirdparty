@@ -7,6 +7,7 @@
 #ifndef _lucene_search_SearchHeader_
 #define _lucene_search_SearchHeader_
 
+#include "CLucene/index/DocRange.h"
 
 //#include "CLucene/index/IndexReader.h"
 CL_CLASS_DEF(index,Term)
@@ -95,6 +96,8 @@ CL_NS_DEF(search)
       * between 0 and 1.
       */
       virtual void collect(const int32_t doc, const float_t score) = 0;
+      virtual void collectRange(DocRange* docRange) { _CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: HitCollector::collectRange"); }
+
       virtual ~HitCollector(){}
     };
 

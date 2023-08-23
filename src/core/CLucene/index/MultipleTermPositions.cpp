@@ -26,6 +26,10 @@ int32_t MultipleTermPositions::read(int32_t*, int32_t*,int32_t) {
 	_CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: MultipleTermPositions::read");
 }
 
+bool MultipleTermPositions::readRange(DocRange* docRange) {
+	_CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: MultipleTermPositions::readRange");
+}
+
 int32_t MultipleTermPositions::getPayloadLength() const {
 	_CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: MultipleTermPositions::getPayloadLength");
 }

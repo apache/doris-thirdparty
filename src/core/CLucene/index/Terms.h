@@ -8,6 +8,8 @@
 #define _lucene_index_Terms_
 
 #include "CLucene/util/Equators.h"
+#include "CLucene/index/DocRange.h"
+
 CL_NS_DEF(index)
 
 //predefine
@@ -56,6 +58,7 @@ public:
 	// <p>Returns the number of entries read.  Zero is only returned when the
 	// stream has been exhausted.
 	virtual int32_t read(int32_t* docs, int32_t* freqs, int32_t length)=0;
+	virtual bool readRange(DocRange* docRange) = 0;
 
 	// Skips entries to the first beyond the current whose document number is
 	// greater than or equal to <i>target</i>. <p>Returns true iff there is such

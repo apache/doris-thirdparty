@@ -59,15 +59,22 @@ CL_NS_DEF(search)
     	}
 	};
 
-    class AllTopDocsCollector:public HitCollector {
-        public:
-            AllTopDocsCollector(const Functor& cb) : cb_(cb) {}
-            void collect(const int32_t doc, const float_t score) {
-                cb_(doc, score);
-            }
+    class AllTopDocsCollector : public HitCollector {
+      public:
+        AllTopDocsCollector(const Functor& cb) : cb_(cb) {}
+        AllTopDocsCollector(const DocRangeFunctor& range_cb) : range_cb_(range_cb) {} 
+        
+        void collect(const int32_t doc, const float_t score) override {
+          cb_(doc, score);
+        }
 
-        private:
-            Functor cb_;
+        void collectRange(DocRange* docRange) override {
+          range_cb_(docRange);
+        }
+
+      private:
+        Functor cb_;
+        DocRangeFunctor range_cb_;
     };
 
 	class SortedTopDocsCollector:public HitCollector{ 
@@ -390,6 +397,38 @@ CL_NS_DEF(search)
 
         AllTopDocsCollector hitCol(cb);
         scorer->score( &hitCol );
+      } _CLFINALLY({
+        _CLDELETE(scorer);
+       if (weight != NULL)
+       {
+          Query* wq = weight->getQuery();
+          if (wq != query) // query was rewritten
+            _CLLDELETE(wq);
+       }
+        _CLLDELETE(weight);
+      });
+  }
+
+  void IndexSearcher::_search(Query* query, const DocRangeFunctor& cb) {
+      CND_PRECONDITION(reader != NULL, "reader is NULL");
+      CND_PRECONDITION(query != NULL, "query is NULL");
+
+      Weight* weight = NULL;
+      Scorer* scorer = NULL;
+      try
+      {
+        weight = query->weight(this);
+        scorer = weight->scorer(reader);
+        if (scorer == NULL) {
+          Query* wq = weight->getQuery();
+          if (wq != query) // query was rewritten
+            _CLLDELETE(wq);
+          _CLLDELETE(weight);
+          return;
+        }
+
+        AllTopDocsCollector hitCol(cb);
+        scorer->scoreRange( &hitCol );
       } _CLFINALLY({
         _CLDELETE(scorer);
        if (weight != NULL)

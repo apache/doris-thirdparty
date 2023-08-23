@@ -238,6 +238,86 @@ int32_t SegmentTermDocs::read(int32_t *docs, int32_t *freqs, int32_t length) {
     return i;
 }
 
+bool SegmentTermDocs::readRange(DocRange* docRange) {
+    if (count >= df) {
+        return false;
+    }
+
+    if (hasProx) {
+        char mode = freqStream->readByte();
+        uint32_t arraySize = freqStream->readVInt();
+        if (mode == (char)CodeMode::kDefault) {
+            uint32_t docDelta = 0;
+            for (uint32_t i = 0; i < arraySize; i++) {
+                uint32_t docCode = freqStream->readVInt();
+                docDelta += (docCode >> 1);
+                docRange->doc_many[i] = docDelta;
+                if ((docCode & 1) != 0) {
+                    docRange->freq_many[i] = 1;
+                } else {
+                    docRange->freq_many[i] = freqStream->readVInt();
+                }
+            }
+            docRange->type_ = DocRangeType::kMany;
+            docRange->doc_many_size_ = arraySize;
+            docRange->freq_many_size_ = arraySize;
+        } else {
+            {
+                uint32_t SerializedSize = freqStream->readVInt();
+                std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+                freqStream->readBytes(buf.data(), SerializedSize);
+                P4DEC(buf.data(), arraySize, docRange->doc_many.data());
+            }
+            {
+                uint32_t SerializedSize = freqStream->readVInt();
+                std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+                freqStream->readBytes(buf.data(), SerializedSize);
+                P4NZDEC(buf.data(), arraySize, docRange->freq_many.data());
+            }
+            docRange->type_ = DocRangeType::kMany;
+            docRange->doc_many_size_ = arraySize;
+            docRange->freq_many_size_ = arraySize;
+        }
+        count += arraySize;
+    } else {
+        uint32_t arraySize = freqStream->readVInt();
+        if (arraySize < PFOR_BLOCK_SIZE) {
+            uint32_t docDelta = 0;
+            for (uint32_t i = 0; i < arraySize; i++) {
+                uint32_t docCode = freqStream->readVInt();
+                docDelta += docCode;
+                docRange->doc_many[i] = docDelta;
+            }
+            docRange->type_ = DocRangeType::kMany;
+            docRange->doc_many_size_ = arraySize;
+        } else {
+            {
+                uint32_t serializedSize = freqStream->readVInt();
+                std::vector<uint8_t> buf(serializedSize + PFOR_BLOCK_SIZE);
+                freqStream->readBytes(buf.data(), serializedSize);
+                P4DEC(buf.data(), arraySize, docRange->doc_many.data());
+            }
+            docRange->type_ = DocRangeType::kMany;
+            docRange->doc_many_size_ = arraySize;
+        }
+        count += arraySize;
+    }
+
+    if (docRange->type_ == DocRangeType::kMany) {
+        if (docRange->doc_many_size_ > 0) {
+            uint32_t start = docRange->doc_many[0];
+            uint32_t end = docRange->doc_many[docRange->doc_many_size_ - 1];
+            if ((end - start) == docRange->doc_many_size_ - 1) {
+                docRange->doc_range.first = start;
+                docRange->doc_range.second = start + docRange->doc_many_size_;
+                docRange->type_ = DocRangeType::kRange;
+            }
+        }
+    }
+
+    return true;
+}
+
 bool SegmentTermDocs::skipTo(const int32_t target) {
     assert(count <= df);
 

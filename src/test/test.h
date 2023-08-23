@@ -81,6 +81,7 @@ CuSuite *testStringBuffer(void);
 CuSuite *testTermVectorsReader(void);
 CuSuite *teststandard95(void);
 CuSuite *testStrConvert(void);
+CuSuite *testSearchRange(void);
 
 #ifdef TEST_CONTRIB_LIBS
 //CuSuite *testGermanAnalyzer(void);

@@ -60,6 +60,7 @@ SET(test_files ./tests.cpp
         ./search/TestExtractTerms.cpp
         ./search/TestConstantScoreRangeQuery.cpp
         ./search/TestIndexSearcher.cpp
+        ./search/TestSearchRange.cpp
         ./index/IndexWriter4Test.cpp
         ./search/BaseTestRangeFilter.h
         ./search/BaseTestRangeFilter.cpp
@@ -100,7 +101,7 @@ SET(test_files ./tests.cpp
         ./util/TestMSBRadixSorter.cpp
         ./util/TestStringBuffer.cpp
         ./util/English.cpp
-        ./util/testStrConvert.cpp
+        ./util/TestStrConvert.cpp
         ${test_HEADERS})
 IF (USE_SHARED_OBJECT_FILES)
     GET_SHARED_FILES(clucene_shared_Files)

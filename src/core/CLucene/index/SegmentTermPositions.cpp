@@ -100,6 +100,10 @@ int32_t SegmentTermPositions::read(int32_t* /*docs*/, int32_t* /*freqs*/, int32_
     _CLTHROWA(CL_ERR_UnsupportedOperation,"TermPositions does not support processing multiple documents in one call. Use TermDocs instead.");
 }
 
+bool SegmentTermPositions::readRange(DocRange* docRange) {
+    _CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: SegmentTermPositions::readDocRange");
+}
+
 void SegmentTermPositions::skipProx(const int64_t proxPointer, const int32_t _payloadLength){
     // we save the pointer, we might have to skip there lazily
     lazySkipPointer = proxPointer;

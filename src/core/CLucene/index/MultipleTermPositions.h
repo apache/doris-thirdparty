@@ -63,6 +63,7 @@ public:
 	* @throws UnsupportedOperationException
 	*/
 	int32_t read(int32_t*, int32_t*,int32_t);
+	bool readRange(DocRange* docRange) override;
 
 	/**
 	* Not implemented.

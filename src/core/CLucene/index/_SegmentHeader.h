@@ -75,6 +75,7 @@ public:
 
   /** Optimized implementation. */
   virtual int32_t read(int32_t* docs, int32_t* freqs, int32_t length);
+  bool readRange(DocRange* docRange) override;
 
   /** Optimized implementation. */
   virtual bool skipTo(const int32_t target);
@@ -125,6 +126,7 @@ protected:
 public:
   bool next();
   int32_t read(int32_t* docs, int32_t* freqs, int32_t length);
+  bool readRange(DocRange* docRange) override;
 
 protected:
   /** Called by super.skipTo(). */
