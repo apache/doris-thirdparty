@@ -319,7 +319,7 @@ void SDocumentsWriter<T>::ThreadState::FieldData::processField(Analyzer *sanalyz
 
             // docFieldsFinal.values[j] = NULL;
         }
-    } catch (exception &ae) {
+    } catch (CLuceneError& ae) {
         throw ae;
     }
 }
@@ -536,6 +536,12 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
 
             const int32_t textLen1 = 1 + tokenTextLen;
             if (textLen1 + threadState->scharPool->tUpto > CHAR_BLOCK_SIZE) {
+                if (textLen1 > CHAR_BLOCK_SIZE) {
+                    std::string errmsg = "bytes can be at most " +
+                                         std::to_string(CHAR_BLOCK_SIZE - 1) +
+                                         " in length; got " + std::to_string(tokenTextLen);
+                    _CLTHROWA(CL_ERR_MaxBytesLength, errmsg.c_str());
+                }
                 threadState->scharPool->nextBuffer();
             }
             T *text = threadState->scharPool->buffer;
@@ -835,7 +841,7 @@ bool SDocumentsWriter<T>::updateDocument(Document *doc, Analyzer *sanalyzer) {
                     finishDocument(state);)
             success = true;
         }
-        _CLFINALLY(
+    _CLFINALLY(
                 if (!success) {
                     // If this thread state had decided to flush, we
                     // must clear it so another thread can flush
@@ -844,8 +850,8 @@ bool SDocumentsWriter<T>::updateDocument(Document *doc, Analyzer *sanalyzer) {
                         flushPending = false;
                     }
                 })
-    } catch (exception &ae) {
-        abort(nullptr);
+    } catch (CLuceneError& ae) {
+        throw ae;
     }
 
     return state->doFlushAfter;

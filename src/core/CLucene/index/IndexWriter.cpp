@@ -722,13 +722,10 @@ void IndexWriter::addDocument(Document *doc, Analyzer *an) {
                         message(string("hit exception adding document"));
 
                     {
-                        SCOPED_LOCK_MUTEX(this->THIS_LOCK)
-                        // If docWriter has some aborted files that were
-                        // never incref'd, then we clean them up here
-                        if (docWriter != NULL) {
-                            const std::vector<std::string> *files = docWriter->abortedFiles();
-                            if (files != NULL)
-                                deleter->deleteNewFiles(*files);
+                        std::vector<std::string> files;
+                        directory->list(files);
+                        for (auto& file : files) {
+                            directory->deleteFile(file.c_str());
                         }
                     }
                 })
