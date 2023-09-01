@@ -26,24 +26,6 @@ ENC_FUNC g_p4nd1enc;
 ENC_FUNC g_p4nzenc;
 } // anonymous namespace
 
-/*extern DEC_FUNC p4nd1dec128v32;
-extern DEC_FUNC p4nzdec128v32;
-extern DEC_FUNC p4nd1dec256v32;
-extern DEC_FUNC p4nzdec256v32;
-extern DEC_FUNC p4nd1dec32;
-extern DEC_FUNC p4nzdec32;
-extern ENC_FUNC p4nd1enc128v32;
-extern ENC_FUNC p4nzenc128v32;
-extern ENC_FUNC p4nd1enc256v32;
-extern ENC_FUNC p4nzenc256v32;
-extern ENC_FUNC p4nd1enc32;
-extern ENC_FUNC p4nzenc32;*/
-
-// When this translation unit is initialized, figure out the current CPU and
-// assign the correct function for this architecture.
-//
-// This avoids an expensive 'cpuid' call in the hot path, and also avoids
-// the cost of a 'std::once' call.
 __attribute__((constructor)) void SelectPFORFunctions() {
     uint32_t eax, ebx, ecx, edx;
     __cpuid(1, eax, ebx, ecx, edx);
