@@ -180,6 +180,9 @@ template <typename T>
 class CLUCENE_EXPORT SimpleAnalyzer: public Analyzer {
 public:
     SimpleAnalyzer(){}
+
+    bool isSDocOpt() override { return true; }
+
     TokenStream* tokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader) override{
         return _CLNEW SimpleTokenizer<T>(reader);
     }

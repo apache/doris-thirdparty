@@ -41,6 +41,8 @@ class CLUCENE_CONTRIBS_EXPORT LanguageBasedAnalyzer : public CL_NS(analysis)::An
 public:
     explicit LanguageBasedAnalyzer(const TCHAR *language = nullptr, bool stem = true, AnalyzerMode mode = AnalyzerMode::All);
     ~LanguageBasedAnalyzer() override;
+
+    bool isSDocOpt() override;
     void setStopWords(const TCHAR** stopwords);
     void setLanguage(const TCHAR *language);
     void setStem(bool s);

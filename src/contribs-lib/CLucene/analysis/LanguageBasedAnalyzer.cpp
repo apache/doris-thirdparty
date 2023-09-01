@@ -41,6 +41,13 @@ LanguageBasedAnalyzer::~LanguageBasedAnalyzer() {
     _CLLDELETE(stopSet);
 }
 
+bool LanguageBasedAnalyzer::isSDocOpt() {
+    if (_tcscmp(lang, _T("chinese")) == 0) {
+        return true;
+    }
+    return false;
+}
+
 void LanguageBasedAnalyzer::setStopWords(const TCHAR** stopwords) {
     StopFilter::fillStopTable(stopSet, stopwords);
 }

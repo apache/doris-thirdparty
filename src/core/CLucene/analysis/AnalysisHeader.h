@@ -276,6 +276,8 @@ class CLUCENE_EXPORT Analyzer{
 public:
     Analyzer();
 
+    virtual bool isSDocOpt() { return false; }
+
     /** Creates a TokenStream which tokenizes all the text in the provided
 	Reader.  Default implementation forwards to tokenStream(Reader) for
 	compatibility with older version.  Override to allow Analyzer to choose

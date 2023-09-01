@@ -6,6 +6,8 @@ namespace lucene::analysis::standard95 {
 
 class StandardAnalyzer : public Analyzer {
  public:
+  bool isSDocOpt() override { return true; }
+  
   TokenStream* tokenStream(const TCHAR* fieldName,
                            lucene::util::Reader* reader) override {
     return _CLNEW StandardTokenizer(reader, useStopWords_);
