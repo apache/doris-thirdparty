@@ -12,6 +12,7 @@
 #include "CLucene/search/Similarity.h"
 #include "CLucene/store/Directory.h"
 #include "CLucene/util/Misc.h"
+#include "CLucene/util/PFORUtil.h"
 #include "IndexReader.h"
 #include "IndexWriter.h"
 
@@ -23,6 +24,7 @@
 #include "CLucene/util/Array.h"
 #include "CLucene/util/PriorityQueue.h"
 #include "CLucene/index/CodeMode.h"
+#include "CLucene/analysis/standard95/StandardAnalyzer.h"
 #include "MergePolicy.h"
 #include "MergeScheduler.h"
 #include "SDocumentWriter.h"
@@ -34,19 +36,10 @@
 #include "_SkipListWriter.h"
 #include "_Term.h"
 #include "_TermInfo.h"
-#include "vp4.h"
 #include <algorithm>
 #include <memory>
 #include <assert.h>
 #include <iostream>
-
-#if defined(USE_AVX2) && defined(__x86_64__)
-#define  P4ENC     p4nd1enc256v32
-#define  P4NZENC   p4nzenc256v32
-#else
-#define  P4ENC     p4nd1enc128v32
-#define  P4NZENC   p4nzenc128v32
-#endif
 
 CL_NS_USE(store)
 CL_NS_USE(util)

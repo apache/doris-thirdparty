@@ -16,6 +16,7 @@
 #include "CLucene/util/Array.h"
 #include "CLucene/util/CLStreams.h"
 #include "CLucene/util/Misc.h"
+#include "CLucene/util/PFORUtil.h"
 #include "CLucene/util/_Arrays.h"
 #include "CLucene/index/CodeMode.h"
 #include "IndexWriter.h"
@@ -31,19 +32,10 @@
 #include "_FieldsWriter.h"
 #include "_IndexFileNames.h"
 #include "_SkipListWriter.h"
-#include "vp4.h"
 
 #include <algorithm>
 #include <assert.h>
 #include <iostream>
-
-#if defined(USE_AVX2) && defined(__x86_64__)
-#define  P4ENC     p4nd1enc256v32
-#define  P4NZENC   p4nzenc256v32
-#else
-#define  P4ENC     p4nd1enc128v32
-#define  P4NZENC   p4nzenc128v32
-#endif
 
 CL_NS_USE(util)
 CL_NS_USE(store)

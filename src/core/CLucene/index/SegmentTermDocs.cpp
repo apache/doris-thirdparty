@@ -9,20 +9,12 @@
 
 #include "CLucene/store/IndexInput.h"
 #include "CLucene/index/CodeMode.h"
+#include "CLucene/util/PFORUtil.h"
 #include "Term.h"
-#include "vp4.h"
 
 #include <assert.h>
 #include <memory>
 #include <iostream>
-
-#if defined(USE_AVX2) && defined(__x86_64__)
-#define  P4DEC     p4nd1dec256v32
-#define  P4NZDEC   p4nzdec256v32
-#else
-#define  P4DEC     p4nd1dec128v32 
-#define  P4NZDEC   p4nzdec128v32
-#endif
 
 CL_NS_DEF(index)
 
