@@ -51,9 +51,7 @@ CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
     }
     if (bufferIndex < dataLen) {
         auto token_text = tokens_text[bufferIndex++];
-        lucene_utf8towcs(buffer, token_text.c_str(), LUCENE_MAX_WORD_LEN);
-        auto length = _tcslen(buffer);
-        token->set(buffer, 0, length);
+        token->setNoCopy(token_text.data(), 0, token_text.size());
         return token;
     }
     return nullptr;
