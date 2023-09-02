@@ -529,4 +529,8 @@ CL_NS(store)::Directory* IndexReader::getDirectory() {
 		_internal->closeCallbacks.put(callback, parameter);
 	}
 
+IndexVersion IndexReader::getIndexVersion() {
+  _CLTHROWA(CL_ERR_UnsupportedOperation, "IndexReader This reader does not support this method.");
+}
+
 CL_NS_END

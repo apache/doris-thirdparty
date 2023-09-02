@@ -11,6 +11,7 @@
 #include "CLucene/util/Array.h"
 #include "CLucene/util/VoidList.h"
 #include "CLucene/LuceneThreads.h"
+#include "CLucene/index/IndexVersion.h"
 
 CL_CLASS_DEF(store,Directory)
 CL_CLASS_DEF(store,LuceneLock)
@@ -675,6 +676,8 @@ public:
 	* should pass their callback function to this.
 	*/
 	void addCloseCallback(CloseCallback callback, void* parameter);
+
+  virtual IndexVersion getIndexVersion();
 
   friend class SegmentReader;
   friend class MultiReader;

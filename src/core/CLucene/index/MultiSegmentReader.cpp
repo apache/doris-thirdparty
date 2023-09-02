@@ -485,6 +485,12 @@ const char* MultiSegmentReader::getObjectName() const{
   return getClassName();
 }
 
+IndexVersion MultiSegmentReader::getIndexVersion() {
+	for (size_t i = 0; i < subReaders->length; i++) {
+		return (*subReaders)[i]->getIndexVersion();
+	}
+	_CLTHROWA(CL_ERR_IllegalState, "MultiSegmentReader::getIndexVersion index open failed.");
+}
 
 
 
@@ -540,6 +546,14 @@ TermPositions* MultiTermDocs::__asTermPositions(){
   return NULL;
 }
 
+int32_t MultiTermDocs::docFreq() {
+	int32_t docFreq = 0;
+	for (size_t i = 0; i < readerTermDocs->length; i++) {
+		docFreq += readerTermDocs->values[i]->docFreq();
+	}
+	return docFreq;
+}
+
 int32_t MultiTermDocs::doc() const {
   CND_PRECONDITION(current!=NULL,"current==NULL, check that next() was called");
   return base + current->doc();
@@ -577,6 +591,12 @@ void MultiTermDocs::seek( Term* tterm) {
 	base = 0;
 	pointer = 0;
 	current = NULL;
+
+	for (int32_t i = 0; i < readerTermDocs->length; i++) {
+		termDocs(i);
+	}
+	base = starts[pointer];
+	current = termDocs(pointer++);
 }
 
 bool MultiTermDocs::next() {
@@ -628,8 +648,8 @@ bool MultiTermDocs::readRange(DocRange* docRange) {
 			current = nullptr;
 		} else {
 			if (docRange->type_ == DocRangeType::kMany) {
-				auto begin = docRange->doc_many.begin();
-				auto end = docRange->doc_many.begin() + docRange->doc_many_size_;
+				auto begin = docRange->doc_many->begin();
+				auto end = docRange->doc_many->begin() + docRange->doc_many_size_;
 				std::transform(begin, end, begin, [this](int32_t val) { return val + base; });
 			} else if (docRange->type_ == DocRangeType::kRange) {
 				docRange->doc_range.first += base;

@@ -50,8 +50,9 @@ CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
         dataLen = tokens_text.size();
     }
     if (bufferIndex < dataLen) {
-        auto token_text = tokens_text[bufferIndex++];
-        token->setNoCopy(token_text.data(), 0, token_text.size());
+        std::string& token_text = tokens_text[bufferIndex++];
+        size_t size = std::min(token_text.size(), static_cast<size_t>(LUCENE_MAX_WORD_LEN));
+        token->setNoCopy(token_text.data(), 0, size);
         return token;
     }
     return nullptr;

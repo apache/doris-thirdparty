@@ -166,6 +166,7 @@ void SDocumentsWriter<T>::ThreadState::init(Document *doc, int32_t doc_id) {
         FieldInfo *fi = _parent->fieldInfos->add(field->name(), field->isIndexed(), field->isTermVectorStored(),
                                                  field->isStorePositionWithTermVector(), field->isStoreOffsetWithTermVector(),
                                                  field->getOmitNorms(), !field->getOmitTermFreqAndPositions(), false);
+        fi->setIndexVersion(field->getIndexVersion());
         if (fi->isIndexed && !fi->omitNorms) {
             // Maybe grow our buffered norms
             if (_parent->norms.length <= fi->number) {
@@ -240,6 +241,7 @@ void SDocumentsWriter<T>::ThreadState::init(Document *doc, int32_t doc_id) {
         fp->docFields.values[fp->fieldCount++] = field;
     }
     _parent->hasProx_ = _parent->fieldInfos->hasProx();
+    _parent->indexVersion_ = _parent->fieldInfos->getIndexVersion();
 }
 
 template<typename T>
@@ -1172,12 +1174,10 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
         while (numToMerge > 0) {
 
             if ((++df % skipInterval) == 0) {
+                freqOut->writeByte((char)CodeMode::kPfor);
+                freqOut->writeVInt(docDeltaBuffer.size());
+                encode(freqOut, docDeltaBuffer, true);
                 if (hasProx_) {
-                    freqOut->writeByte((char)CodeMode::kPfor);
-                    freqOut->writeVInt(docDeltaBuffer.size());
-                    // doc
-                    encode(freqOut, docDeltaBuffer, true);
-                    // freq
                     encode(freqOut, freqBuffer, false);
                 }
 
@@ -1205,22 +1205,14 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
             // changing the format to match Lucene's segment
             // format.
 
+            docDeltaBuffer.push_back(doc);
             if (hasProx_) {
-                // position
                 for (int32_t j = 0; j < termDocFreq; j++) {
                     const int32_t code = prox.readVInt();
                     assert(0 == (code & 1));
                     proxOut->writeVInt(code >> 1);
                 }
-
-                docDeltaBuffer.push_back(doc);
                 freqBuffer.push_back(termDocFreq);
-            } else {
-                docDeltaBuffer.push_back(doc);
-                if (docDeltaBuffer.size() == PFOR_BLOCK_SIZE) {
-                    freqOut->writeVInt(docDeltaBuffer.size());
-                    encode(freqOut, docDeltaBuffer, true);
-                }
             }
 
             if (!minState->nextDoc()) {
@@ -1253,13 +1245,14 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
 
         // Done merging this term
         {
-            if (hasProx_) {
-                freqOut->writeByte((char)CodeMode::kDefault);
-                freqOut->writeVInt(docDeltaBuffer.size());
-                uint32_t lastDoc = 0;
-                for (int32_t i = 0; i < docDeltaBuffer.size(); i++) {
-                    uint32_t newDocCode = (docDeltaBuffer[i] - lastDoc) << 1;
-                    lastDoc = docDeltaBuffer[i];
+            freqOut->writeByte((char)CodeMode::kDefault);
+            freqOut->writeVInt(docDeltaBuffer.size());
+            uint32_t lastDoc = 0;
+            for (int32_t i = 0; i < docDeltaBuffer.size(); i++) {
+                uint32_t curDoc = docDeltaBuffer[i];
+                if (hasProx_) {
+                    uint32_t newDocCode = (curDoc - lastDoc) << 1;
+                    lastDoc = curDoc;
                     uint32_t freq = freqBuffer[i];
                     if (1 == freq) {
                         freqOut->writeVInt(newDocCode | 1);
@@ -1267,18 +1260,13 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
                         freqOut->writeVInt(newDocCode);
                         freqOut->writeVInt(freq);
                     }
+                } else {
+                    freqOut->writeVInt(curDoc - lastDoc);
+                    lastDoc = curDoc;
                 }
-                docDeltaBuffer.resize(0);
-                freqBuffer.resize(0);
-            } else {
-                freqOut->writeVInt(docDeltaBuffer.size());
-                uint32_t lDoc = 0;
-                for (auto& docDelta : docDeltaBuffer) {
-                    freqOut->writeVInt(docDelta - lDoc);
-                    lDoc = docDelta;
-                }
-                docDeltaBuffer.resize(0);
             }
+            docDeltaBuffer.resize(0);
+            freqBuffer.resize(0);
         }
         
         int64_t skipPointer = skipListWriter->writeSkip(freqOut);

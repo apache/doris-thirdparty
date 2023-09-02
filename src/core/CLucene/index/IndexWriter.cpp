@@ -280,10 +280,10 @@ void IndexWriter::init(Directory *d, Analyzer *a, const bool create, const bool 
             if (analyzer->isSDocOpt()) {
                 docWriter = _CLNEW SDocumentsWriter<char>(directory, this);
             } else {
-                docWriter = _CLNEW DocumentsWriter(directory, this);
+                _CLTHROWA(CL_ERR_IllegalArgument, "IndexWriter::init: Only support SDocumentsWriter");
             }
         } else {
-            docWriter = _CLNEW DocumentsWriter(directory, this);
+            _CLTHROWA(CL_ERR_IllegalArgument, "IndexWriter::init: Only support SDocumentsWriter");
         }
         // Default deleter (for backwards compatibility) is
         // KeepOnlyLastCommitDeleter:
@@ -1702,14 +1702,13 @@ void IndexWriter::mergeTerms(bool hasProx) {
                 }
 
                 if ((++df % skipInterval) == 0) {
+                    freqOut->writeByte((char)CodeMode::kPfor);
+                    freqOut->writeVInt(docDeltaBuffer.size());
+                    encode(freqOut, docDeltaBuffer, true);
                     if (hasProx) {
-                        freqOut->writeByte((char)CodeMode::kPfor);
-                        freqOut->writeVInt(docDeltaBuffer.size());
-                        // doc
-                        encode(freqOut, docDeltaBuffer, true);
-                        // freq
                         encode(freqOut, freqBuffer, false);
                     }
+
                     skipWriter->setSkipData(lastDoc, false, -1);
                     skipWriter->bufferSkip(df);
                 }
@@ -1717,8 +1716,8 @@ void IndexWriter::mergeTerms(bool hasProx) {
                 assert(destDocId > lastDoc || df == 1);
                 lastDoc = destDocId;
 
+                docDeltaBuffer.push_back(destDocId);
                 if (hasProx) {
-                    // position
                     int32_t lastPosition = 0;
                     for (int32_t i = 0; i < descPositions.size(); i++) {
                         int32_t position = descPositions[i];
@@ -1726,15 +1725,7 @@ void IndexWriter::mergeTerms(bool hasProx) {
                         proxOut->writeVInt(delta);
                         lastPosition = position;
                     }
-
-                    docDeltaBuffer.push_back(destDocId);
                     freqBuffer.push_back(destFreq);
-                } else {
-                    docDeltaBuffer.push_back(destDocId);
-                    if (docDeltaBuffer.size() == PFOR_BLOCK_SIZE) {
-                        freqOut->writeVInt(docDeltaBuffer.size());
-                        encode(freqOut, docDeltaBuffer, true);
-                    }
                 }
 
                 smi = match[destDoc->srcIdx];
@@ -1775,7 +1766,7 @@ void IndexWriter::mergeTerms(bool hasProx) {
                 proxPointer = proxPointers[i];
             }
 
-            if (hasProx) {
+            {
                 auto& docDeltaBuffer = docDeltaBuffers[i];
                 auto& freqBuffer = freqBuffers[i];
 
@@ -1783,26 +1774,24 @@ void IndexWriter::mergeTerms(bool hasProx) {
                 freqOutput->writeVInt(docDeltaBuffer.size());
                 uint32_t lastDoc = 0;
                 for (int32_t i = 0; i < docDeltaBuffer.size(); i++) {
-                    uint32_t newDocCode = (docDeltaBuffer[i] - lastDoc) << 1;
-                    lastDoc = docDeltaBuffer[i];
-                    uint32_t freq = freqBuffer[i];
-                    if (1 == freq) {
-                        freqOutput->writeVInt(newDocCode | 1);
+                    uint32_t curDoc = docDeltaBuffer[i];
+                    if (hasProx) {
+                        uint32_t newDocCode = (docDeltaBuffer[i] - lastDoc) << 1;
+                        lastDoc = curDoc;
+                        uint32_t freq = freqBuffer[i];
+                        if (1 == freq) {
+                            freqOutput->writeVInt(newDocCode | 1);
+                        } else {
+                            freqOutput->writeVInt(newDocCode);
+                            freqOutput->writeVInt(freq);
+                        }
                     } else {
-                        freqOutput->writeVInt(newDocCode);
-                        freqOutput->writeVInt(freq);
+                        freqOutput->writeVInt(curDoc - lastDoc);
+                        lastDoc = curDoc;
                     }
                 }
                 docDeltaBuffer.resize(0);
                 freqBuffer.resize(0);
-            } else {
-                freqOutput->writeVInt(docDeltaBuffers[i].size());
-                uint32_t lDoc = 0;
-                for (auto &docDelta: docDeltaBuffers[i]) {
-                    freqOutput->writeVInt(docDelta - lDoc);
-                    lDoc = docDelta;
-                }
-                docDeltaBuffers[i].resize(0);
             }
             
             int64_t skipPointer = skipListWriter->writeSkip(freqOutput);

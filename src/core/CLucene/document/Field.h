@@ -9,6 +9,8 @@
 
 #include "CLucene/util/Array.h"
 #include "CLucene/util/Equators.h"
+#include "CLucene/index/IndexVersion.h"
+
 /*
 Fieldable reading:
 https://issues.apache.org/jira/browse/LUCENE-1219?page=com.atlassian.jira.plugin.system.issuetabpanels:comment- tabpanel&focusedCommentId=12578199#action_12578199
@@ -310,6 +312,9 @@ public:
 	virtual const char* getObjectName() const;
 	static const char* getClassName();
 
+	void setIndexVersion(IndexVersion indexVersion) { indexVersion_ = indexVersion; }
+	IndexVersion getIndexVersion() { return indexVersion_; }
+
 protected:
 	/**
 	* Set configs using XOR. This resets all the settings
@@ -327,6 +332,8 @@ protected:
 	const TCHAR* _name;
 	uint32_t config;
 	float_t boost;
+
+	IndexVersion indexVersion_ = IndexVersion::kV1;
 };
 CL_NS_END
 #endif

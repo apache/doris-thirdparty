@@ -82,6 +82,10 @@ public:
     *	No dynamic casting is required and no RTTI data is needed to do this
     */
 	virtual TermPositions* __asTermPositions()=0;
+
+	virtual int32_t docFreq() {
+		_CLTHROWA(CL_ERR_UnsupportedOperation, "TermDocs::docFreq does not support this method.");
+	}
 };
 
 

@@ -199,6 +199,8 @@ SET(clucene_core_Files
     ./CLucene/search/spans/SpanWeight.cpp
     ./CLucene/search/spans/SpanWeight.h
     ./CLucene/search/spans/TermSpans.cpp
+    ./CLucene/search/query/DcoIdSetIterator.h
+    ./CLucene/search/query/TermIterator.h
     )
 
 #if USE_SHARED_OBJECT_FILES then we link directly to the object files (means rebuilding them for the core)
