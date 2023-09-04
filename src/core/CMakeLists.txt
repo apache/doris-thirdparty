@@ -55,6 +55,7 @@ SET(clucene_core_Files
     ./CLucene/util/FutureArrays.cpp
     ./CLucene/util/NumericUtils.cpp
     ./CLucene/util/stringUtil.cpp
+    ./CLucene/util/PFORUtil.cpp
     ./CLucene/queryParser/FastCharStream.cpp
     ./CLucene/queryParser/MultiFieldQueryParser.cpp
     ./CLucene/queryParser/QueryParser.cpp
