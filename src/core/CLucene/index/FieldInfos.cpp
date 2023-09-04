@@ -103,6 +103,17 @@ bool FieldInfos::hasProx() {
 	return false;
 }
 
+IndexVersion FieldInfos::getIndexVersion() {
+	int numFields = byNumber.size();
+	for (int i = 0; i < numFields; i++) {
+		FieldInfo* fi = fieldInfo(i);
+		if (fi->indexVersion_ > IndexVersion::kV0) {
+			return fi->indexVersion_;
+		}
+	}
+	return IndexVersion::kV0;
+}
+
 void FieldInfos::addIndexed(const TCHAR** names, const bool storeTermVectors, const bool storePositionWithTermVector,
 							const bool storeOffsetWithTermVector) {
 	size_t i = 0;
@@ -228,8 +239,16 @@ void FieldInfos::write(IndexOutput* output) const{
 		if (fi->storePayloads) bits |= STORE_PAYLOADS;
 		if (fi->hasProx) bits |= TERM_FREQ_AND_POSITIONS;
 
+		if (fi->getIndexVersion() > IndexVersion::kV0) {
+			bits |= 0x80;
+		}
+
 		output->writeString(fi->name,_tcslen(fi->name));
 		output->writeByte(bits);
+
+		if (fi->getIndexVersion() > IndexVersion::kV0) {
+			output->writeVInt(static_cast<int32_t>(fi->getIndexVersion()));
+		}
 	}
 }
 
@@ -239,7 +258,7 @@ void FieldInfos::read(IndexInput* input) {
 	bool isIndexed,storeTermVector,storePositionsWithTermVector,storeOffsetWithTermVector,omitNorms,hasProx,storePayloads;
 	for (int32_t i = 0; i < size; ++i){
 	    TCHAR* name = input->readString(); //we could read name into a string buffer, but we can't be sure what the maximum field length will be.
-		bits = input->readByte();
+			bits = input->readByte();
    		isIndexed = (bits & IS_INDEXED) != 0;
    		storeTermVector = (bits & STORE_TERMVECTOR) != 0;
    		storePositionsWithTermVector = (bits & STORE_POSITIONS_WITH_TERMVECTOR) != 0;
@@ -247,8 +266,14 @@ void FieldInfos::read(IndexInput* input) {
    		omitNorms = (bits & OMIT_NORMS) != 0;
 			storePayloads = (bits & STORE_PAYLOADS) != 0;
 			hasProx = (bits & TERM_FREQ_AND_POSITIONS) != 0;
-   
-   		addInternal(name, isIndexed, storeTermVector, storePositionsWithTermVector, storeOffsetWithTermVector, omitNorms, hasProx, storePayloads);
+
+   		FieldInfo* fi = addInternal(name, isIndexed, storeTermVector, storePositionsWithTermVector, storeOffsetWithTermVector, omitNorms, hasProx, storePayloads);
+			if ((bits & 0x80) == 0) {
+				fi->setIndexVersion(IndexVersion::kV0);
+			} else {
+				IndexVersion indexVersion = (IndexVersion)input->readVInt();
+				fi->setIndexVersion(indexVersion);
+			} 
    		_CLDELETE_CARRAY(name);
 	}
 }

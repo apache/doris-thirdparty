@@ -8,6 +8,8 @@
 #define _lucene_index_FieldInfos_
 
 #include "CLucene/store/Directory.h"
+#include "CLucene/index/IndexVersion.h"
+
 
 CL_CLASS_DEF(document,Document)
 CL_CLASS_DEF(document,Field)
@@ -33,6 +35,7 @@ class FieldInfo :LUCENE_BASE{
 
 	bool omitNorms; // omit norms associated with indexed fields
 	bool hasProx = false;
+	IndexVersion indexVersion_ = IndexVersion::kV1;
 
 	bool storePayloads; // whether this field stores payloads together with term positions
 
@@ -67,6 +70,10 @@ class FieldInfo :LUCENE_BASE{
 	* @memory - caller is responsible for deleting the returned object
 	*/
 	FieldInfo* clone();
+
+public:
+	void setIndexVersion(IndexVersion indexVersion) { indexVersion_ = indexVersion; }
+	IndexVersion getIndexVersion() { return indexVersion_; }
 };
 
 /** Access to the Field Info file that describes document fields and whether or
@@ -126,6 +133,7 @@ public:
 	void addIndexed(const TCHAR** names, const bool storeTermVectors, const bool storePositionWithTermVector, const bool storeOffsetWithTermVector);
 
 	bool hasProx();
+	IndexVersion getIndexVersion();
 
 	/**
 	* Assumes the fields are not storing term vectors.

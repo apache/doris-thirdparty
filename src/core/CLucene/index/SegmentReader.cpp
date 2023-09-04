@@ -1123,4 +1123,9 @@ bool SegmentReader::normsClosed() {
     }
     return true;
 }
+
+IndexVersion SegmentReader::getIndexVersion() {
+    return _fieldInfos->getIndexVersion();
+}
+
 CL_NS_END

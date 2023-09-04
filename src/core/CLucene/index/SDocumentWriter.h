@@ -54,6 +54,7 @@ private:
     std::ostream* infoStream{};
     int64_t ramBufferSize;
     bool hasProx_ = false;
+    IndexVersion indexVersion_ = IndexVersion::kV1;
 
 public:
     class FieldMergeState;

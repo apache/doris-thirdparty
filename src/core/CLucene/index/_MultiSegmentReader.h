@@ -119,6 +119,8 @@ public:
 
   static const char* getClassName();
   const char* getObjectName() const;
+
+  IndexVersion getIndexVersion() override;
 };
 
 
@@ -159,6 +161,8 @@ public:
   void close();
 
   virtual TermPositions* __asTermPositions();
+
+  int32_t docFreq() override;
 };
 
 
