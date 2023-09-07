@@ -592,11 +592,13 @@ void MultiTermDocs::seek( Term* tterm) {
 	pointer = 0;
 	current = NULL;
 
-	for (int32_t i = 0; i < readerTermDocs->length; i++) {
-		termDocs(i);
+	if (readerTermDocs) {
+		for (int32_t i = 0; i < readerTermDocs->length; i++) {
+			termDocs(i);
+		}
+		base = starts[pointer];
+		current = termDocs(pointer++);
 	}
-	base = starts[pointer];
-	current = termDocs(pointer++);
 }
 
 bool MultiTermDocs::next() {

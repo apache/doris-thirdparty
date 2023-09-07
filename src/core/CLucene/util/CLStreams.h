@@ -27,6 +27,10 @@ class CLUCENE_EXPORT CLStream: public IReader{
 public:
 	virtual ~CLStream(){}
 
+    virtual void init(const void *_value, int32_t _length, bool copyData) {
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::init");
+    }
+
 	inline int read(){
 		const T* buffer;
 		const int32_t nread = read((const void**)&buffer,1, 1);
@@ -191,7 +195,7 @@ public:
         this->buffer_size = 0;
         this->init(_value, _length, copyData);
     }
-    void init(const T *_value, int32_t _length, bool copyData = true){
+    void init(const void *_value, int32_t _length, bool copyData = true) override {
         const size_t length = _length;
         this->pos = 0;
         if (copyData) {
@@ -209,7 +213,7 @@ public:
             if (ownValue && this->value != NULL) {
                 _CLDELETE_LARRAY((T *) this->value);
             }
-            this->value = _value;
+            this->value = (T *)_value;
             this->buffer_size = 0;
         }
         this->m_size = length;
