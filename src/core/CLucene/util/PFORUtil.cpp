@@ -16,6 +16,9 @@
 // under the License.
 #include "PFORUtil.h"
 #include "vp4.h"
+#if (defined(__i386) || defined(__x86_64__))
+#include <cpuid.h>
+#endif
 
 namespace {
 using DEC_FUNC = size_t (*)(unsigned char *__restrict, size_t, uint32_t *__restrict);
@@ -27,12 +30,12 @@ ENC_FUNC g_p4nzenc;
 } // anonymous namespace
 
 __attribute__((constructor)) void SelectPFORFunctions() {
+#if (defined(__i386) || defined(__x86_64__))
     uint32_t eax, ebx, ecx, edx;
     __cpuid(1, eax, ebx, ecx, edx);
 
     bool sse2 = (edx & bit_SSE2) != 0;
     bool sse42 = (ecx & bit_SSE4_2) != 0;
-#if (defined(__i386) || defined(__x86_64__))
 #if defined(USE_AVX2)
     g_p4nd1dec = p4nd1dec256v32;
     g_p4nzdec = p4nzdec256v32;
