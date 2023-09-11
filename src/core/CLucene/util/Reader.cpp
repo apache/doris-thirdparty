@@ -62,8 +62,8 @@ StringReader::StringReader ( const TCHAR* _value, const int32_t _length, bool co
 	this->init(_value,_length,copyData);
 }
 
-void StringReader::init(const TCHAR *_value, const int32_t _length, bool copyData) {
-    const size_t length = (_length < 0 ? _tcslen(_value) : _length);
+void StringReader::init(const void *_value, const int32_t _length, bool copyData) {
+    const size_t length = (_length < 0 ? _tcslen((TCHAR *)_value) : _length);
     this->pos = 0;
     if (copyData) {
         TCHAR *tmp = (TCHAR *) this->value;
@@ -74,13 +74,13 @@ void StringReader::init(const TCHAR *_value, const int32_t _length, bool copyDat
             tmp = (TCHAR *) realloc(tmp, sizeof(TCHAR) * (length + 1));
             this->buffer_size = length;
         }
-        _tcsncpy(tmp, _value, length + 1);
+        _tcsncpy(tmp, (TCHAR *)_value, length + 1);
         this->value = tmp;
     } else {
         if (ownValue && this->value != NULL) {
             _CLDELETE_LARRAY((TCHAR *) this->value);
         }
-        this->value = _value;
+        this->value = (TCHAR *)_value;
         this->buffer_size = 0;
     }
     this->m_size = length;

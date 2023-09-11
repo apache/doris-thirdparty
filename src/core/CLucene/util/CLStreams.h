@@ -270,7 +270,11 @@ class CLUCENE_EXPORT FilteredBufferedReader: public BufferedReader{
 public:
 	FilteredBufferedReader(Reader* reader, bool deleteReader);
 	virtual ~FilteredBufferedReader();
-	
+    
+    void init(const void *_value, int32_t _length, bool copyData) override {
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::init");
+    }
+
 	int32_t read(const void** start, int32_t min, int32_t max);
 	int64_t position();
 	int64_t reset(int64_t);
@@ -304,7 +308,7 @@ protected:
   size_t buffer_size;
 public:
   StringReader ( const TCHAR* value, const int32_t length = -1, bool copyData = true );
-  void init ( const TCHAR* value, const int32_t length, bool copyData = true );
+  void init ( const void* value, const int32_t length, bool copyData = true ) override;
 	virtual ~StringReader();
 
   int32_t read(const void** start, int32_t min, int32_t max);
@@ -345,6 +349,10 @@ class CLUCENE_EXPORT FileInputStream: public BufferedInputStream {
 	Internal* _internal;
 protected:
 	void init(InputStream *i, int encoding);
+
+    void init(const void *_value, int32_t _length, bool copyData) override {
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::init");
+    }
 public:
 	LUCENE_STATIC_CONSTANT(int32_t, DEFAULT_BUFFER_SIZE=4096);
 	FileInputStream ( const char* path, int32_t buflen = -1 );
@@ -363,6 +371,10 @@ class CLUCENE_EXPORT SimpleInputStreamReader: public BufferedReader{
 	Internal* _internal;
 protected:
 	void init(InputStream *i, int encoding);
+
+    void init(const void *_value, int32_t _length, bool copyData) override {
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::init");
+    }
 public:	
 	enum{
 		ASCII=1,
