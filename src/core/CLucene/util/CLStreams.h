@@ -275,12 +275,12 @@ public:
         _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::init");
     }
 
-	int32_t read(const void** start, int32_t min, int32_t max);
-	int64_t position();
-	int64_t reset(int64_t);
-	int64_t skip(int64_t ntoskip);
-	size_t size();
-	void setMinBufSize(int32_t minbufsize);
+	int32_t read(const void** start, int32_t min, int32_t max) override;
+	int64_t position() override;
+	int64_t reset(int64_t) override;
+	int64_t skip(int64_t ntoskip) override;
+	size_t size() override;
+	void setMinBufSize(int32_t minbufsize) override;
 };
 
 class CLUCENE_EXPORT FilteredBufferedInputStream: public BufferedInputStream{
@@ -311,12 +311,12 @@ public:
   void init ( const void* value, const int32_t length, bool copyData = true ) override;
 	virtual ~StringReader();
 
-  int32_t read(const void** start, int32_t min, int32_t max);
-  int64_t position();
-  int64_t reset(int64_t);
-	int64_t skip(int64_t ntoskip);
-	void setMinBufSize(int32_t s);
-	size_t size();
+  int32_t read(const void** start, int32_t min, int32_t max) override;
+  int64_t position() override;
+  int64_t reset(int64_t) override;
+	int64_t skip(int64_t ntoskip) override;
+	void setMinBufSize(int32_t s) override;
+	size_t size() override;
 };
 class CLUCENE_EXPORT AStringReader: public BufferedInputStream{
 	signed char* value;
@@ -358,12 +358,12 @@ public:
 	FileInputStream ( const char* path, int32_t buflen = -1 );
 	virtual ~FileInputStream ();
 	
-	int32_t read(const void** start, int32_t min, int32_t max);
-	int64_t position();
-	int64_t reset(int64_t);
-	int64_t skip(int64_t ntoskip);
-	size_t size();
-	void setMinBufSize(int32_t minbufsize);
+	int32_t read(const void** start, int32_t min, int32_t max) override;
+	int64_t position() override;
+	int64_t reset(int64_t) override;
+	int64_t skip(int64_t ntoskip) override;
+	size_t size() override;
+	void setMinBufSize(int32_t minbufsize) override;
 };
 
 class CLUCENE_EXPORT SimpleInputStreamReader: public BufferedReader{
@@ -386,12 +386,12 @@ public:
    SimpleInputStreamReader(InputStream *i, int encoding);
 	virtual ~SimpleInputStreamReader();
 	
-  int32_t read(const void** start, int32_t min, int32_t max);
-  int64_t position();
-  int64_t reset(int64_t);
-  int64_t skip(int64_t ntoskip);
-  void setMinBufSize(int32_t s);
-  size_t size();
+  int32_t read(const void** start, int32_t min, int32_t max) override;
+  int64_t position() override;
+  int64_t reset(int64_t) override;
+  int64_t skip(int64_t ntoskip) override;
+  void setMinBufSize(int32_t s) override;
+  size_t size() override;
 };
 
 /**
