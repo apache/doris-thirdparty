@@ -695,6 +695,11 @@ namespace orc {
      * @param rowNumber the next row the reader should return
      */
     virtual void seekToRow(uint64_t rowNumber) = 0;
+
+    /**
+     * Get number of rows in this range.
+     */
+    virtual uint64_t getNumberOfRows() const = 0;
   };
 }  // namespace orc
 
