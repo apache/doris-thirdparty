@@ -268,6 +268,7 @@ namespace orc {
     numRowGroupsInStripeRange = 0;
     useTightNumericVector = opts.getUseTightNumericVector();
     uint64_t rowTotal = 0;
+    rowTotalInRange = 0;
 
     firstRowOfStripe.resize(numberOfStripes);
     for (size_t i = 0; i < numberOfStripes; ++i) {
@@ -277,6 +278,7 @@ namespace orc {
       bool isStripeInRange = stripeInfo.offset() >= opts.getOffset() &&
                              stripeInfo.offset() < opts.getOffset() + opts.getLength();
       if (isStripeInRange) {
+        rowTotalInRange += stripeInfo.numberofrows();
         if (i < currentStripe) {
           currentStripe = i;
         }
@@ -500,6 +502,10 @@ namespace orc {
     if (rowsToSkip > 0) {
       reader->skip(rowsToSkip, startReadPhase);
     }
+  }
+
+  uint64_t RowReaderImpl::getNumberOfRows() const {
+    return rowTotalInRange;
   }
 
   void RowReaderImpl::loadStripeIndex() {

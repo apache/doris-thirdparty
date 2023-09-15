@@ -184,6 +184,8 @@ namespace orc {
     uint64_t rowsInCurrentStripe;
     // number of row groups between first stripe and last stripe
     uint64_t numRowGroupsInStripeRange;
+    // numbfer of rows in range
+    uint64_t rowTotalInRange;
     proto::StripeInformation currentStripeInfo;
     proto::StripeFooter currentStripeFooter;
     std::unique_ptr<ColumnReader> reader;
@@ -290,6 +292,8 @@ namespace orc {
     uint64_t getRowNumber() const override;
 
     void seekToRow(uint64_t rowNumber) override;
+
+    uint64_t getNumberOfRows() const override;
 
     const FileContents& getFileContents() const;
     bool getThrowOnHive11DecimalOverflow() const;
