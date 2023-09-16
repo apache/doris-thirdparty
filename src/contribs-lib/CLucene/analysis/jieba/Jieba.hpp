@@ -1,6 +1,7 @@
 #ifndef CPPJIEAB_JIEBA_H
 #define CPPJIEAB_JIEBA_H
 
+#include <string_view>
 #include "QuerySegment.hpp"
 #include "KeywordExtractor.hpp"
 
@@ -34,16 +35,25 @@ class Jieba {
   void Cut(const string& sentence, vector<string>& words, bool hmm = true) const {
     mix_seg_.Cut(sentence, words, hmm);
   }
+  void Cut(const string& sentence, vector<std::string_view>& words, bool hmm = true) const {
+    mix_seg_.Cut(sentence, words, hmm);
+  }
   void Cut(const string& sentence, vector<Word>& words, bool hmm = true) const {
     mix_seg_.Cut(sentence, words, hmm);
   }
   void CutAll(const string& sentence, vector<string>& words) const {
     full_seg_.Cut(sentence, words);
   }
+  void CutAll(const string& sentence, vector<std::string_view>& words) const {
+    full_seg_.Cut(sentence, words);
+  }
   void CutAll(const string& sentence, vector<Word>& words) const {
     full_seg_.Cut(sentence, words);
   }
   void CutForSearch(const string& sentence, vector<string>& words, bool hmm = true) const {
+    query_seg_.Cut(sentence, words, hmm);
+  }
+  void CutForSearch(const string& sentence, vector<std::string_view>& words, bool hmm = true) const {
     query_seg_.Cut(sentence, words, hmm);
   }
   void CutForSearch(const string& sentence, vector<Word>& words, bool hmm = true) const {

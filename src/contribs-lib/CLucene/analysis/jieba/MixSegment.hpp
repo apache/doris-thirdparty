@@ -2,6 +2,7 @@
 #define CPPJIEBA_MIXSEGMENT_H
 
 #include <cassert>
+#include <string_view>
 #include "MPSegment.hpp"
 #include "HMMSegment.hpp"
 #include "StringUtil.hpp"
@@ -20,6 +21,27 @@ class MixSegment: public SegmentTagged {
     LoadStopWordDict(stopWordPath);
   }
   ~MixSegment() {
+  }
+
+  void Cut(const string& sentence, vector<std::string_view>& words, bool hmm = true) const {
+    PreFilter pre_filter(symbols_, sentence);
+    PreFilter::Range range;
+    vector<WordRange> wrs;
+    wrs.reserve(sentence.size() / 2);
+    while (pre_filter.HasNext()) {
+      range = pre_filter.Next();
+      Cut(range.begin, range.end, wrs, hmm);
+    }
+    words.clear();
+    words.reserve(wrs.size());
+    for (auto& wr : wrs) {
+      uint32_t len = wr.right->offset - wr.left->offset + wr.right->len;
+      std::string_view word(sentence.data() + wr.left->offset, len);
+      if (stopWords_.count(word)) {
+        continue;
+      }
+      words.emplace_back(word);
+    }
   }
 
   void Cut(const string& sentence, vector<string>& words) const {
@@ -104,10 +126,12 @@ class MixSegment: public SegmentTagged {
     ifstream ifs(filePath.c_str());
     if (ifs.is_open()) {
       string line;
-      while (getline(ifs, line)) {
-        stopWords_.insert(line);
+        while (getline(ifs, line)) {
+        stopWordList_.push_back(line);
       }
-      assert(stopWords_.size());
+      for (auto& word : stopWordList_) {
+        stopWords_.insert(std::string_view(word.data(), word.size()));
+      }
     }
   }
 
@@ -116,7 +140,8 @@ class MixSegment: public SegmentTagged {
   HMMSegment hmmSeg_;
   PosTagger tagger_;
 
-  unordered_set<string> stopWords_;
+  std::vector<std::string> stopWordList_;
+  unordered_set<std::string_view> stopWords_;
 
 }; // class MixSegment
 
