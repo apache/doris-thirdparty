@@ -26,6 +26,32 @@ class FullSegment: public SegmentBase {
       delete dictTrie_;
     }
   }
+
+  void Cut(const std::string& sentence, vector<std::string_view>& words) const {
+    PreFilter pre_filter(symbols_, sentence, true);
+    PreFilter::Range range;
+    vector<WordRange> wrs;
+    wrs.reserve(sentence.size()/2);
+    while (pre_filter.HasNext()) {
+      range = pre_filter.Next();
+      if (range.type == PreFilter::Language::CHINESE) {
+        Cut(range.begin, range.end, wrs);
+      } else {
+        CutAlnum(range.begin, range.end, wrs);
+      }
+    }
+    words.clear();
+    words.reserve(wrs.size());
+    for (auto& wr : wrs) {
+      uint32_t len = wr.right->offset - wr.left->offset + wr.right->len;
+      std::string_view word(sentence.data() + wr.left->offset, len);
+      if (stopWords_.count(word)) {
+        continue;
+      }
+      words.emplace_back(word);
+    }
+  }
+
   void Cut(const string& sentence, 
         vector<string>& words) const {
     vector<Word> tmp;
@@ -137,10 +163,12 @@ class FullSegment: public SegmentBase {
     ifstream ifs(filePath.c_str());
     if (ifs.is_open()) {
       string line;
-      while (getline(ifs, line)) {
-        stopWords_.insert(line);
+        while (getline(ifs, line)) {
+        stopWordList_.push_back(line);
       }
-      assert(stopWords_.size());
+      for (auto& word : stopWordList_) {
+        stopWords_.insert(std::string_view(word.data(), word.size()));
+      }
     }
   }
 
@@ -148,7 +176,8 @@ class FullSegment: public SegmentBase {
   const DictTrie* dictTrie_;
   bool isNeedDestroy_;
 
-  unordered_set<string> stopWords_;
+  std::vector<std::string> stopWordList_;
+  unordered_set<std::string_view> stopWords_;
 
 };
 }

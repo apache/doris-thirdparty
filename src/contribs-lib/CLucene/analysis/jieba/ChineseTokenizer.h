@@ -4,6 +4,7 @@
 #include <CLucene.h>
 
 #include <memory>
+#include <string_view>
 #include "Jieba.hpp"
 
 #include "CLucene/analysis/AnalysisHeader.h"
@@ -31,28 +32,15 @@ private:
 class ChineseTokenizer : public lucene::analysis::Tokenizer {
 private:
     AnalyzerMode mode{};
-    /** word offset, used to imply which character(in ) is parsed */
-    int32_t offset{};
 
     /** the index used only for ioBuffer */
-    int32_t bufferIndex{};
+    int32_t bufferIndex = 0;
 
     /** data length */
-    int32_t dataLen{};
+    int32_t dataLen = 0;
 
-    /**
-     * character buffer, store the characters which are used to compose <br>
-     * the returned Token
-     */
-    TCHAR buffer[LUCENE_MAX_WORD_LEN + 1]{};
-
-    /**
-     * I/O buffer, used to store the content of the input(one of the <br>
-     * members of Tokenizer)
-     */
-    const char* ioBuffer{};
-    std::vector<std::string> tokens_text;
-    //std::vector<std::unique_ptr<Token>> tokens;
+    std::string buffer_;
+    std::vector<std::string_view> tokens_text;
 
 public:
     // Constructor
@@ -65,13 +53,7 @@ public:
     // Override the next method to tokenize Chinese text using Jieba
     lucene::analysis::Token* next(lucene::analysis::Token* token) override;
 
-    void reset(lucene::util::Reader *reader) override {
-        this->input = reader;
-        this->offset = 0;
-        this->bufferIndex = 0;
-        this->dataLen = 0;
-        this->tokens_text.clear();
-    }
+    void reset(lucene::util::Reader *reader) override;
 };
 
 CL_NS_END2
