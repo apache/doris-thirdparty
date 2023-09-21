@@ -1684,7 +1684,11 @@ void IndexWriter::mergeTerms(bool hasProx) {
                 auto destDocId = destDoc->destDocId;
                 auto destFreq = destDoc->destFreq;
                 auto& descPositions = destDoc->destPositions;
-
+                // <UINT32_MAX, UINT32_MAX> indicates current row not exist in Doris dest segment.
+                // So we ignore this doc here.
+                if (destIdx == UINT32_MAX || destDocId == UINT32_MAX) {
+                    continue;
+                }
                 auto freqOut = freqOutputList[destIdx];         
                 auto proxOut = proxOutputList[destIdx];
                 auto& docDeltaBuffer = docDeltaBuffers[destIdx];
