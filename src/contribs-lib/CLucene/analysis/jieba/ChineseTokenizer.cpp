@@ -34,7 +34,7 @@ void ChineseTokenizer::reset(lucene::util::Reader* reader) {
 
     buffer_.resize(input->size());
     int32_t numRead = input->readCopy(buffer_.data(), 0, buffer_.size());
-    assert(buffer.size() == numRead);
+    assert(buffer_.size() == numRead);
     
     switch (mode) {
         case AnalyzerMode::Search:
