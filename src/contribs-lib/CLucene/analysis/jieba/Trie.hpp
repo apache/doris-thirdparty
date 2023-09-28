@@ -78,6 +78,53 @@ class Trie {
     return ptNode->ptValue;
   }
 
+  void Find(const string& sentence,
+            RuneStrArray::const_iterator begin,
+            RuneStrArray::const_iterator end,
+            vector<string_view>& words,
+            size_t max_word_len = MAX_WORD_LENGTH) const {
+    assert(root_ != NULL);
+
+    const TrieNode* ptNode = NULL;
+    TrieNode::NextMap::const_iterator citer;
+
+    for (size_t i = 0; i < size_t(end - begin);) {
+      size_t longestWordEnd = 1; // Used to keep track of the end of the longest word found
+      if (root_->next != NULL && root_->next->end() != (citer = root_->next->find((begin + i)->rune))) {
+        ptNode = citer->second;
+      } else {
+        ptNode = NULL;
+      }
+
+      if (ptNode != NULL && ptNode->ptValue) {
+        longestWordEnd = ptNode->ptValue->word.size();
+      }
+
+      for (size_t j = i + 1; j < size_t(end - begin) && (j - i + 1) <= max_word_len; j++) {
+        if (ptNode == NULL || ptNode->next == NULL) {
+            break;
+        }
+        citer = ptNode->next->find((begin + j)->rune);
+        if (ptNode->next->end() == citer) {
+            break;
+        }
+        ptNode = citer->second;
+
+        if (NULL != ptNode->ptValue && j + ptNode->ptValue->word.size() > longestWordEnd) {
+            longestWordEnd = ptNode->ptValue->word.size();
+        }
+      }
+
+      if (longestWordEnd > 1 && ptNode != nullptr && ptNode->ptValue != nullptr) {
+        words.emplace_back(GetStringViewFromRunes(sentence, begin + i, begin + i + ptNode->ptValue->word.size() - 1));
+        i += ptNode->ptValue->word.size();
+      } else {
+        words.emplace_back(GetStringViewFromRunes(sentence, begin + i, begin + i));
+        i++;
+      }
+    }
+  }
+
   void Find(RuneStrArray::const_iterator begin, 
         RuneStrArray::const_iterator end, 
         vector<struct Dag>&res, 

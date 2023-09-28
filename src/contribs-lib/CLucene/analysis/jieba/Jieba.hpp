@@ -71,6 +71,9 @@ class Jieba {
   void CutSmall(const string& sentence, vector<Word>& words, size_t max_word_len) const {
     mp_seg_.Cut(sentence, words, max_word_len);
   }
+  void CutSmall(const string& sentence, vector<string_view>& words, size_t max_word_len) const {
+    mp_seg_.Cut(sentence, words, max_word_len);
+  }
   
   void Tag(const string& sentence, vector<pair<string, string> >& words) const {
     mix_seg_.Tag(sentence, words);

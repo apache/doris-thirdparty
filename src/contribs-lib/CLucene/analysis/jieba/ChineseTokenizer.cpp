@@ -44,7 +44,7 @@ void ChineseTokenizer::reset(lucene::util::Reader* reader) {
             JiebaSingleton::getInstance().CutAll(buffer_, tokens_text);
             break;
         case AnalyzerMode::Default:
-            JiebaSingleton::getInstance().Cut(buffer_, tokens_text, true);
+            JiebaSingleton::getInstance().CutSmall(buffer_, tokens_text, 512);
             break;
     }
 

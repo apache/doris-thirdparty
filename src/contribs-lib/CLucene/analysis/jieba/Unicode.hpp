@@ -200,7 +200,16 @@ inline Word GetWordFromRunes(const string& s, RuneStrArray::const_iterator left,
 inline string GetStringFromRunes(const string& s, RuneStrArray::const_iterator left, RuneStrArray::const_iterator right) {
   assert(right->offset >= left->offset);
   uint32_t len = right->offset - left->offset + right->len;
+  if (len == 0) {
+    return "";
+  }
   return s.substr(left->offset, len);
+}
+
+inline string_view GetStringViewFromRunes(const string& s, RuneStrArray::const_iterator left, RuneStrArray::const_iterator right) {
+  assert(right->offset >= left->offset);
+  uint32_t len = right->offset - left->offset + right->len;
+  return string_view(s.data() + left->offset, len);
 }
 
 inline void GetWordsFromWordRanges(const string& s, const vector<WordRange>& wrs, vector<Word>& words) {

@@ -52,6 +52,17 @@ class MPSegment: public SegmentTagged {
     words.reserve(wrs.size());
     GetWordsFromWordRanges(sentence, wrs, words);
   }
+  void Cut(const string& sentence,
+           vector<string_view>& words,
+           size_t max_word_len = MAX_WORD_LENGTH) const {
+    words.clear();
+    PreFilter pre_filter(symbols_, sentence);
+    PreFilter::Range range;
+    while (pre_filter.HasNext()) {
+      range = pre_filter.Next();
+      Cut(sentence, range.begin, range.end, words, max_word_len);
+    }
+  }
   void Cut(RuneStrArray::const_iterator begin,
            RuneStrArray::const_iterator end,
            vector<WordRange>& words,
@@ -63,6 +74,13 @@ class MPSegment: public SegmentTagged {
           max_word_len);
     CalcDP(dags);
     CutByDag(begin, end, dags, words);
+  }
+  void Cut(const string& sentence,
+          RuneStrArray::const_iterator begin,
+           RuneStrArray::const_iterator end,
+           vector<string_view>& words,
+           size_t max_word_len = MAX_WORD_LENGTH) const {
+    dictTrie_->Find(sentence, begin, end, words);
   }
 
   const DictTrie* GetDictTrie() const {

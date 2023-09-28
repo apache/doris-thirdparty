@@ -81,6 +81,14 @@ class DictTrie {
     trie_->Find(begin, end, res, max_word_len);
   }
 
+  void Find(const string& sentence,
+                    RuneStrArray::const_iterator begin,
+                    RuneStrArray::const_iterator end,
+                    vector<string_view>& words,
+                    size_t max_word_len = MAX_WORD_LENGTH) const {
+    trie_->Find(sentence, begin, end, words);
+  }
+
   bool Find(const string& word)
   {
     const DictUnit *tmp = NULL;
