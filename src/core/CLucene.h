@@ -8,6 +8,11 @@
 #ifndef _lucene_CLucene_
 #define _lucene_CLucene_
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wshadow-field"
+#endif
+
 #include "CLucene/StdHeader.h"
 #include "CLucene/index/IndexReader.h"
 #include "CLucene/index/IndexWriter.h"
@@ -44,5 +49,9 @@
 #include "CLucene/util/CLStreams.h"
 #include "CLucene/util/PriorityQueue.h"
 #include "CLucene/util/Misc.h"
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 #endif
