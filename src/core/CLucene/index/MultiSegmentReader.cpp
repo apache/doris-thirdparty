@@ -489,7 +489,7 @@ IndexVersion MultiSegmentReader::getIndexVersion() {
 	for (size_t i = 0; i < subReaders->length; i++) {
 		return (*subReaders)[i]->getIndexVersion();
 	}
-	_CLTHROWA(CL_ERR_IllegalState, "MultiSegmentReader::getIndexVersion index open failed.");
+	return IndexVersion::kV0;
 }
 
 
