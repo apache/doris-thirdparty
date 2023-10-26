@@ -40,6 +40,7 @@ size_t DefaultDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict o
         }
         out[i] = docCode;
     }
+    return n;
 }
 
 size_t DefaultDDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict out) {
@@ -55,6 +56,7 @@ size_t DefaultDDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict 
         docDelta += (docCode >> 1);
         out[i] = docDelta;
     }
+    return n;
 }
 
 size_t DefaultDENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out) {
@@ -70,6 +72,7 @@ size_t DefaultDENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict 
         out[outIndex++] = (uint8_t)delta;
         lastDoc = curDoc;
     }
+    return outIndex;
 }
 
 size_t DefaultENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out) {
@@ -82,6 +85,7 @@ size_t DefaultENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict o
         }
         out[outIndex++] = (uint8_t)curDoc;
     }
+    return outIndex;
 }
 
 __attribute__((constructor)) void SelectPFORFunctions() {
@@ -97,17 +101,10 @@ __attribute__((constructor)) void SelectPFORFunctions() {
     g_p4nd1enc = p4nd1enc256v32;
     g_p4nzenc = p4nzenc256v32;
 #else
-    if (sse42) {
-        g_p4nd1dec = p4nd1dec128v32;
-        g_p4nzdec = p4nzdec128v32;
-        g_p4nd1enc = p4nd1enc128v32;
-        g_p4nzenc = p4nzenc128v32;
-    } else {
-        g_p4nd1dec = DefaultDDEC;
-        g_p4nzdec = DefaultDEC;
-        g_p4nd1enc = DefaultDENC;
-        g_p4nzenc = DefaultENC;
-    }
+    g_p4nd1dec = DefaultDDEC;
+    g_p4nzdec = DefaultDEC;
+    g_p4nd1enc = DefaultDENC;
+    g_p4nzenc = DefaultENC;
 #endif
 #else
     g_p4nd1dec = p4nd1dec32;
