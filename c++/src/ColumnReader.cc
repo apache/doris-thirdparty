@@ -2045,6 +2045,8 @@ namespace orc {
           skipInternal(idx - previousIdx, readPhase);
         }
         readInt128(values[idx]);
+        scaleInt128(values[idx], static_cast<uint32_t>(scale),
+                    static_cast<int32_t>(scaleBuffer[idx]));
         previousIdx = idx + 1;
       }
       skipInternal(numValues - previousIdx, readPhase);
