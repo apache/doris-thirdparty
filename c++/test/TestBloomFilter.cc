@@ -22,7 +22,7 @@
 
 namespace orc {
 
-  TEST(TestBloomFilter, testBitSetEqual) {
+  TEST(TestOrcBloomFilter, testBitSetEqual) {
     BitSet bitSet64_1(64), bitSet64_2(64), bitSet32(128);
     EXPECT_TRUE(bitSet64_1 == bitSet64_2);
     EXPECT_FALSE(bitSet64_1 == bitSet32);
@@ -50,7 +50,7 @@ namespace orc {
   }
 
   // ported from Java ORC
-  TEST(TestBloomFilter, testSetGetBitSet) {
+  TEST(TestOrcBloomFilter, testSetGetBitSet) {
     BitSet bitset(128);
 
     // set every 9th bit for a rotating pattern
@@ -82,10 +82,10 @@ namespace orc {
     EXPECT_EQ(~0x8040201008040201L, longs[1]);
   }
 
-  // Same test as TestBloomFilter#testLongHash() in Java codes. Make sure the hash values
+  // Same test as TestOrcBloomFilter#testLongHash() in Java codes. Make sure the hash values
   // are consistent between the Java client and C++ client.
   // TODO(ORC-1025): Add exhaustive test on all numbers.
-  TEST(TestBloomFilter, testLongHash) {
+  TEST(TestOrcBloomFilter, testLongHash) {
     EXPECT_EQ(0, orc::getLongHash(0));
     EXPECT_EQ(6614246905173314819, orc::getLongHash(-1));
     EXPECT_EQ(-5218250166726157773, orc::getLongHash(-2));
@@ -112,10 +112,10 @@ namespace orc {
   EXPECT_TRUE(bf.mBitSet->get(p4));         \
   EXPECT_TRUE(bf.mBitSet->get(p5))
 
-  // Same test as TestBloomFilter#testBasicOperations() in Java codes. We also
+  // Same test as TestOrcBloomFilter#testBasicOperations() in Java codes. We also
   // verifies the bitSet positions that are set, to make sure both the Java and C++ codes
   // hash the same value into the same position.
-  TEST(TestBloomFilter, testBloomFilterBasicOperations) {
+  TEST(TestOrcBloomFilter, testBloomFilterBasicOperations) {
     BloomFilterImpl bloomFilter(128);
 
     // test integers
@@ -222,7 +222,7 @@ namespace orc {
     EXPECT_TRUE(bloomFilter.testBytes(cnStr, static_cast<int64_t>(strlen(cnStr))));
   }
 
-  TEST(TestBloomFilter, testBloomFilterSerialization) {
+  TEST(TestOrcBloomFilter, testBloomFilterSerialization) {
     BloomFilterImpl emptyFilter1(128), emptyFilter2(256);
     EXPECT_FALSE(emptyFilter1 == emptyFilter2);
 
