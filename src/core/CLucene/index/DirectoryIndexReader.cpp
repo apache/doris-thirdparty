@@ -4,6 +4,7 @@
 * Distributable under the terms of either the Apache License (Version 2.0) or
 * the GNU Lesser General Public License, as specified in the COPYING file.
 ------------------------------------------------------------------------------*/
+#include <cstdint>
 #include "CLucene/_ApiHeader.h"
 #include "DirectoryIndexReader.h"
 #include "_IndexFileDeleter.h"
@@ -141,6 +142,8 @@ CL_NS_DEF(index)
   class DirectoryIndexReader::FindSegmentsFile_Open: public SegmentInfos::FindSegmentsFile<DirectoryIndexReader*>{
     bool closeDirectory;
     IndexDeletionPolicy* deletionPolicy;
+    int32_t readBufferSize_ = -1;
+
 	protected:
     DirectoryIndexReader* doBody(const char* segmentFileName) {
 
@@ -150,9 +153,9 @@ CL_NS_DEF(index)
       DirectoryIndexReader* reader;
 
       if (infos->size() == 1) {          // index is optimized
-        reader = SegmentReader::get(infos, infos->info(0), closeDirectory);
+        reader = SegmentReader::get(infos, infos->info(0), readBufferSize_, closeDirectory);
       } else {
-        reader = _CLNEW MultiSegmentReader(directory, infos, closeDirectory);
+        reader = _CLNEW MultiSegmentReader(directory, infos, closeDirectory, readBufferSize_);
       }
       reader->setDeletionPolicy(deletionPolicy);
       return reader;
@@ -165,6 +168,12 @@ CL_NS_DEF(index)
       this->closeDirectory = closeDirectory;
       this->deletionPolicy = deletionPolicy;
     }
+
+    FindSegmentsFile_Open(bool closeDirectory, int32_t readBufferSize,
+                          IndexDeletionPolicy* deletionPolicy, CL_NS(store)::Directory* dir)
+            : FindSegmentsFile_Open(closeDirectory, deletionPolicy, dir) {
+      readBufferSize_ = readBufferSize;
+    }
   };
 
   DirectoryIndexReader* DirectoryIndexReader::open(Directory* __directory, bool closeDirectory, IndexDeletionPolicy* deletionPolicy) {
@@ -172,6 +181,13 @@ CL_NS_DEF(index)
     return runner.run();
   }
 
+  DirectoryIndexReader* DirectoryIndexReader::open(Directory* __directory, int32_t readBufferSize,
+                                                   bool closeDirectory,
+                                                   IndexDeletionPolicy* deletionPolicy) {
+    DirectoryIndexReader::FindSegmentsFile_Open runner(closeDirectory, readBufferSize,
+                                                       deletionPolicy, __directory);
+    return runner.run();
+  }
 
   class DirectoryIndexReader::FindSegmentsFile_Reopen: public SegmentInfos::FindSegmentsFile<DirectoryIndexReader*>{
     bool closeDirectory;

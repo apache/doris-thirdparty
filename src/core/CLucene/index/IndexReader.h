@@ -156,6 +156,9 @@ public:
    */
   static IndexReader* open(CL_NS(store)::Directory* directory, bool closeDirectoryOnCleanup=false, IndexDeletionPolicy* deletionPolicy=NULL);
 
+  static IndexReader* open(CL_NS(store)::Directory* directory, int32_t readBufferSize,
+                           bool closeDirectoryOnCleanup = false,
+                           IndexDeletionPolicy* deletionPolicy = NULL);
 
   /**
    * Refreshes an IndexReader if the index has changed since this instance

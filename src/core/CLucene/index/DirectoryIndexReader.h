@@ -7,6 +7,7 @@
 #ifndef _lucene_index_DirectoryIndexReader_
 #define _lucene_index_DirectoryIndexReader_
 
+#include <cstdint>
 #include "IndexReader.h"
 
 CL_CLASS_DEF(store,LuceneLock)
@@ -84,6 +85,9 @@ public:
 
   CLUCENE_LOCAL_DECL DirectoryIndexReader(CL_NS(store)::Directory* directory, SegmentInfos* segmentInfos, bool closeDirectory);
   CLUCENE_LOCAL_DECL static DirectoryIndexReader* open(CL_NS(store)::Directory* directory, bool closeDirectory, IndexDeletionPolicy* deletionPolicy);
+  CLUCENE_LOCAL_DECL static DirectoryIndexReader* open(CL_NS(store)::Directory* directory,
+                                                       int32_t readBufferSize, bool closeDirectory,
+                                                       IndexDeletionPolicy* deletionPolicy);
 
   IndexReader* reopen();
 
