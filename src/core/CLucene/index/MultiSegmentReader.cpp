@@ -45,7 +45,7 @@ void MultiSegmentReader::initialize(CL_NS(util)::ArrayBase<IndexReader*>* _subRe
   starts[subReaders->length] = _maxDoc;
 }
 
-MultiSegmentReader::MultiSegmentReader(CL_NS(store)::Directory* directory, SegmentInfos* sis, bool closeDirectory):
+MultiSegmentReader::MultiSegmentReader(CL_NS(store)::Directory* directory, SegmentInfos* sis, bool closeDirectory, int32_t readBufferSize):
   DirectoryIndexReader(directory,sis,closeDirectory),
   normsCache(NormsCacheType(true,true))
 {
@@ -57,7 +57,7 @@ MultiSegmentReader::MultiSegmentReader(CL_NS(store)::Directory* directory, Segme
   ArrayBase<IndexReader*>* readers = _CLNEW ObjectArray<IndexReader>(sis->size());
   for (int32_t i = (int32_t)sis->size()-1; i >= 0; i--) {
     try {
-      readers->values[i] = SegmentReader::get(sis->info(i));
+      readers->values[i] = SegmentReader::get(sis->info(i), readBufferSize);
     } catch(CLuceneError& err) {
       if ( err.number() != CL_ERR_IO ) throw err;
 

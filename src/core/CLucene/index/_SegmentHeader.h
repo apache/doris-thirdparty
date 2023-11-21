@@ -367,6 +367,8 @@ public:
    */
   static SegmentReader* get(SegmentInfos* sis, SegmentInfo* si, bool closeDir);
 
+  static SegmentReader *get(SegmentInfos *sis, SegmentInfo *si, int32_t readBufferSize, bool closeDir);
+
   /**
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error

@@ -239,6 +239,11 @@ SegmentReader *SegmentReader::get(SegmentInfos *sis, SegmentInfo *si,
                                   bool closeDir) {
     return get(si->dir, si, sis, closeDir, true, BufferedIndexInput::BUFFER_SIZE, false);
 }
+
+SegmentReader *SegmentReader::get(SegmentInfos *sis, SegmentInfo *si, int32_t readBufferSize, bool closeDir) {
+    return get(si->dir, si, sis, closeDir, true, readBufferSize, false);
+}
+
 /**
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error

@@ -126,6 +126,11 @@ CL_NS_DEF(index)
        return DirectoryIndexReader::open(directory, closeDirectory, deletionPolicy);
   }
 
+  IndexReader* IndexReader::open(Directory* directory, int32_t readBufferSize, bool closeDirectory,
+                                 IndexDeletionPolicy* deletionPolicy) {
+       return DirectoryIndexReader::open(directory, readBufferSize, closeDirectory, deletionPolicy);
+  }
+
   IndexReader* IndexReader::reopen(){
 	  _CLTHROWA(CL_ERR_UnsupportedOperation, "This reader does not support reopen().");
   }
