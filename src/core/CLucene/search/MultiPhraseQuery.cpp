@@ -305,6 +305,14 @@ void MultiPhraseQuery::add(const CL_NS(util)::ArrayBase<CL_NS(index)::Term*>* te
 	add(terms, position);
 }
 
+void MultiPhraseQuery::add(std::vector<CL_NS(index)::Term*>& terms) {
+	int32_t position = 0;
+	if (positions->size() > 0)
+		position = (*positions)[positions->size()-1] + 1;
+
+	add(terms, position);
+}
+
 void MultiPhraseQuery::add(const CL_NS(util)::ArrayBase<CL_NS(index)::Term*>* _terms, const int32_t position) {
 	if (termArrays->size() == 0)
 		field = STRDUP_TtoT((*_terms)[0]->field());
@@ -321,6 +329,25 @@ void MultiPhraseQuery::add(const CL_NS(util)::ArrayBase<CL_NS(index)::Term*>* _t
 	termArrays->push_back(terms);
 	positions->push_back(position);
 }
+
+void MultiPhraseQuery::add(std::vector<CL_NS(index)::Term*>& _terms, const int32_t position) {
+	if (termArrays->size() == 0)
+		field = STRDUP_TtoT((_terms)[0]->field());
+
+  CL_NS(util)::ArrayBase<CL_NS(index)::Term*>* terms = _CLNEW CL_NS(util)::ValueArray<CL_NS(index)::Term*>(_terms.size());
+  for ( size_t i=0;i<_terms.size();i++ ){
+		if ( _tcscmp(_terms[i]->field(), field) != 0) {
+			TCHAR buf[250];
+			_sntprintf(buf,250,_T("All phrase terms must be in the same field (%s): %s"),field, (*terms)[i]->field());
+			_CLTHROWT(CL_ERR_IllegalArgument,buf);
+		}
+    terms->values[i] = _CL_POINTER(_terms[i]);
+	}
+
+	termArrays->push_back(terms);
+	positions->push_back(position);
+}
+
 const CL_NS(util)::CLArrayList<CL_NS(util)::ArrayBase<CL_NS(index)::Term*>*>* MultiPhraseQuery::getTermArrays() {
   return termArrays;
 }

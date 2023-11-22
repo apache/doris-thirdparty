@@ -11,6 +11,8 @@
 #include "CLucene/util/Array.h"
 #include "CLucene/util/VoidList.h"
 
+#include <vector>
+
 CL_CLASS_DEF(index,Term)
 
 CL_NS_DEF(search)
@@ -66,6 +68,7 @@ public:
 	* @see PhraseQuery#add(Term)
 	*/
 	void add(const CL_NS(util)::ArrayBase<CL_NS(index)::Term*>* terms);
+	void add(std::vector<CL_NS(index)::Term*>& terms);
 
 	/**
 	* Allows to specify the relative position of terms within the phrase.
@@ -76,6 +79,7 @@ public:
   * @memory A pointer is taken of each term, the array memory must be cleaned up by calle
 	*/
   void add(const CL_NS(util)::ArrayBase<CL_NS(index)::Term*>* terms, const int32_t position);
+	void add(std::vector<CL_NS(index)::Term*>& terms, const int32_t position);
 
 	/**
 	* Returns a ArrayBase<Term[]> of the terms in the multiphrase.
