@@ -4,6 +4,7 @@
 #include "CLucene/util/CodecUtil.h"
 #include "CLucene/util/FutureArrays.h"
 #include "CLucene/util/Time.h"
+#include "CLucene/index/_IndexFileNames.h"
 #include "bkd_reader.h"
 #include "bkd_writer.h"
 #include "docids_writer.h"
@@ -11,11 +12,40 @@
 #include "packed_index_tree.h"
 
 #include <cmath>
+#include <iostream>
 
+CL_NS_USE(index)
 CL_NS_DEF2(util, bkd)
 
 bkd_reader::bkd_reader(store::IndexInput *in) {
     in_ = std::unique_ptr<store::IndexInput>(in);
+}
+
+bkd_reader::~bkd_reader() {
+    if(_close_directory && _dir){
+        _dir->close();
+    }
+    _CLDECDELETE(_dir);
+}
+
+bkd_reader::bkd_reader(store::Directory *dir, bool close_directory): _close_directory(close_directory) {
+    _dir = _CL_POINTER(dir);
+}
+
+bool bkd_reader::open() {
+    in_ = std::unique_ptr<store::IndexInput>(_dir->openInput(IndexFileNames::BKD_DATA));
+    auto meta_in = std::unique_ptr<store::IndexInput>(_dir->openInput(IndexFileNames::BKD_META));
+    auto index_in =std::unique_ptr<store::IndexInput>(_dir->openInput(IndexFileNames::BKD_INDEX));
+    if (0 == read_meta(meta_in.get())) {
+        return false;
+    }
+    read_index(index_in.get());
+    /*if (!packed_index_.empty()) {
+        index_tree_ = std::make_shared<packed_index_tree>(shared_from_this());
+    } else {
+        index_tree_ = std::make_shared<legacy_index_tree>(shared_from_this());
+    }*/
+    return true;
 }
 
 int bkd_reader::read_meta(store::IndexInput* meta_in) {
@@ -73,9 +103,9 @@ void bkd_reader::read_index(store::IndexInput* index_in) {
         int32_t numBytes = index_in->readVInt();
         metaOffset = index_in->getFilePointer();
 
-        clone_index_input = std::shared_ptr<store::IndexInput>(index_in->clone());
-        packed_index_ = std::make_shared<std::vector<uint8_t>>(numBytes);
-        index_in->readBytes(packed_index_->data(), numBytes);
+        //clone_index_input = std::shared_ptr<store::IndexInput>(index_in);
+        packed_index_ = std::vector<uint8_t>(numBytes);
+        index_in->readBytes(packed_index_.data(), numBytes);
         leaf_block_fps_.clear();
         split_packed_values_.clear();
     } else {
@@ -115,7 +145,7 @@ void bkd_reader::read_index(store::IndexInput* index_in) {
         }
 
         leaf_block_fps_ = leafBlockFPs;
-        packed_index_->clear();
+        packed_index_.clear();
     }
 }
 
@@ -125,7 +155,7 @@ bkd_reader::intersect_state::intersect_state(store::IndexInput *in,
                                              int32_t packedIndexBytesLength,
                                              int32_t maxPointsInLeafNode,
                                              bkd_reader::intersect_visitor *visitor,
-                                             const std::shared_ptr<index_tree> &indexVisitor) {
+                                             std::shared_ptr<index_tree> indexVisitor) {
     in_ = std::shared_ptr<store::IndexInput>(in);
     visitor_ = visitor;
     common_prefix_lengths_ = std::vector<int32_t>(numDims);
@@ -139,9 +169,9 @@ bkd_reader::intersect_state::intersect_state(store::IndexInput *in,
 
 std::shared_ptr<bkd_reader::intersect_state> bkd_reader::get_intersect_state(bkd_reader::intersect_visitor *visitor) {
     // because we will reuse BKDReader, we need to seek to packed tree index offset every time.
-    clone_index_input->seek(metaOffset);
+    //clone_index_input->seek(metaOffset);
     std::shared_ptr<index_tree> index;
-    if (!packed_index_->empty()) {
+    if (!packed_index_.empty()) {
         index = std::make_shared<packed_index_tree>(shared_from_this());
     } else {
         index = std::make_shared<legacy_index_tree>(shared_from_this());
@@ -158,6 +188,9 @@ std::shared_ptr<bkd_reader::intersect_state> bkd_reader::get_intersect_state(bkd
 void bkd_reader::intersect(bkd_reader::intersect_visitor *visitor)
 
 {
+    if (indexFP == 0) {
+        return;
+    }
     intersect(get_intersect_state(visitor), min_packed_value_, max_packed_value_);
 }
 
@@ -560,8 +593,8 @@ int32_t bkd_reader::get_tree_depth() const {
 }
 
 int64_t bkd_reader::ram_bytes_used() {
-    if (!packed_index_->empty()) {
-        return packed_index_->capacity();
+    if (!packed_index_.empty()) {
+        return packed_index_.capacity();
     } else {
         return split_packed_values_.capacity() + leaf_block_fps_.capacity() * sizeof(int64_t);
     }

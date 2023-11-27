@@ -35,15 +35,15 @@ public:
     // called reset w/ non-zero offset!!
     void rewind();
 
-    int getPosition();
+    int getPosition() const;
 
     void setPosition(int pos);
 
     void reset(std::vector<uint8_t> &bytes, int offset, int len);
 
-    int length();
+    int length() const;
 
-    bool eof();
+    bool eof() const;
 
     void skipBytes(int64_t count);
 

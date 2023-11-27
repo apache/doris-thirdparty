@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 
+CL_CLASS_DEF(store,Directory)
 CL_NS_DEF2(util, bkd)
 
 enum class relation {
@@ -37,8 +38,8 @@ public:
     int64_t point_count_{};
     int32_t doc_count_{};
     int32_t version_{};
-    std::shared_ptr<std::vector<uint8_t>> packed_index_;
-    std::shared_ptr<store::IndexInput> clone_index_input;
+    std::vector<uint8_t> packed_index_;
+    //std::shared_ptr<store::IndexInput> clone_index_input;
     int32_t bytes_per_index_entry_{};
     std::vector<int64_t> leaf_block_fps_;
 
@@ -48,6 +49,7 @@ public:
     int32_t type{};
     int64_t metaOffset{};
     int64_t indexFP{};
+    std::shared_ptr<index_tree> index_tree_{};
 
 public:
     class intersect_visitor {
@@ -85,7 +87,7 @@ public:
                         int32_t packedIndexBytesLength,
                         int32_t maxPointsInLeafNode,
                         bkd_reader::intersect_visitor *visitor,
-                        const std::shared_ptr<index_tree> &indexVisitor);
+                        std::shared_ptr<index_tree> indexVisitor);
 
     public:
         std::shared_ptr<store::IndexInput> in_;
@@ -142,10 +144,13 @@ public:
                                      bkd_reader::intersect_visitor *visitor) const;
 
 public:
+    ~bkd_reader();
     bkd_reader() = default;
     void read_index(store::IndexInput* index_in);
     int read_meta(store::IndexInput* meta_in);
     explicit bkd_reader(store::IndexInput *in);
+    bkd_reader(store::Directory* directory, bool close_directory = true);
+    bool open();
     int64_t estimate_point_count(bkd_reader::intersect_visitor *visitor);
     int64_t estimate_point_count(const std::shared_ptr<intersect_state> &s,
                                  std::vector<uint8_t> &cellMinPacked,
@@ -158,6 +163,8 @@ public:
 
 private:
     int64_t ram_bytes_used();
+    store::Directory* _dir;
+    bool _close_directory;
 
 public:
     struct reader_stats {

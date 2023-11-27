@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+CL_CLASS_DEF(store, ByteArrayDataInput)
 CL_NS_DEF2(util,bkd)
 class packed_index_tree : public index_tree {
 public:
@@ -23,13 +24,14 @@ private:
     void read_node_data(bool isLeft);
 
 private:
-    std::shared_ptr<store::IndexInput> in_;
+    std::shared_ptr<store::ByteArrayDataInput> in2_;
+    //std::unique_ptr<store::IndexInput> in_;
     std::vector<int64_t> leaf_block_fp_stack_;
     std::vector<int32_t> left_node_positions_;
     std::vector<int32_t> right_node_positions_;
     std::vector<int32_t> split_dims_;
     std::vector<bool> negative_deltas_;
-    std::vector<std::shared_ptr<std::vector<uint8_t>>> split_values_stack_;
+    std::vector<std::vector<uint8_t>> split_values_stack_;
     std::shared_ptr<BytesRef> scratch_;
 };
 

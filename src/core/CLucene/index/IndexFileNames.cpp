@@ -34,6 +34,9 @@ CL_NS_DEF(index)
 	const char* IndexFileNames::PLAIN_NORMS_EXTENSION = "f";
 	const char* IndexFileNames::SEPARATE_NORMS_EXTENSION = "s";
 	const char* IndexFileNames::GEN_EXTENSION = "gen";
+        const char* IndexFileNames::BKD_DATA = "bkd";
+        const char* IndexFileNames::BKD_META = "bkd_meta";
+        const char* IndexFileNames::BKD_INDEX = "bkd_index";
   
 	const char* IndexFileNames_INDEX_EXTENSIONS_s[] =
 		{
