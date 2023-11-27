@@ -242,7 +242,7 @@ class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
   SegmentsToOptimizeType* segmentsToOptimize;           // used by optimize to note those needing optimization
 
 
-  CL_NS(store)::LuceneLock* writeLock;
+  CL_NS(store)::LuceneLock* writeLock = nullptr;
 
   void init(CL_NS(store)::Directory* d, CL_NS(analysis)::Analyzer* a, bool closeDir, IndexDeletionPolicy* deletionPolicy, bool autoCommit);
   void init(CL_NS(store)::Directory* d, CL_NS(analysis)::Analyzer* a, bool create, bool closeDir, IndexDeletionPolicy* deletionPolicy, bool autoCommit);
@@ -286,8 +286,10 @@ class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
   FieldInfos* fieldInfos;
   // IndexOutput to the new Frequency File
   std::vector<CL_NS(store)::IndexOutput*> freqOutputList;
+  std::vector<int64_t> freqPointers;
   // IndexOutput to the new Prox File
   std::vector<CL_NS(store)::IndexOutput*> proxOutputList;
+  std::vector<int64_t> proxPointers;
   std::vector<TermInfosWriter*> termInfosWriterList;
   int32_t skipInterval;
   int32_t maxSkipLevels;
@@ -325,14 +327,14 @@ public:
     void addIndexesSegments(std::vector<lucene::store::Directory*>& dirs);
 
     // create new fields info
-    void mergeFields();
+    void mergeFields(bool hasProx);
     // write fields info file
     void writeFields(lucene::store::Directory* d, std::string segment);
     // merge terms and write files
-    void mergeTerms();
+    void mergeTerms(bool hasProx);
 
     // Compare current index with the other
-    bool compareIndexes(lucene::store::Directory* other);
+    void compareIndexes(lucene::store::Directory* other);
 
 	// Release the write lock, if needed.
 	SegmentInfos* segmentInfos;

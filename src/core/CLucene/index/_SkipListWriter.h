@@ -95,7 +95,7 @@ private:
   int32_t* lastSkipDoc;
   int32_t* lastSkipPayloadLength;
   int64_t* lastSkipFreqPointer;
-  int64_t* lastSkipProxPointer;
+  int64_t* lastSkipProxPointer = nullptr;
   
   CL_NS(store)::IndexOutput* freqOutput;
   CL_NS(store)::IndexOutput* proxOutput{nullptr};
@@ -105,6 +105,8 @@ private:
   int32_t curPayloadLength;
   int64_t curFreqPointer;
   int64_t curProxPointer{-1};
+
+  bool hasProx = false;
   
 protected:
 
@@ -112,17 +114,17 @@ protected:
 
 public:
 	
-  DefaultSkipListWriter(int32_t skipInterval, int32_t numberOfSkipLevels, int32_t docCount, 
+    DefaultSkipListWriter(int32_t skipInterval, int32_t numberOfSkipLevels, int32_t docCount,
     CL_NS(store)::IndexOutput* freqOutput, CL_NS(store)::IndexOutput* proxOutput);
-  ~DefaultSkipListWriter();
-  
-  friend class SegmentMerger;
-  friend class DocumentsWriter;
-  /**
+    ~DefaultSkipListWriter();
+
+    friend class SegmentMerger;
+    friend class DocumentsWriter;
+    /**
    * Sets the values for the current skip data.
    */
-  void setSkipData(int32_t doc, bool storePayloads, int32_t payloadLength);
-  void resetSkip();
+    void setSkipData(int32_t doc, bool storePayloads, int32_t payloadLength);
+    void resetSkip();
 };
 
 

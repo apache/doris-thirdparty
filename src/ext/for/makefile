@@ -117,7 +117,7 @@ transpose_avx2.o: transpose.c
 
 LIB=bitpack.o bitpack_sse.o bitunpack.o bitunpack_sse.o \
     vp4c.o vp4c_sse.o vp4d.o vp4d_sse.o \
-	bitutil.o fp.o v8.o vint.o transpose.o transpose_sse.o trlec.o trled.o vsimple.o eliasfano.o
+	bitutil.o  v8.o vint.o transpose.o transpose_sse.o trlec.o trled.o vsimple.o 
 #bic.o 	
 #ifeq ($(ARCH),x86_64)
 ifeq ($(USE_AVX2),1)

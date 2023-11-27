@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CLucene/StdHeader.h"
-#include "CLucene/util/croaring/roaring.hh"
 
 #include <limits>
 #include <memory>

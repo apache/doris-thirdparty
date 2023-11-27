@@ -70,29 +70,12 @@ void SingleInstanceLockFactory::clearLock( const char* lockName )
 	}
 }
 
-
-NoLockFactory* NoLockFactory::singleton = NULL;
-NoLock* NoLockFactory::singletonLock = NULL;
-
 void NoLockFactory::_shutdown(){
-	_CLDELETE(NoLockFactory::singleton);
-	_CLDELETE(NoLockFactory::singletonLock);
-}
-
-NoLockFactory* NoLockFactory::getNoLockFactory()
-{
-	if ( singleton == NULL ) {
-		singleton = _CLNEW NoLockFactory();
-	}
-	return singleton;
 }
 
 LuceneLock* NoLockFactory::makeLock( const char* /*lockName*/ )
 {
-	if ( singletonLock == NULL ) {
-		singletonLock = _CLNEW NoLock();
-	}
-	return singletonLock;
+	return _CLNEW NoLock();
 }
 
 void NoLockFactory::clearLock( const char* /*lockName*/ )
@@ -145,6 +128,13 @@ void FSLockFactory::clearLock( const char* lockName )
 		} else {
 			strcpy(name,lockName);
 		}
+                size_t totalLength = lockDir.length() + strlen(name) + 1; // +1 for the '/'
+                if (totalLength >= CL_MAX_DIR) {
+                        // Truncate the name and log a warning.
+                        size_t maxNameLength = CL_MAX_DIR - lockDir.length() - 2; // -2 for the '/' and null terminator
+                        name[maxNameLength] = '\0';
+                        fprintf(stderr, "Warning: The lock file name has been truncated due to exceeding the maximum path length.\n");
+                }
 
 		_snprintf(path,CL_MAX_DIR,"%s/%s",lockDir.c_str(),name);
 

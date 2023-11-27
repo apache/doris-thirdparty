@@ -7,10 +7,15 @@
 #ifndef _lucene_util_CLStreams_
 #define _lucene_util_CLStreams_
 
+#include <algorithm>
+
+#include "CLucene/debug/error.h"
+
 CL_NS_DEF(util)
 
 class IReader {
 public:
+    virtual ~IReader() = default;
     virtual int32_t read(const void **start, int32_t min, int32_t max) = 0;
     virtual int64_t skip(int64_t ntoskip) = 0;
     virtual int64_t position() = 0;
@@ -21,6 +26,10 @@ template <typename T>
 class CLUCENE_EXPORT CLStream: public IReader{
 public:
 	virtual ~CLStream(){}
+
+    virtual void init(const void *_value, int32_t _length, bool copyData) {
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::init");
+    }
 
 	inline int read(){
 		const T* buffer;
@@ -84,6 +93,9 @@ public:
 	 *			if an error occurs.
      **/
 	virtual int32_t read(const void ** start, int32_t min, int32_t max) = 0;
+    virtual int32_t readCopy(void* start, int32_t off, int32_t len) {
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::read");
+    }
     /**
      * @brief Skip @p ntoskip items.
      *
@@ -183,7 +195,7 @@ public:
         this->buffer_size = 0;
         this->init(_value, _length, copyData);
     }
-    void init(const T *_value, int32_t _length, bool copyData = true){
+    void init(const void *_value, int32_t _length, bool copyData = true) override {
         const size_t length = _length;
         this->pos = 0;
         if (copyData) {
@@ -201,7 +213,7 @@ public:
             if (ownValue && this->value != NULL) {
                 _CLDELETE_LARRAY((T *) this->value);
             }
-            this->value = _value;
+            this->value = (T *)_value;
             this->buffer_size = 0;
         }
         this->m_size = length;
@@ -224,6 +236,16 @@ public:
         pos += r;
         return r;
     }
+
+    int32_t readCopy(void* start, int32_t off, int32_t len) override {
+        if (len == 0) return 0;
+        if (pos >= m_size) return -1;
+        int32_t n = std::min(static_cast<int32_t>(m_size - pos), len);
+        std::copy_n(value + pos, n, static_cast<T*>(start) + off);
+        pos += n;
+        return n;
+    }
+
     int64_t position() override {
         return pos;
     }
@@ -248,13 +270,17 @@ class CLUCENE_EXPORT FilteredBufferedReader: public BufferedReader{
 public:
 	FilteredBufferedReader(Reader* reader, bool deleteReader);
 	virtual ~FilteredBufferedReader();
-	
-	int32_t read(const void** start, int32_t min, int32_t max);
-	int64_t position();
-	int64_t reset(int64_t);
-	int64_t skip(int64_t ntoskip);
-	size_t size();
-	void setMinBufSize(int32_t minbufsize);
+    
+    void init(const void *_value, int32_t _length, bool copyData) override {
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::init");
+    }
+
+	int32_t read(const void** start, int32_t min, int32_t max) override;
+	int64_t position() override;
+	int64_t reset(int64_t) override;
+	int64_t skip(int64_t ntoskip) override;
+	size_t size() override;
+	void setMinBufSize(int32_t minbufsize) override;
 };
 
 class CLUCENE_EXPORT FilteredBufferedInputStream: public BufferedInputStream{
@@ -282,15 +308,15 @@ protected:
   size_t buffer_size;
 public:
   StringReader ( const TCHAR* value, const int32_t length = -1, bool copyData = true );
-  void init ( const TCHAR* value, const int32_t length, bool copyData = true );
+  void init ( const void* value, const int32_t length, bool copyData = true ) override;
 	virtual ~StringReader();
 
-  int32_t read(const void** start, int32_t min, int32_t max);
-  int64_t position();
-  int64_t reset(int64_t);
-	int64_t skip(int64_t ntoskip);
-	void setMinBufSize(int32_t s);
-	size_t size();
+  int32_t read(const void** start, int32_t min, int32_t max) override;
+  int64_t position() override;
+  int64_t reset(int64_t) override;
+	int64_t skip(int64_t ntoskip) override;
+	void setMinBufSize(int32_t s) override;
+	size_t size() override;
 };
 class CLUCENE_EXPORT AStringReader: public BufferedInputStream{
 	signed char* value;
@@ -323,17 +349,21 @@ class CLUCENE_EXPORT FileInputStream: public BufferedInputStream {
 	Internal* _internal;
 protected:
 	void init(InputStream *i, int encoding);
+
+    void init(const void *_value, int32_t _length, bool copyData) override {
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::init");
+    }
 public:
 	LUCENE_STATIC_CONSTANT(int32_t, DEFAULT_BUFFER_SIZE=4096);
 	FileInputStream ( const char* path, int32_t buflen = -1 );
 	virtual ~FileInputStream ();
 	
-	int32_t read(const void** start, int32_t min, int32_t max);
-	int64_t position();
-	int64_t reset(int64_t);
-	int64_t skip(int64_t ntoskip);
-	size_t size();
-	void setMinBufSize(int32_t minbufsize);
+	int32_t read(const void** start, int32_t min, int32_t max) override;
+	int64_t position() override;
+	int64_t reset(int64_t) override;
+	int64_t skip(int64_t ntoskip) override;
+	size_t size() override;
+	void setMinBufSize(int32_t minbufsize) override;
 };
 
 class CLUCENE_EXPORT SimpleInputStreamReader: public BufferedReader{
@@ -341,6 +371,10 @@ class CLUCENE_EXPORT SimpleInputStreamReader: public BufferedReader{
 	Internal* _internal;
 protected:
 	void init(InputStream *i, int encoding);
+
+    void init(const void *_value, int32_t _length, bool copyData) override {
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "UnsupportedOperationException: CLStream::init");
+    }
 public:	
 	enum{
 		ASCII=1,
@@ -352,12 +386,12 @@ public:
    SimpleInputStreamReader(InputStream *i, int encoding);
 	virtual ~SimpleInputStreamReader();
 	
-  int32_t read(const void** start, int32_t min, int32_t max);
-  int64_t position();
-  int64_t reset(int64_t);
-  int64_t skip(int64_t ntoskip);
-  void setMinBufSize(int32_t s);
-  size_t size();
+  int32_t read(const void** start, int32_t min, int32_t max) override;
+  int64_t position() override;
+  int64_t reset(int64_t) override;
+  int64_t skip(int64_t ntoskip) override;
+  void setMinBufSize(int32_t s) override;
+  size_t size() override;
 };
 
 /**

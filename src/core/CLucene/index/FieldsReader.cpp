@@ -225,6 +225,7 @@ void FieldsReader::addFieldLazy(CL_NS(document)::Document& doc, const FieldInfo*
 			//skip over the part that we aren't loading
 			fieldsStream->seek(pointer + toRead);
 			f->setOmitNorms(fi->omitNorms);
+			f->setOmitTermFreqAndPositions(!fi->hasProx);
 		} else {
 			int32_t length = fieldsStream->readVInt();
 			int64_t pointer = fieldsStream->getFilePointer();
@@ -232,6 +233,7 @@ void FieldsReader::addFieldLazy(CL_NS(document)::Document& doc, const FieldInfo*
 			fieldsStream->skipChars(length);
 			f = _CLNEW LazyField(this, fi->name, Field::STORE_YES | getIndexType(fi, tokenize) | getTermVectorType(fi), length, pointer);
 			f->setOmitNorms(fi->omitNorms);
+			f->setOmitTermFreqAndPositions(!fi->hasProx);
 		}
 		doc.add(*f);
 	}
@@ -317,6 +319,7 @@ void FieldsReader::addField(CL_NS(document)::Document& doc, const FieldInfo* fi,
         bits, false);
 #endif
       f->setOmitNorms(fi->omitNorms);
+			f->setOmitTermFreqAndPositions(!fi->hasProx);
 		} else {
 			bits |= Field::STORE_YES;
       TCHAR* str = fieldsStream->readString();
@@ -324,6 +327,7 @@ void FieldsReader::addField(CL_NS(document)::Document& doc, const FieldInfo* fi,
 				str, // read value
 				bits, false);
 			f->setOmitNorms(fi->omitNorms);
+			f->setOmitTermFreqAndPositions(!fi->hasProx);
 		}
 		doc.add(*f);
 	}
@@ -530,6 +534,7 @@ FieldsReader::FieldForMerge::FieldForMerge(void* _value, ValueType _type, const 
 
 	if (fi->isIndexed && !tokenize) bits |= INDEX_UNTOKENIZED;
 	if (fi->omitNorms) bits |= INDEX_NONORMS;
+	if (!fi->hasProx) bits |= INDEX_NOTERMFREQANDPOSITIONS;
 	if (fi->storeOffsetWithTermVector) bits |= TERMVECTOR_WITH_OFFSETS;
 	if (fi->storePositionWithTermVector) bits |= TERMVECTOR_WITH_POSITIONS;
 	if (fi->storeTermVector) bits |= TERMVECTOR_YES;

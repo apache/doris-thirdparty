@@ -25,6 +25,8 @@ if(COMMAND cmake_policy)
   cmake_policy(SET CMP0003 NEW)
   cmake_policy(SET CMP0043 NEW)
   cmake_policy(SET CMP0054 NEW)
+  cmake_policy(SET CMP0074 NEW)
+  cmake_policy(SET CMP0077 NEW)
 endif(COMMAND cmake_policy)
 
 #set various platform specific global options
@@ -35,9 +37,6 @@ endif(WIN32)
 
 # include specific modules
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-#remove FOR cmake,use shell script
-include(cmake/TurboPFOR.cmake)
 
 #define options...
 
@@ -51,6 +50,11 @@ IF(NOT CMAKE_BUILD_TYPE)
 ELSE(NOT CMAKE_BUILD_TYPE)
     MESSAGE( "Compiling as ${CMAKE_BUILD_TYPE}" )
 ENDIF(NOT CMAKE_BUILD_TYPE)
+
+option(ENABLE_CLANG_COVERAGE "coverage option" OFF)
+if (ENABLE_CLANG_COVERAGE AND ENABLE_CLANG_COVERAGE STREQUAL ON AND COMPILER_CLANG)
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-instr-generate -fcoverage-mapping")
+endif ()
 
 OPTION(ENABLE_DEBUG
   "enable debug support"
@@ -188,6 +192,10 @@ INCLUDE_DIRECTORIES( ${_CL_BOOST_INCLUDE_PATH} )
 
 #include the projects
 ADD_SUBDIRECTORY (src/ext)
+include(cmake/FindRoaring.cmake)
+find_package(Roaring REQUIRED)
+#TurboPFOR
+ADD_SUBDIRECTORY (src/ext/for)
 ADD_SUBDIRECTORY (src/shared)
 ADD_SUBDIRECTORY (src/core)
 ADD_SUBDIRECTORY (src/test)

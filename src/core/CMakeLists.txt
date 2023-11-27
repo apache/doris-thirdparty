@@ -43,9 +43,6 @@ SET(clucene_core_Files
     ./CLucene/util/bkd/point_reader.cpp
     ./CLucene/util/bkd/docids_writer.cpp
     ./CLucene/util/bkd/bkd_msb_radix_sorter.cpp
-    ./CLucene/util/croaring/roaring.c
-    ./CLucene/util/croaring/roaring.h
-    ./CLucene/util/croaring/roaring.hh
     ./CLucene/util/BitUtil.cpp
     ./CLucene/util/BytesRef.cpp
     ./CLucene/util/BytesRefBuilder.cpp
@@ -58,6 +55,7 @@ SET(clucene_core_Files
     ./CLucene/util/FutureArrays.cpp
     ./CLucene/util/NumericUtils.cpp
     ./CLucene/util/stringUtil.cpp
+    ./CLucene/util/PFORUtil.cpp
     ./CLucene/queryParser/FastCharStream.cpp
     ./CLucene/queryParser/MultiFieldQueryParser.cpp
     ./CLucene/queryParser/QueryParser.cpp
@@ -72,6 +70,7 @@ SET(clucene_core_Files
     ./CLucene/analysis/standard/StandardAnalyzer.cpp
     ./CLucene/analysis/standard/StandardFilter.cpp
     ./CLucene/analysis/standard/StandardTokenizer.cpp
+    ./CLucene/analysis/standard95/StandardTokenizerImpl.cpp
     ./CLucene/analysis/Analyzers.cpp
     ./CLucene/analysis/AnalysisHeader.cpp
     ./CLucene/store/MMapInput.cpp
@@ -200,6 +199,8 @@ SET(clucene_core_Files
     ./CLucene/search/spans/SpanWeight.cpp
     ./CLucene/search/spans/SpanWeight.h
     ./CLucene/search/spans/TermSpans.cpp
+    ./CLucene/search/query/DcoIdSetIterator.h
+    ./CLucene/search/query/TermIterator.h
     )
 
 #if USE_SHARED_OBJECT_FILES then we link directly to the object files (means rebuilding them for the core)
@@ -213,16 +214,19 @@ file(GLOB_RECURSE HEADERS ${clucene-core_SOURCE_DIR}/*.h )
 #create the libraries
 INCLUDE_DIRECTORIES(${clucene_SOURCE_DIR}/src/core)
 INCLUDE_DIRECTORIES(${clucene_SOURCE_DIR}/src/ext/for)
+
 IF (BUILD_SHARED_LIBRARIES)
   add_library(clucene-core SHARED
       ${clucene_core_Files} ${clucene_shared_Files} ${HEADERS}
       )
   IF (USE_BTHREAD)
-    target_include_directories(clucene-core PUBLIC
+    TARGET_INCLUDE_DIRECTORIES(clucene-core PUBLIC
           $<BUILD_INTERFACE:${BRPC_DIR}>
           )
     TARGET_LINK_LIBRARIES(clucene-core ssl crypto ${BRPC_LIB} ${GLOG_LIB} ${GFLAG_LIB} ${PROTOBUF_LIB})
   ENDIF (USE_BTHREAD)
+  TARGET_INCLUDE_DIRECTORIES(clucene-core PUBLIC ${Roaring_INCLUDE_DIR})
+
   #set properties on the libraries
   SET_TARGET_PROPERTIES(clucene-core PROPERTIES
       VERSION ${CLUCENE_VERSION}
@@ -241,11 +245,13 @@ IF (BUILD_STATIC_LIBRARIES)
       ${clucene_core_Files} ${clucene_shared_Files} ${HEADERS}
       )
   IF (USE_BTHREAD)
-    target_include_directories(clucene-core-static PUBLIC
+    TARGET_INCLUDE_DIRECTORIES(clucene-core-static PUBLIC
             $<BUILD_INTERFACE:${BRPC_DIR}>
             )
     TARGET_LINK_LIBRARIES(clucene-core-static ssl crypto ${BRPC_LIB} ${GLOG_LIB} ${GFLAG_LIB} ${PROTOBUF_LIB})
   ENDIF (USE_BTHREAD)
+  TARGET_INCLUDE_DIRECTORIES(clucene-core-static PUBLIC ${Roaring_INCLUDE_DIR})
+
   SET_TARGET_PROPERTIES(clucene-core-static PROPERTIES
       VERSION ${CLUCENE_VERSION}
       SOVERSION ${CLUCENE_SOVERSION}
@@ -316,9 +322,6 @@ ELSE (LUCENE_SYS_INCLUDES)
       COMPONENT development)
   install(FILES ${clucene-shared_BINARY_DIR}/CLucene/util/Misc.h
       DESTINATION include/CLucene/util
-      COMPONENT development)
-  install(FILES ${clucene_SOURCE_DIR}/src/core/CLucene/util/croaring/roaring.hh
-      DESTINATION include/CLucene/util/croaring
       COMPONENT development)
 ENDIF (LUCENE_SYS_INCLUDES)
 

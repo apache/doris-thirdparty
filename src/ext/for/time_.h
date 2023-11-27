@@ -51,7 +51,7 @@ typedef struct timespec tm_t;
 
   #ifdef __corei7__
 #define RDTSC_INI(_c_) do { unsigned _cl, _ch;              \
-  __asm volatile ("couid\n\t"                               \
+  __asm volatile ("cpuid\n\t"                               \
                 "rdtsc\n\t"                                 \
                 "mov %%edx, %0\n"                           \
                 "mov %%eax, %1\n": "=r" (_ch), "=r" (_cl):: \

@@ -44,10 +44,6 @@ public:
 
 class CLUCENE_EXPORT NoLockFactory: public LockFactory {
 public:
-	static NoLockFactory* singleton;
-	static NoLock* singletonLock;
-	
-	static NoLockFactory* getNoLockFactory();
 	LuceneLock* makeLock( const char* lockName );
 	void clearLock( const char* lockName );
 	

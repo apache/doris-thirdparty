@@ -12,6 +12,7 @@
 #include "CLucene/search/Similarity.h"
 #include "CLucene/store/Directory.h"
 #include "CLucene/util/Misc.h"
+#include "CLucene/util/PFORUtil.h"
 #include "IndexReader.h"
 #include "IndexWriter.h"
 
@@ -22,7 +23,8 @@
 #include "CLucene/store/_RAMDirectory.h"
 #include "CLucene/util/Array.h"
 #include "CLucene/util/PriorityQueue.h"
-#include "CLucene/util/croaring/roaring.hh"
+#include "CLucene/index/CodeMode.h"
+#include "CLucene/analysis/standard95/StandardAnalyzer.h"
 #include "MergePolicy.h"
 #include "MergeScheduler.h"
 #include "SDocumentWriter.h"
@@ -34,17 +36,10 @@
 #include "_SkipListWriter.h"
 #include "_Term.h"
 #include "_TermInfo.h"
-#include "vp4.h"
 #include <algorithm>
 #include <memory>
 #include <assert.h>
 #include <iostream>
-
-#if defined(USE_AVX2)
-#define P4ENC p4nd1enc256v32
-#else
-#define P4ENC p4nd1enc128v32
-#endif
 
 CL_NS_USE(store)
 CL_NS_USE(util)
@@ -262,13 +257,14 @@ void IndexWriter::init(Directory *d, Analyzer *a, const bool create, const bool 
             // against an index that's currently open for
             // searching.  In this case we write the next
             // segments_N file with no segments:
-            try {
+            //NOTE: do not read when create, because doris would never read an old index dir
+            /*try {
                 segmentInfos->read(directory);
                 segmentInfos->clear();
             } catch (CLuceneError &e) {
                 if (e.number() != CL_ERR_IO) throw e;
                 // Likely this means it's a fresh directory
-            }
+            }*/
             segmentInfos->write(directory);
         } else {
             segmentInfos->read(directory);
@@ -281,13 +277,13 @@ void IndexWriter::init(Directory *d, Analyzer *a, const bool create, const bool 
             rollbackSegmentInfos = NULL;
         }
         if (analyzer != nullptr) {
-            if (auto *sa = dynamic_cast<SimpleAnalyzer<char> *>(analyzer); sa != nullptr) {
+            if (analyzer->isSDocOpt()) {
                 docWriter = _CLNEW SDocumentsWriter<char>(directory, this);
             } else {
-                docWriter = _CLNEW DocumentsWriter(directory, this);
+                _CLTHROWA(CL_ERR_IllegalArgument, "IndexWriter::init: Only support SDocumentsWriter");
             }
         } else {
-            docWriter = _CLNEW DocumentsWriter(directory, this);
+            _CLTHROWA(CL_ERR_IllegalArgument, "IndexWriter::init: Only support SDocumentsWriter");
         }
         // Default deleter (for backwards compatibility) is
         // KeepOnlyLastCommitDeleter:
@@ -465,7 +461,6 @@ void IndexWriter::setInfoStream(std::ostream *infoStream) {
 void IndexWriter::messageState() {
     message(string("setInfoStream: dir=") + directory->toString() +
             " autoCommit=" + (autoCommit ? "true" : "false" + string(" mergePolicy=") + mergePolicy->getObjectName() + " mergeScheduler=" + mergeScheduler->getObjectName() + " ramBufferSizeMB=" + Misc::toString(docWriter->getRAMBufferSizeMB()) + " maxBuffereDocs=" + Misc::toString(docWriter->getMaxBufferedDocs())) +
-            " maxBuffereDeleteTerms=" + Misc::toString(docWriter->getMaxBufferedDeleteTerms()) +
             " maxFieldLength=" + Misc::toString(maxFieldLength) +
             " index=" + segString());
 }
@@ -717,13 +712,10 @@ void IndexWriter::addDocument(Document *doc, Analyzer *an) {
                         message(string("hit exception adding document"));
 
                     {
-                        SCOPED_LOCK_MUTEX(this->THIS_LOCK)
-                        // If docWriter has some aborted files that were
-                        // never incref'd, then we clean them up here
-                        if (docWriter != NULL) {
-                            const std::vector<std::string> *files = docWriter->abortedFiles();
-                            if (files != NULL)
-                                deleter->deleteNewFiles(*files);
+                        std::vector<std::string> files;
+                        directory->list(files);
+                        for (auto& file : files) {
+                            directory->deleteFile(file.c_str());
                         }
                     }
                 })
@@ -1279,6 +1271,21 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         message(string("index compaction total doc count: ") + Misc::toString(totDocCount));
     }
 
+    // check hasProx
+    bool hasProx = false;
+    {
+        if (!readers.empty()) {
+            auto reader = static_cast<SegmentReader*>(readers[0]);
+            hasProx = reader->getFieldInfos()->hasProx();
+            for (int32_t i = 1; i < readers.size(); i++) {
+                if (hasProx != reader->getFieldInfos()->hasProx()) {
+                    _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs hasProx inconformity");
+                }
+            }
+        }
+    }
+    // std::cout << "hasProx: " << hasProx << std::endl;
+
     numDestIndexes = dest_dirs.size();
 
     // print dest index files
@@ -1298,7 +1305,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     std::vector<lucene::index::IndexWriter *> destIndexWriterList;
     try {
         /// merge fields
-        mergeFields();
+        mergeFields(hasProx);
 
         /// write fields and create files writers
         for (int j = 0; j < numDestIndexes; j++) {
@@ -1322,11 +1329,13 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
             /// create file writers
             // Open an IndexOutput to the new Frequency File
             IndexOutput *freqOut = dest_dir->createOutput((Misc::segmentname(segment.c_str(), ".frq").c_str()));
+            freqPointers.push_back(0);
             freqOutputList.push_back(freqOut);
             // Open an IndexOutput to the new Prox File
             IndexOutput *proxOut = nullptr;
-            if (0) {
+            if (hasProx) {
                 proxOut = dest_dir->createOutput(Misc::segmentname(segment.c_str(), ".prx").c_str());
+                proxPointers.push_back(0);
             }
             proxOutputList.push_back(proxOut);
             // Instantiate a new termInfosWriter which will write in directory
@@ -1340,7 +1349,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         }
 
         /// merge terms
-        mergeTerms();
+        mergeTerms(hasProx);
     } catch (CLuceneError &e) {
         throw e;
     }
@@ -1395,7 +1404,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     newSegmentInfos.clear();
 }
 
-bool IndexWriter::compareIndexes(lucene::store::Directory *other) {
+void IndexWriter::compareIndexes(lucene::store::Directory *other) {
     /// compare merged segments
     // index compaction segments
     // term -> <docId, freq>
@@ -1516,7 +1525,7 @@ void IndexWriter::addIndexesSegments(std::vector<lucene::store::Directory *> &di
     }
 }
 
-void IndexWriter::mergeFields() {
+void IndexWriter::mergeFields(bool hasProx) {
     //Create a new FieldInfos
     fieldInfos = _CLNEW FieldInfos();
     //Condition check to see if fieldInfos points to a valid instance
@@ -1533,7 +1542,7 @@ void IndexWriter::mergeFields() {
             FieldInfo *fi = segmentReader->getFieldInfos()->fieldInfo(j);
             fieldInfos->add(fi->name, fi->isIndexed, fi->storeTermVector,
                             fi->storePositionWithTermVector, fi->storeOffsetWithTermVector,
-                            !reader->hasNorms(fi->name), fi->storePayloads);
+                            !reader->hasNorms(fi->name), hasProx, fi->storePayloads);
         }
     }
 }
@@ -1691,11 +1700,13 @@ void IndexWriter::mergeTerms() {
                 lDoc = docDelta;
             }
             docDeltaBuffers[i].resize(0);
+
             int64_t skipPointer = skipListWriter->writeSkip(freqOutput);
 
             // write terms
             TermInfo termInfo;
             termInfo.set(docNums, freqPointer, proxPointer, (int32_t) (skipPointer - freqPointer));
+
             // Write a new TermInfo
             termInfosWriter->add(smallestTerm, &termInfo);
         }

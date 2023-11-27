@@ -8,6 +8,8 @@
 #define _lucene_index_FieldInfos_
 
 #include "CLucene/store/Directory.h"
+#include "CLucene/index/IndexVersion.h"
+
 
 CL_CLASS_DEF(document,Document)
 CL_CLASS_DEF(document,Field)
@@ -32,6 +34,8 @@ class FieldInfo :LUCENE_BASE{
 	bool storePositionWithTermVector;
 
 	bool omitNorms; // omit norms associated with indexed fields
+	bool hasProx = false;
+	IndexVersion indexVersion_ = IndexVersion::kV1;
 
 	bool storePayloads; // whether this field stores payloads together with term positions
 
@@ -54,6 +58,7 @@ class FieldInfo :LUCENE_BASE{
 		const bool storeOffsetWithTermVector,
 		const bool storePositionWithTermVector,
 		const bool omitNorms,
+		const bool hasProx,
 		const bool storePayloads);
 
     //Func - Destructor
@@ -65,6 +70,10 @@ class FieldInfo :LUCENE_BASE{
 	* @memory - caller is responsible for deleting the returned object
 	*/
 	FieldInfo* clone();
+
+public:
+	void setIndexVersion(IndexVersion indexVersion) { indexVersion_ = indexVersion; }
+	IndexVersion getIndexVersion() { return indexVersion_; }
 };
 
 /** Access to the Field Info file that describes document fields and whether or
@@ -88,7 +97,8 @@ public:
 		STORE_POSITIONS_WITH_TERMVECTOR = 0x4,
 		STORE_OFFSET_WITH_TERMVECTOR = 0x8,
 		OMIT_NORMS = 0x10,
-		STORE_PAYLOADS = 0x20
+		STORE_PAYLOADS = 0x20,
+		TERM_FREQ_AND_POSITIONS = 0x40
 	};
 
 	FieldInfos();
@@ -122,6 +132,9 @@ public:
 	*/
 	void addIndexed(const TCHAR** names, const bool storeTermVectors, const bool storePositionWithTermVector, const bool storeOffsetWithTermVector);
 
+	bool hasProx();
+	IndexVersion getIndexVersion();
+
 	/**
 	* Assumes the fields are not storing term vectors.
 	* 
@@ -130,11 +143,12 @@ public:
 	* 
 	* @see #add(TCHAR*, bool)
 	*/
-	void add(const TCHAR** names, const bool isIndexed, const bool storeTermVector=false,
-              const bool storePositionWithTermVector=false, const bool storeOffsetWithTermVector=false,
-			  const bool omitNorms=false, const bool storePayloads=false);
+	void add(const TCHAR** names, const bool isIndexed, const bool storeTermVector = false,
+						const bool storePositionWithTermVector = false,
+						const bool storeOffsetWithTermVector = false, const bool omitNorms = false,
+						const bool hasProx = false, const bool storePayloads = false);
 
-	// Merges in information from another FieldInfos. 
+        // Merges in information from another FieldInfos. 
 	void add(FieldInfos* other);
 	
 	/** If the field is not yet known, adds it. If it is known, checks to make
@@ -150,12 +164,16 @@ public:
 	* @param omitNorms true if the norms for the indexed field should be omitted
 	* @param storePayloads true if payloads should be stored for this field
 	*/
-	FieldInfo* add(const TCHAR* name, const bool isIndexed, const bool storeTermVector=false,
-	          const bool storePositionWithTermVector=false, const bool storeOffsetWithTermVector=false, const bool omitNorms=false, const bool storePayloads=false);
+	FieldInfo* add(const TCHAR* name, const bool isIndexed, const bool storeTermVector = false,
+									const bool storePositionWithTermVector = false,
+									const bool storeOffsetWithTermVector = false, const bool omitNorms = false,
+									const bool hasProx = false, const bool storePayloads = false);
 
-	// was void
-	FieldInfo* addInternal( const TCHAR* name,const bool isIndexed, const bool storeTermVector,
-		const bool storePositionWithTermVector, const bool storeOffsetWithTermVector, const bool omitNorms, const bool storePayloads);
+  // was void
+	FieldInfo* addInternal(const TCHAR* name, const bool isIndexed, const bool storeTermVector,
+													const bool storePositionWithTermVector,
+													const bool storeOffsetWithTermVector, const bool omitNorms,
+													const bool hasProx, const bool storePayloads);
 
 	int32_t fieldNumber(const TCHAR* fieldName)const;
 	

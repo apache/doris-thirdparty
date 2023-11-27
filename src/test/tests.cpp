@@ -13,6 +13,7 @@ unittest tests[] = {
 //        {"reuters", testreuters},
         {"analysis", testanalysis},
         {"analyzers", testanalyzers},
+        {"analysis", teststandard95},
         {"document", testdocument},
         {"field", testField},
 //        {"numbertools", testNumberTools},
@@ -45,6 +46,8 @@ unittest tests[] = {
 //        {"spanqueries", testSpanQueries},
 //        {"stringbuffer", testStringBuffer},
 //        {"termvectorsreader", testTermVectorsReader},
+        {"strconvert", testStrConvert},
+        {"searchRange", testSearchRange},
 #ifdef TEST_CONTRIB_LIBS
         {"chinese", testchinese},
 #endif

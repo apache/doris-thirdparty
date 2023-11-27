@@ -8,6 +8,7 @@
 #include "IndexOutput.h"
 #include "IndexInput.h"
 #include "CLucene/util/Misc.h"
+#include "CLucene/util/stringUtil.h"
 
 CL_NS_USE(util)
 CL_NS_DEF(store)

@@ -9,6 +9,8 @@
 
 #include "Terms.h"
 
+#include <iostream>
+
 CL_NS_USE(util)
 CL_NS_DEF(index)
 
@@ -52,7 +54,7 @@ void SegmentTermPositions::close() {
 
 int32_t SegmentTermPositions::nextPosition() {
     // TODO:need to do like this:    if (indexOptions != IndexOptions.DOCS_AND_FREQS_AND_POSITIONS)
-    if (parent->proxStream== NULL){
+    if (!hasProx){
         return 0;
     }
     // perform lazy skips if neccessary
@@ -96,6 +98,10 @@ bool SegmentTermPositions::next() {
 
 int32_t SegmentTermPositions::read(int32_t* /*docs*/, int32_t* /*freqs*/, int32_t /*length*/) {
     _CLTHROWA(CL_ERR_UnsupportedOperation,"TermPositions does not support processing multiple documents in one call. Use TermDocs instead.");
+}
+
+bool SegmentTermPositions::readRange(DocRange* docRange) {
+    _CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: SegmentTermPositions::readDocRange");
 }
 
 void SegmentTermPositions::skipProx(const int64_t proxPointer, const int32_t _payloadLength){

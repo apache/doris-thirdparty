@@ -8,6 +8,7 @@
 #define _lucene_index_MultiSegmentReader
 
 
+#include <cstdint>
 #include "DirectoryIndexReader.h"
 #include "IndexReader.h"
 CL_CLASS_DEF(document,Document)
@@ -58,7 +59,7 @@ protected:
 public:
 
   /** Construct reading the named set of readers. */
-  MultiSegmentReader(CL_NS(store)::Directory* directory, SegmentInfos* sis, bool closeDirectory);
+  MultiSegmentReader(CL_NS(store)::Directory* directory, SegmentInfos* sis, bool closeDirectory, int32_t readBufferSize = -1);
 
   /** This contructor is only used for {@link #reopen()} */
   CLUCENE_LOCAL_DECL MultiSegmentReader(
@@ -119,6 +120,8 @@ public:
 
   static const char* getClassName();
   const char* getObjectName() const;
+
+  IndexVersion getIndexVersion() override;
 };
 
 
@@ -151,6 +154,7 @@ public:
 
   /** Optimized implementation. */
   int32_t read(int32_t* docs, int32_t* freqs, int32_t length);
+  bool readRange(DocRange* docRange) override;
 
    /* A Possible future optimization could skip entire segments */
   bool skipTo(const int32_t target);
@@ -158,6 +162,8 @@ public:
   void close();
 
   virtual TermPositions* __asTermPositions();
+
+  int32_t docFreq() override;
 };
 
 

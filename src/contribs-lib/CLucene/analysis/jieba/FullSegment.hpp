@@ -16,30 +16,64 @@ class FullSegment: public SegmentBase {
     dictTrie_ = new DictTrie(dictPath);
     isNeedDestroy_ = true;
   }
-  FullSegment(const DictTrie* dictTrie)
+  FullSegment(const DictTrie* dictTrie, const string& stopWordPath = "")
     : dictTrie_(dictTrie), isNeedDestroy_(false) {
     assert(dictTrie_);
+    LoadStopWordDict(stopWordPath);
   }
   ~FullSegment() {
     if (isNeedDestroy_) {
       delete dictTrie_;
     }
   }
-  void Cut(const string& sentence, 
-        vector<string>& words) const {
-    vector<Word> tmp;
-    Cut(sentence, tmp);
-    GetStringsFromWords(tmp, words);
-  }
-  void Cut(const string& sentence, 
-        vector<Word>& words) const {
-    PreFilter pre_filter(symbols_, sentence);
+
+  void Cut(const std::string& sentence, vector<std::string_view>& words) const {
+    PreFilter pre_filter(symbols_, sentence, true);
     PreFilter::Range range;
     vector<WordRange> wrs;
     wrs.reserve(sentence.size()/2);
     while (pre_filter.HasNext()) {
       range = pre_filter.Next();
-      Cut(range.begin, range.end, wrs);
+      if (range.type == PreFilter::Language::CHINESE) {
+        Cut(range.begin, range.end, wrs);
+      } else {
+        CutAlnum(range.begin, range.end, wrs);
+      }
+    }
+    words.clear();
+    words.reserve(wrs.size());
+    for (auto& wr : wrs) {
+      uint32_t len = wr.right->offset - wr.left->offset + wr.right->len;
+      std::string_view word(sentence.data() + wr.left->offset, len);
+      if (stopWords_.count(word)) {
+        continue;
+      }
+      words.emplace_back(word);
+    }
+  }
+
+  void Cut(const string& sentence, 
+        vector<string>& words) const {
+    vector<Word> tmp;
+    Cut(sentence, tmp);
+    GetStringsFromWords(tmp, words, [this](const std::string& word) {
+      return stopWords_.count(word);
+    });
+  }
+  void Cut(const string& sentence, 
+        vector<Word>& words) const {
+    PreFilter pre_filter(symbols_, sentence, true);
+    PreFilter::Range range;
+    vector<WordRange> wrs;
+    wrs.reserve(sentence.size()/2);
+    while (pre_filter.HasNext()) {
+      range = pre_filter.Next();
+      if (range.type == PreFilter::Language::CHINESE) {
+        Cut(range.begin, range.end, wrs);
+      } else {
+
+        CutAlnum(range.begin, range.end, wrs);
+      }
     }
     words.clear();
     words.reserve(wrs.size());
@@ -84,9 +118,67 @@ class FullSegment: public SegmentBase {
       uIdx++;
     }
   }
+
+  void CutAlnum(RuneStrArray::const_iterator begin,
+                RuneStrArray::const_iterator end,
+                vector<WordRange>& res) const {
+    WordRange wr(begin, end - 1);
+    res.push_back(wr);
+
+    auto cursor = begin;
+    while (cursor != end) {
+      if (PreFilter::IsNumber(cursor->rune)) {
+        FindRange(PreFilter::IsNumber, cursor, begin, end, res);
+        continue;
+      }
+      if (PreFilter::IsLetter(cursor->rune)) {
+        FindRange(PreFilter::IsLetter, cursor, begin, end, res);
+        continue;
+      }
+      cursor++;
+    }
+  }
+
+  template <typename Predicate>
+  void FindRange(Predicate pred, RuneStrArray::const_iterator& cursor,
+                 RuneStrArray::const_iterator begin,
+                 RuneStrArray::const_iterator end,
+                 vector<WordRange>& res) const {
+    auto wrBegin = cursor;
+    while (cursor != end && pred(cursor->rune)) {
+      cursor++;
+    }
+    auto wrEnd = cursor;
+    if (wrBegin == begin && wrEnd == end) {
+      return;
+    }
+    if (wrEnd - wrBegin <= 1) {
+      return;
+    }
+    WordRange wr(wrBegin, wrEnd - 1);
+    res.push_back(wr);
+  }
+
+  void LoadStopWordDict(const string& filePath) {
+    ifstream ifs(filePath.c_str());
+    if (ifs.is_open()) {
+      string line;
+        while (getline(ifs, line)) {
+        stopWordList_.push_back(line);
+      }
+      for (auto& word : stopWordList_) {
+        stopWords_.insert(std::string_view(word.data(), word.size()));
+      }
+    }
+  }
+
  private:
   const DictTrie* dictTrie_;
   bool isNeedDestroy_;
+
+  std::vector<std::string> stopWordList_;
+  unordered_set<std::string_view> stopWords_;
+
 };
 }
 

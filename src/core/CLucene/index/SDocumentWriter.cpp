@@ -11,22 +11,18 @@
 #include "CLucene/util/CLStreams.h"
 #include "CLucene/util/Misc.h"
 #include "CLucene/util/stringUtil.h"
+#include "CLucene/util/PFORUtil.h"
+#include "CLucene/index/CodeMode.h"
 
 #include "_FieldsWriter.h"
 #include "_TermInfosWriter.h"
 #include "_SkipListWriter.h"
 #include "_IndexFileNames.h"
 #include "_SegmentMerger.h"
-#include "vp4.h"
 
 #include <algorithm>
 #include <vector>
-
-#if defined(USE_AVX2) && defined(__x86_64__)
-#define  P4ENC     p4nd1enc256v32
-#else
-#define  P4ENC     p4nd1enc128v32
-#endif
+#include <iostream>
 
 CL_NS_USE(util)
 CL_NS_USE(store)
@@ -40,7 +36,7 @@ const uint8_t SDocumentsWriter<T>::defaultNorm = search::Similarity::encodeNorm(
 template<typename T>
 const int32_t SDocumentsWriter<T>::BYTE_BLOCK_SHIFT = 15;
 template<typename T>
-const int32_t SDocumentsWriter<T>::BYTE_BLOCK_SIZE = (int32_t) pow(2.0, BYTE_BLOCK_SHIFT);
+const int32_t SDocumentsWriter<T>::BYTE_BLOCK_SIZE = 1 << BYTE_BLOCK_SHIFT;//(int32_t) pow(2.0, BYTE_BLOCK_SHIFT);
 template<typename T>
 const int32_t SDocumentsWriter<T>::BYTE_BLOCK_MASK = BYTE_BLOCK_SIZE - 1;
 template<typename T>
@@ -136,15 +132,18 @@ typename SDocumentsWriter<T>::ThreadState *SDocumentsWriter<T>::getThreadState(D
         threadState = _CLNEW ThreadState(this);
     }
 
-    ThreadState *state = threadState;
-    if (segment.empty())
+    if (segment.empty()) {
         segment = writer->newSegmentName();
-    state->init(doc, nextDocID);
+        threadState->init(doc, nextDocID);
+    }
+
+    threadState->docID = nextDocID;
+
     // Only increment nextDocID & numDocsInRAM on successful init
     nextDocID++;
     numDocsInRAM++;
 
-    return state;
+    return threadState;
 }
 
 template<typename T>
@@ -166,7 +165,8 @@ void SDocumentsWriter<T>::ThreadState::init(Document *doc, int32_t doc_id) {
 
         FieldInfo *fi = _parent->fieldInfos->add(field->name(), field->isIndexed(), field->isTermVectorStored(),
                                                  field->isStorePositionWithTermVector(), field->isStoreOffsetWithTermVector(),
-                                                 field->getOmitNorms(), false);
+                                                 field->getOmitNorms(), !field->getOmitTermFreqAndPositions(), false);
+        fi->setIndexVersion(field->getIndexVersion());
         if (fi->isIndexed && !fi->omitNorms) {
             // Maybe grow our buffered norms
             if (_parent->norms.length <= fi->number) {
@@ -240,6 +240,8 @@ void SDocumentsWriter<T>::ThreadState::init(Document *doc, int32_t doc_id) {
 
         fp->docFields.values[fp->fieldCount++] = field;
     }
+    _parent->hasProx_ = _parent->fieldInfos->hasProx();
+    _parent->indexVersion_ = _parent->fieldInfos->getIndexVersion();
 }
 
 template<typename T>
@@ -250,7 +252,7 @@ void SDocumentsWriter<T>::ThreadState::writeDocument() {
     // abort all documents since we last flushed because
     // it means those files are possibly inconsistent.
     try {
-        _parent->numDocsInStore++;
+        //_parent->numDocsInStore++;
 
         // Append norms for the fields we saw:
         for (int32_t i = 0; i < numFieldData; i++) {
@@ -309,9 +311,9 @@ void SDocumentsWriter<T>::ThreadState::FieldData::processField(Analyzer *sanalyz
                 threadState->numStoredFields++;
             }
 
-            docFieldsFinal.values[j] = NULL;
+            // docFieldsFinal.values[j] = NULL;
         }
-    } catch (exception &ae) {
+    } catch (CLuceneError& ae) {
         throw ae;
     }
 }
@@ -413,7 +415,7 @@ void SDocumentsWriter<T>::ThreadState::writeProxByte(uint8_t b) {
     if (prox[proxUpto] != 0) {
         proxUpto = postingsPool->allocSlice(prox, proxUpto);
         prox = postingsPool->buffer;
-        //p->proxUpto = postingsPool->tOffset;
+        p->proxUpto = postingsPool->tOffset;
         assert(prox != nullptr);
     }
     prox[proxUpto++] = b;
@@ -436,17 +438,34 @@ void SDocumentsWriter<T>::ThreadState::writeProxBytes(const uint8_t *b, int32_t 
     }
 }
 
+template <typename T>
+inline bool eq(const std::basic_string_view<T>& a, const std::basic_string_view<T>& b) {
+    if constexpr (std::is_same_v<T, char>) {
+#if defined(__SSE2__)
+        if (a.size() != b.size()) {
+            return false;
+        }
+        return StringUtil::memequalSSE2Wide(a.data(), b.data(), a.size());
+#endif
+    }
+    return a == b;
+}
+
 template<typename T>
 void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
     const T *tokenText = token->termBuffer<T>();
     const int32_t tokenTextLen = token->termLength<T>();
+    std::basic_string_view<T> term(tokenText, tokenTextLen);
+    // if constexpr (std::is_same_v<T, char>) {
+    //     std::cout << term << std::endl;
+    // }
     uint32_t code = 0;
 
     // Compute hashcode
     //int32_t downto = tokenTextLen;
     int32_t upto = 0;
     //while (downto > 0)
-    while (upto < tokenTextLen)
+    while (upto < tokenTextLen && tokenText[upto] != CLUCENE_END_OF_WORD)
         code = (code * 31) + tokenText[upto++];
     uint32_t hashPos = code & postingsHashMask;
 
@@ -455,19 +474,17 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
     // Locate Posting in hash
     threadState->p = postingsHash[hashPos];
 
-    if (threadState->p != nullptr && !threadState->postingEquals(tokenText, tokenTextLen)) {
-        // Conflict: keep searching different locations in
-        // the hash table.
+    if (threadState->p != nullptr && !eq(threadState->p->term_, term)) {
         const uint32_t inc = ((code >> 8) + code) | 1;
         do {
             postingsHashConflicts++;
             code += inc;
             hashPos = code & postingsHashMask;
             threadState->p = postingsHash[hashPos];
-        } while (threadState->p != nullptr && !threadState->postingEquals(tokenText, tokenTextLen));
+        } while (threadState->p != nullptr && !eq(threadState->p->term_, term));
     }
 
-    //int32_t proxCode;
+    int32_t proxCode = 0;
     try {
         if (threadState->p != nullptr) {                             // term seen since last flush
             if (threadState->docID != threadState->p->lastDocID) {// term not yet seen in this doc
@@ -475,17 +492,24 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
                 // write it & lastDocCode
                 threadState->freqUpto = threadState->p->freqUpto & BYTE_BLOCK_MASK;
                 threadState->freq = threadState->postingsPool->buffers[threadState->p->freqUpto >> BYTE_BLOCK_SHIFT];
-                //if (1 == threadState->p->docFreq)
-                threadState->writeFreqVInt(threadState->p->lastDocCode | 1);
-                //else {
-                //    threadState->writeFreqVInt(threadState->p->lastDocCode);
-                //    threadState->writeFreqVInt(threadState->p->docFreq);
-               // }
+
+                if (fieldInfo->hasProx) {
+                    if (1 == threadState->p->docFreq)
+                        threadState->writeFreqVInt(threadState->p->lastDocCode | 1);
+                    else {
+                        threadState->writeFreqVInt(threadState->p->lastDocCode);
+                        threadState->writeFreqVInt(threadState->p->docFreq);
+                    }
+                } else {
+                    threadState->writeFreqVInt(threadState->p->lastDocCode | 1);
+                }
+
                 threadState->p->freqUpto = threadState->freqUpto + (threadState->p->freqUpto & BYTE_BLOCK_NOT_MASK);
 
-                //proxCode = position;
-
-                //threadState->p->docFreq = 1;
+                if (fieldInfo->hasProx) {
+                    proxCode = position;
+                    threadState->p->docFreq = 1;
+                }
 
                 // Store code so we can write this after we're
                 // done with this new doc
@@ -493,9 +517,10 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
                 threadState->p->lastDocID = threadState->docID;
 
             } else {// term already seen in this doc
-                //threadState->p->docFreq++;
-
-                //proxCode = position - threadState->p->lastPosition;
+                if (fieldInfo->hasProx) {
+                    threadState->p->docFreq++;
+                    proxCode = position - threadState->p->lastPosition;
+                }
             }
         } else {// term not seen before
             if (0 == threadState->postingsFreeCountTS) {
@@ -505,6 +530,12 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
 
             const int32_t textLen1 = 1 + tokenTextLen;
             if (textLen1 + threadState->scharPool->tUpto > CHAR_BLOCK_SIZE) {
+                if (textLen1 > CHAR_BLOCK_SIZE) {
+                    std::string errmsg = "bytes can be at most " +
+                                         std::to_string(CHAR_BLOCK_SIZE - 1) +
+                                         " in length; got " + std::to_string(tokenTextLen);
+                    _CLTHROWA(CL_ERR_MaxBytesLength, errmsg.c_str());
+                }
                 threadState->scharPool->nextBuffer();
             }
             T *text = threadState->scharPool->buffer;
@@ -518,6 +549,7 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
             threadState->scharPool->tUpto += textLen1;
 
             memcpy(textUpto, tokenText, tokenTextLen * sizeof(T));
+            threadState->p->term_ = std::basic_string_view<T>(textUpto, term.size());
             textUpto[tokenTextLen] = CLUCENE_END_OF_WORD;
 
             assert(postingsHash[hashPos] == NULL);
@@ -534,24 +566,29 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
             const int32_t upto1 = threadState->postingsPool->newSlice(firstSize);
             threadState->p->freqStart = threadState->p->freqUpto = threadState->postingsPool->tOffset + upto1;
 
-            //const int32_t upto2 = threadState->postingsPool->newSlice(firstSize);
-            //threadState->p->proxStart = threadState->p->proxUpto = threadState->postingsPool->tOffset + upto2;
+            if (fieldInfo->hasProx) {
+                const int32_t upto2 = threadState->postingsPool->newSlice(firstSize);
+                threadState->p->proxStart = threadState->p->proxUpto = threadState->postingsPool->tOffset + upto2;
+            }
 
             threadState->p->lastDocCode = threadState->docID << 1;
             threadState->p->lastDocID = threadState->docID;
-            //threadState->p->docFreq = 1;
-            //proxCode = position;
+
+            if (fieldInfo->hasProx) {
+                threadState->p->docFreq = 1;
+                proxCode = position;
+            }
         }
 
-        //threadState->proxUpto = threadState->p->proxUpto & BYTE_BLOCK_MASK;
-        //threadState->prox = threadState->postingsPool->buffers[threadState->p->proxUpto >> BYTE_BLOCK_SHIFT];
-        //assert(threadState->prox != nullptr);
+        threadState->proxUpto = threadState->p->proxUpto & BYTE_BLOCK_MASK;
+        threadState->prox = threadState->postingsPool->buffers[threadState->p->proxUpto >> BYTE_BLOCK_SHIFT];
+        assert(threadState->prox != nullptr);
 
-        //threadState->writeProxVInt(proxCode << 1);
-
-        //threadState->p->proxUpto = threadState->proxUpto + (threadState->p->proxUpto & BYTE_BLOCK_NOT_MASK);
-
-        threadState->p->lastPosition = position++;
+        if (fieldInfo->hasProx) {
+            threadState->writeProxVInt(proxCode << 1);
+            threadState->p->proxUpto = threadState->proxUpto + (threadState->p->proxUpto & BYTE_BLOCK_NOT_MASK);
+            threadState->p->lastPosition = position++;
+        }
     } catch (CLuceneError &t) {
         throw;
     }
@@ -702,8 +739,8 @@ int32_t SDocumentsWriter<T>::ThreadState::comparePostings(Posting *p1, Posting *
     const T *pos1 = scharPool->buffers[p1->textStart >> CHAR_BLOCK_SHIFT] + (p1->textStart & CHAR_BLOCK_MASK);
     const T *pos2 = scharPool->buffers[p2->textStart >> CHAR_BLOCK_SHIFT] + (p2->textStart & CHAR_BLOCK_MASK);
     while (true) {
-        const T c1 = *pos1++;
-        const T c2 = *pos2++;
+        const auto c1 = static_cast<typename std::make_unsigned<T>::type>(*pos1++);
+        const auto c2 = static_cast<typename std::make_unsigned<T>::type>(*pos2++);
         if (c1 < c2)
             if (CLUCENE_END_OF_WORD == c2)
                 return 1;
@@ -716,8 +753,8 @@ int32_t SDocumentsWriter<T>::ThreadState::comparePostings(Posting *p1, Posting *
                 return 1;
         else if (CLUCENE_END_OF_WORD == c1)
             return 0;
+        }
     }
-}
 
 template<typename T>
 void SDocumentsWriter<T>::ThreadState::quickSort(Posting **postings, int32_t lo, int32_t hi) {
@@ -798,7 +835,7 @@ bool SDocumentsWriter<T>::updateDocument(Document *doc, Analyzer *sanalyzer) {
                     finishDocument(state);)
             success = true;
         }
-        _CLFINALLY(
+    _CLFINALLY(
                 if (!success) {
                     // If this thread state had decided to flush, we
                     // must clear it so another thread can flush
@@ -807,8 +844,8 @@ bool SDocumentsWriter<T>::updateDocument(Document *doc, Analyzer *sanalyzer) {
                         flushPending = false;
                     }
                 })
-    } catch (exception &ae) {
-        abort(nullptr);
+    } catch (CLuceneError& ae) {
+        throw ae;
     }
 
     return state->doFlushAfter;
@@ -820,7 +857,7 @@ TCHAR *SDocumentsWriter<TCHAR>::getSCharBlock() {
     TCHAR *c;
     if (0 == size) {
         numBytesAlloc += CHAR_BLOCK_SIZE * CHAR_NUM_BYTE;
-        c = _CL_NEWARRAY(TCHAR, CHAR_NUM_BYTE);
+        c = _CL_NEWARRAY(TCHAR, CHAR_BLOCK_SIZE);
         memset(c, 0, sizeof(TCHAR) * CHAR_BLOCK_SIZE);
     } else {
         c = *freeSCharBlocks.begin();
@@ -930,7 +967,7 @@ void SDocumentsWriter<T>::writeSegment(std::vector<std::string> &flushedFiles) {
     IndexOutput *freqOut = directory->createOutput((segmentName + ".frq").c_str());
     // TODO:add options in field index
     IndexOutput *proxOut = nullptr;
-    if (0) {
+    if (hasProx_) {
         proxOut = directory->createOutput((segmentName + ".prx").c_str());
     }
 
@@ -952,7 +989,7 @@ void SDocumentsWriter<T>::writeSegment(std::vector<std::string> &flushedFiles) {
 
     skipListWriter = _CLNEW DefaultSkipListWriter(termsOut->skipInterval,
                                                   termsOut->maxSkipLevels,
-                                                  numDocsInRAM, freqOut, proxOut);
+                                         numDocsInRAM, freqOut, proxOut);
 
     int32_t start = 0;
     while (start < numAllFields) {
@@ -990,7 +1027,7 @@ void SDocumentsWriter<T>::writeSegment(std::vector<std::string> &flushedFiles) {
     // Record all files we have flushed
     flushedFiles.push_back(segmentFileName(IndexFileNames::FIELD_INFOS_EXTENSION));
     flushedFiles.push_back(segmentFileName(IndexFileNames::FREQ_EXTENSION));
-    if (0) {
+    if (hasProx_) {
         flushedFiles.push_back(segmentFileName(IndexFileNames::PROX_EXTENSION));
     }
     flushedFiles.push_back(segmentFileName(IndexFileNames::TERMS_EXTENSION));
@@ -1112,11 +1149,24 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
 
         int64_t freqPointer = freqOut->getFilePointer();
         int64_t proxPointer = 0;
-        if (proxOut != nullptr) {
+        if (hasProx_) {
             proxPointer = proxOut->getFilePointer();
         }
 
         skipListWriter->resetSkip();
+
+        auto encode = [](IndexOutput* out, std::vector<uint32_t>& buffer, bool isDoc) {
+            std::vector<uint8_t> compress(4 * buffer.size() + PFOR_BLOCK_SIZE);
+            size_t size = 0;
+            if (isDoc) {
+                size = P4ENC(buffer.data(), buffer.size(), compress.data());
+            } else {
+                size = P4NZENC(buffer.data(), buffer.size(), compress.data());
+            }
+            out->writeVInt(size);
+            out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
+            buffer.resize(0);
+        };
 
         // Now termStates has numToMerge FieldMergeStates
         // which all share the same term.  Now we must
@@ -1124,6 +1174,13 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
         while (numToMerge > 0) {
 
             if ((++df % skipInterval) == 0) {
+                freqOut->writeByte((char)CodeMode::kPfor);
+                freqOut->writeVInt(docDeltaBuffer.size());
+                encode(freqOut, docDeltaBuffer, true);
+                if (hasProx_) {
+                    encode(freqOut, freqBuffer, false);
+                }
+
                 skipListWriter->setSkipData(lastDoc, currentFieldStorePayloads, lastPayloadLength);
                 skipListWriter->bufferSkip(df);
             }
@@ -1147,26 +1204,16 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
             // Carefully copy over the prox + payload info,
             // changing the format to match Lucene's segment
             // format.
-            if (proxOut != nullptr) {
+
+            docDeltaBuffer.push_back(doc);
+            if (hasProx_) {
                 for (int32_t j = 0; j < termDocFreq; j++) {
                     const int32_t code = prox.readVInt();
                     assert(0 == (code & 1));
                     proxOut->writeVInt(code >> 1);
                 }
+                freqBuffer.push_back(termDocFreq);
             }
-
-            docDeltaBuffer.push_back(doc);
-
-            if (docDeltaBuffer.size() == PFOR_BLOCK_SIZE) {
-                std::vector<uint8_t> compresseddata(4 * docDeltaBuffer.size() + PFOR_BLOCK_SIZE);
-                auto size = P4ENC(docDeltaBuffer.data(), docDeltaBuffer.size(), compresseddata.data());
-                //auto size = p4nd1enc256v32(docDeltaBuffer.data(), docDeltaBuffer.size(), compresseddata.data());
-                freqOut->writeVInt(docDeltaBuffer.size());
-                freqOut->writeVInt(size);
-                freqOut->writeBytes(reinterpret_cast<const uint8_t *>(compresseddata.data()), size);
-                docDeltaBuffer.resize(0);
-            }
-
 
             if (!minState->nextDoc()) {
 
@@ -1197,13 +1244,31 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
         assert(df > 0);
 
         // Done merging this term
-        freqOut->writeVInt(docDeltaBuffer.size());
-        uint32_t lDoc = 0;
-        for (auto &docDelta: docDeltaBuffer) {
-            freqOut->writeVInt(docDelta - lDoc);
-            lDoc = docDelta;
+        {
+            freqOut->writeByte((char)CodeMode::kDefault);
+            freqOut->writeVInt(docDeltaBuffer.size());
+            uint32_t lastDoc = 0;
+            for (int32_t i = 0; i < docDeltaBuffer.size(); i++) {
+                uint32_t curDoc = docDeltaBuffer[i];
+                if (hasProx_) {
+                    uint32_t newDocCode = (curDoc - lastDoc) << 1;
+                    lastDoc = curDoc;
+                    uint32_t freq = freqBuffer[i];
+                    if (1 == freq) {
+                        freqOut->writeVInt(newDocCode | 1);
+                    } else {
+                        freqOut->writeVInt(newDocCode);
+                        freqOut->writeVInt(freq);
+                    }
+                } else {
+                    freqOut->writeVInt(curDoc - lastDoc);
+                    lastDoc = curDoc;
+                }
+            }
+            docDeltaBuffer.resize(0);
+            freqBuffer.resize(0);
         }
-        docDeltaBuffer.resize(0);
+        
         int64_t skipPointer = skipListWriter->writeSkip(freqOut);
 
         // Write term
@@ -1433,6 +1498,11 @@ void SDocumentsWriter<T>::balanceRAM() {
             bufferIsFull = true;
         }
     }
+}
+
+template<typename T>
+bool SDocumentsWriter<T>::hasProx() {
+    return fieldInfos->hasProx();
 }
 
 template class SDocumentsWriter<char>;

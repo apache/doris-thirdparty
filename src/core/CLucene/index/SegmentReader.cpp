@@ -196,7 +196,7 @@ void SegmentReader::initialize(SegmentInfo *si, int32_t readBufferSize, bool doO
         // so that if an index update removes them we'll still have them
         freqStream = cfsDir->openInput((segment + ".frq").c_str(), readBufferSize);
         // TODO: should be true when we could set writing terms positions in field conf flag.
-        if (0) {
+        if (_fieldInfos->hasProx()) {
             proxStream = cfsDir->openInput((segment + ".prx").c_str(), readBufferSize);
         }
         // we do not need norms, so we don't read it at all.
@@ -239,6 +239,11 @@ SegmentReader *SegmentReader::get(SegmentInfos *sis, SegmentInfo *si,
                                   bool closeDir) {
     return get(si->dir, si, sis, closeDir, true, BufferedIndexInput::BUFFER_SIZE, false);
 }
+
+SegmentReader *SegmentReader::get(SegmentInfos *sis, SegmentInfo *si, int32_t readBufferSize, bool closeDir) {
+    return get(si->dir, si, sis, closeDir, true, readBufferSize, false);
+}
+
 /**
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
@@ -1123,4 +1128,9 @@ bool SegmentReader::normsClosed() {
     }
     return true;
 }
+
+IndexVersion SegmentReader::getIndexVersion() {
+    return _fieldInfos->getIndexVersion();
+}
+
 CL_NS_END

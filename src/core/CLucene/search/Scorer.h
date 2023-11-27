@@ -7,6 +7,8 @@
 #ifndef _lucene_search_Scorer_
 #define _lucene_search_Scorer_
 
+#include "CLucene/index/DocRange.h"
+
 CL_CLASS_DEF(search,Similarity)
 CL_CLASS_DEF(search,HitCollector)
 CL_CLASS_DEF(search,Explanation)
@@ -47,7 +49,8 @@ public:
 	* {@link HitCollector#collect(int, float)}.
 	* <br>When this method is used the {@link #explain(int)} method should not be used.
 	*/
-	virtual void score(HitCollector* hc) ;
+	virtual void score(HitCollector* hc);
+	virtual void scoreRange(HitCollector* hc);
 
 	/** Expert: Collects matching documents in a range.  Hook for optimization.
 	* Note that {@link #next()} must be called once before this method is called
@@ -74,6 +77,7 @@ public:
 	* @see BooleanQuery#setAllowDocsOutOfOrder
 	*/
 	virtual bool next() = 0;
+	virtual bool nextRange(DocRange* docRange) { _CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: Scorer::nextRange"); }
 
 	/** Returns the current document number matching the query.
 	* Initially invalid, until {@link #next()} is called the first time.

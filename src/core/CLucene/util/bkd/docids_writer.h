@@ -4,10 +4,10 @@
 #include <memory>
 #include <vector>
 
-#include "CLucene.h"
 #include "bkd_reader.h"
-#include "CLucene/util/croaring/roaring.hh"
-
+#include <roaring/roaring.hh>
+#include "CLucene/store/IndexInput.h"
+#include "CLucene/store/IndexOutput.h"
 
 CL_NS_DEF2(util, bkd)
 class docids_writer {
@@ -16,7 +16,7 @@ private:
 public:
     docids_writer() = default;
     ~docids_writer() = default;
-    static void read_bitmap(store::IndexInput *in, Roaring &r);
+    static void read_bitmap(store::IndexInput *in, roaring::Roaring &r);
     static void read_bitmap(store::IndexInput *in, bkd_reader::intersect_visitor *visitor);
     static void read_low_cardinal_bitmap(store::IndexInput *in,  bkd_docid_set_iterator* iter);
     static void read_low_cardinal_bitmap(store::IndexInput *in, bkd_reader::intersect_visitor *visitor);

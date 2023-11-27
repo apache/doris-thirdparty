@@ -22,7 +22,7 @@ TestVisitor1::TestVisitor1(
     this->hits = hits;
 }
 
-void TestVisitor1::visit(Roaring &docIDs) {
+void TestVisitor1::visit(roaring::Roaring &docIDs) {
     for (auto docID: docIDs) {
         //wcout << L"visit docID=" << docID << endl;
         hits->set(docID);
@@ -46,7 +46,7 @@ bool TestVisitor1::matches(uint8_t *packedValue) {
     return false;
 }
 
-void TestVisitor1::visit(Roaring *docID, std::vector<uint8_t> &packedValue) {
+void TestVisitor1::visit(roaring::Roaring *docID, std::vector<uint8_t> &packedValue) {
     if (!matches(packedValue.data())) {
         return;
     }

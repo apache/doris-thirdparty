@@ -138,6 +138,8 @@ CL_NS_DEF(search)
 		/** Returns documents matching <code>query</code> sorted by
 		* <code>sort</code>.
 		*/
+		using Searchable::_search;
+
 		Hits* search(Query* query, const Sort* sort, size_t n=0);
 
 		/** Returns documents matching <code>query</code> and <code>filter</code>,

@@ -15,6 +15,7 @@
 #include "_FieldInfos.h"
 #include "_TermInfosWriter.h"
 #include <assert.h>
+#include <iostream>
 
 CL_NS_USE(util)
 CL_NS_USE(store)
@@ -176,20 +177,43 @@ void STermInfosWriter<T>::close() {
 
 template <typename T>
 void STermInfosWriter<T>::writeTerm(int32_t fieldNumber, const T *termText, int32_t termTextLength) {
-    int32_t start = 0;
-    const int32_t limit = termTextLength < lastTermTextLength ? termTextLength : lastTermTextLength;
-    while (start < limit) {
-        if (termText[start] != lastTermText.values[start])
-            break;
-        start++;
+    if constexpr (std::is_same_v<T, char>) {
+        std::string_view newTermStr(termText, termTextLength);
+        std::wstring newTermWStr = StringUtil::string_to_wstring(newTermStr);
+
+        std::string_view oldTermStr(lastTermText.values, lastTermTextLength);
+        std::wstring oldTermWStr = StringUtil::string_to_wstring(oldTermStr);
+        
+        int32_t start = 0;
+        const int32_t limit = newTermWStr.length() < oldTermWStr.length() ? newTermWStr.length() : oldTermWStr.length();
+        while (start < limit) {
+            if (newTermWStr[start] != oldTermWStr[start])
+                break;
+            start++;
+        }
+
+        int32_t length = newTermWStr.length() - start;
+
+        output->writeVInt(start);
+        output->writeVInt(length);
+        output->writeSChars(newTermWStr.data() + start, length);
+        output->writeVInt(fieldNumber);
+    } else {
+        int32_t start = 0;
+        const int32_t limit = termTextLength < lastTermTextLength ? termTextLength : lastTermTextLength;
+        while (start < limit) {
+            if (termText[start] != lastTermText.values[start])
+                break;
+            start++;
+        }
+
+        int32_t length = termTextLength - start;
+
+        output->writeVInt(start);                    // write shared prefix length
+        output->writeVInt(length);                   // write delta length
+        output->writeSChars(termText + start, length);// write delta chars
+        output->writeVInt(fieldNumber);              // write field num
     }
-
-    int32_t length = termTextLength - start;
-
-    output->writeVInt(start);                    // write shared prefix length
-    output->writeVInt(length);                   // write delta length
-    output->writeSChars(termText + start, length);// write delta chars
-    output->writeVInt(fieldNumber);              // write field num
 }
 
 template class STermInfosWriter<char>;

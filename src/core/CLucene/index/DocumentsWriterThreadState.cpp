@@ -208,7 +208,7 @@ void DocumentsWriter::ThreadState::init(Document *doc, int32_t docID) {
 
         FieldInfo *fi = _parent->fieldInfos->add(field->name(), field->isIndexed(), field->isTermVectorStored(),
                                                  field->isStorePositionWithTermVector(), field->isStoreOffsetWithTermVector(),
-                                                 field->getOmitNorms(), false);
+                                                 field->getOmitNorms(), !field->getOmitTermFreqAndPositions(), false);
         if (fi->isIndexed && !fi->omitNorms) {
             // Maybe grow our buffered norms
             if (_parent->norms.length <= fi->number) {

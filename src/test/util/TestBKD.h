@@ -1,6 +1,6 @@
 #include "CLucene/util/BitSet.h"
 #include "CLucene/util/bkd/bkd_reader.h"
-#include "CLucene/util/croaring/roaring.hh"
+#include <roaring/roaring.hh>
 
 #include <memory>
 #include <vector>
@@ -16,8 +16,8 @@ public:
                  std::shared_ptr<lucene::util::BitSet> &hits);
 
     void visit(int docID) override;
-    void visit(Roaring &docID) override;
-    void visit(Roaring &&docIDs) override {
+    void visit(roaring::Roaring &docID) override;
+    void visit(roaring::Roaring &&docIDs) override {
         {
             for (auto docID : docIDs) {
                 //wcout << L"visit docID=" << docID << endl;
@@ -29,9 +29,9 @@ public:
         if (!matches(packedValue.data())) {
             return;
         }
-        visit(Roaring::read(docID.data(), false));
+        visit(roaring::Roaring::read(docID.data(), false));
     }
-    void visit(Roaring *docID, std::vector<uint8_t> &packedValue) override;
+    void visit(roaring::Roaring *docID, std::vector<uint8_t> &packedValue) override;
     void visit(int docID, std::vector<uint8_t> &packedValue) override;
     void visit(lucene::util::bkd::bkd_docid_set_iterator *iter, std::vector<uint8_t> &packedValue) override;
 
@@ -71,21 +71,21 @@ public:
         if (!matches(packedValue.data())) {
             return;
         }
-        visit(Roaring::read(docID.data(), false));
+        visit(roaring::Roaring::read(docID.data(), false));
     }
-    void visit(Roaring &docIDs) override {
+    void visit(roaring::Roaring &docIDs) override {
         for (auto docID: docIDs) {
             //std::wcout << L"visit docID=" << docID << endl;
             hits->set(docID);
         }
     };
-    void visit(Roaring &&docIDs) override {
+    void visit(roaring::Roaring &&docIDs) override {
         for (auto docID: docIDs) {
             //std::wcout << L"visit docID=" << docID << endl;
             hits->set(docID);
         }
     };
-    void visit(Roaring *docID, std::vector<uint8_t> &packedValue) override {
+    void visit(roaring::Roaring *docID, std::vector<uint8_t> &packedValue) override {
         if (!matches(packedValue.data())) {
             return;
         }

@@ -6,6 +6,11 @@ ADD_DEFINITIONS(${EXTRA_OPTIONS} -DMAKE_CLUCENE_CONTRIBS_LIB)
 
 set(CMAKE_MODULE_PATH "${clucene-contribs-lib_SOURCE_DIR}/cmake")
 
+option(ENABLE_CLANG_COVERAGE "coverage option" OFF)
+if (ENABLE_CLANG_COVERAGE AND ENABLE_CLANG_COVERAGE STREQUAL ON AND COMPILER_CLANG)
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-instr-generate -fcoverage-mapping")
+endif ()
+
 #add the files to our groups and core
 SOURCE_GROUP("analysis" ./CLucene/analysis/*)
 SOURCE_GROUP("util" ./CLucene/util/*)
@@ -88,12 +93,12 @@ ENDIF()
 file(GLOB_RECURSE HEADERS ${clucene-contribs-lib_SOURCE_DIR}/*.h)
 
 #add extra capabilities
-find_package(ZLIB)
-IF ( NOT ZLIB_FOUND )
-  MESSAGE ( FATAL "ZLib not found" )
-ENDIF ( NOT ZLIB_FOUND )
-INCLUDE_DIRECTORIES( ${ZLIB_INCLUDE_DIR} )
-SET ( clucene_contrib_extra_libs "${clucene_contrib_extra_libs}" ${ZLIB_LIBRARIES} )
+#find_package(ZLIB)
+#IF ( NOT ZLIB_FOUND )
+#  MESSAGE ( FATAL "ZLib not found" )
+#ENDIF ( NOT ZLIB_FOUND )
+#INCLUDE_DIRECTORIES( ${ZLIB_INCLUDE_DIR} )
+#SET ( clucene_contrib_extra_libs "${clucene_contrib_extra_libs}" ${ZLIB_LIBRARIES} )
 
 find_package(Iconv)
 #find_package(Strigi)

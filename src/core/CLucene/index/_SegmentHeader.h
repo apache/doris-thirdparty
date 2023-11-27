@@ -25,9 +25,66 @@
 #include "DirectoryIndexReader.h"
 #include "_SkipListReader.h"
 #include "CLucene/util/_ThreadLocal.h"
+#include "CLucene/index/IndexVersion.h"
 
 CL_NS_DEF(index)
 class SegmentReader;
+
+class TermDocsBuffer {
+public:
+  TermDocsBuffer(CL_NS(store)::IndexInput* freqStream, bool hasProx, IndexVersion indexVersion)
+      : docs_(PFOR_BLOCK_SIZE + 3),
+        freqs_(PFOR_BLOCK_SIZE + 3),
+        freqStream_(freqStream),
+        hasProx_(hasProx),
+        indexVersion_(indexVersion) {
+  }
+
+  ~TermDocsBuffer() {
+    cur_doc_ = 0;
+    cur_freq_ = 0;
+
+    docs_.clear();
+    freqs_.clear();
+
+    freqStream_ = nullptr;
+  }
+
+  inline int32_t getDoc() {
+    if (cur_doc_ >= size_) {
+      refill();
+    }
+    return docs_[cur_doc_++];
+  }
+
+  inline int32_t getFreq() {
+    if (cur_freq_ >= size_) {
+      refill();
+    }
+    return freqs_[cur_freq_++];
+  }
+
+  void refill();
+  void readRange(DocRange* docRange);
+
+private:
+  int32_t refillV0();
+  int32_t refillV1();
+
+private:
+  uint32_t size_ = 0;
+
+  uint32_t cur_doc_ = 0;
+  std::vector<uint32_t> docs_;
+
+  uint32_t cur_freq_ = 0;
+  std::vector<uint32_t> freqs_;
+
+  CL_NS(store)::IndexInput* freqStream_ = nullptr;
+
+  bool hasProx_ = false;
+  IndexVersion indexVersion_ = IndexVersion::kV0; 
+};
 
 class SegmentTermDocs:public virtual TermDocs {
 protected:
@@ -56,6 +113,8 @@ private:
 
 protected:
   bool currentFieldStoresPayloads;
+  bool hasProx = false;
+  IndexVersion indexVersion_ = IndexVersion::kV0; 
 
 public:
   ///\param Parent must be a segment reader
@@ -74,15 +133,25 @@ public:
 
   /** Optimized implementation. */
   virtual int32_t read(int32_t* docs, int32_t* freqs, int32_t length);
+  bool readRange(DocRange* docRange) override;
 
   /** Optimized implementation. */
   virtual bool skipTo(const int32_t target);
 
   virtual TermPositions* __asTermPositions();
 
+  int32_t docFreq() override;
+
 protected:
   virtual void skippingDoc(){}
   virtual void skipProx(const int64_t /*proxPointer*/, const int32_t /*payloadLength*/){}
+
+private:
+  bool readRangeV0(DocRange* docRange);
+  bool readRangeV1(DocRange* docRange);
+
+private:
+  TermDocsBuffer buffer_;
 };
 
 
@@ -124,6 +193,7 @@ protected:
 public:
   bool next();
   int32_t read(int32_t* docs, int32_t* freqs, int32_t length);
+  bool readRange(DocRange* docRange) override;
 
 protected:
   /** Called by super.skipTo(). */
@@ -297,6 +367,8 @@ public:
    */
   static SegmentReader* get(SegmentInfos* sis, SegmentInfo* si, bool closeDir);
 
+  static SegmentReader *get(SegmentInfos *sis, SegmentInfo *si, int32_t readBufferSize, bool closeDir);
+
   /**
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
@@ -435,6 +507,8 @@ private:
   void setSegmentInfo(SegmentInfo* info);
   void startCommit();
   void rollbackCommit();
+
+  IndexVersion getIndexVersion() override;
 
   //allow various classes to access the internals of this. this allows us to have
   //a more tight idea of the package

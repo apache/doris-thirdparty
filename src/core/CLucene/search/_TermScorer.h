@@ -57,6 +57,7 @@ public:
 	* @return true iff there is another document matching the query.
 	*/
 	bool next();
+	bool nextRange(DocRange* docRange) override;
 
 	float_t score();
 

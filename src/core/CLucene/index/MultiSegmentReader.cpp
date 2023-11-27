@@ -18,6 +18,8 @@
 #include "MultiReader.h"
 #include "_MultiSegmentReader.h"
 
+#include <algorithm>
+
 CL_NS_USE(document)
 CL_NS_USE(store)
 CL_NS_USE(util)
@@ -43,7 +45,7 @@ void MultiSegmentReader::initialize(CL_NS(util)::ArrayBase<IndexReader*>* _subRe
   starts[subReaders->length] = _maxDoc;
 }
 
-MultiSegmentReader::MultiSegmentReader(CL_NS(store)::Directory* directory, SegmentInfos* sis, bool closeDirectory):
+MultiSegmentReader::MultiSegmentReader(CL_NS(store)::Directory* directory, SegmentInfos* sis, bool closeDirectory, int32_t readBufferSize):
   DirectoryIndexReader(directory,sis,closeDirectory),
   normsCache(NormsCacheType(true,true))
 {
@@ -55,7 +57,7 @@ MultiSegmentReader::MultiSegmentReader(CL_NS(store)::Directory* directory, Segme
   ArrayBase<IndexReader*>* readers = _CLNEW ObjectArray<IndexReader>(sis->size());
   for (int32_t i = (int32_t)sis->size()-1; i >= 0; i--) {
     try {
-      readers->values[i] = SegmentReader::get(sis->info(i));
+      readers->values[i] = SegmentReader::get(sis->info(i), readBufferSize);
     } catch(CLuceneError& err) {
       if ( err.number() != CL_ERR_IO ) throw err;
 
@@ -483,6 +485,12 @@ const char* MultiSegmentReader::getObjectName() const{
   return getClassName();
 }
 
+IndexVersion MultiSegmentReader::getIndexVersion() {
+	for (size_t i = 0; i < subReaders->length; i++) {
+		return (*subReaders)[i]->getIndexVersion();
+	}
+	return IndexVersion::kV0;
+}
 
 
 
@@ -538,6 +546,14 @@ TermPositions* MultiTermDocs::__asTermPositions(){
   return NULL;
 }
 
+int32_t MultiTermDocs::docFreq() {
+	int32_t docFreq = 0;
+	for (size_t i = 0; i < readerTermDocs->length; i++) {
+		docFreq += readerTermDocs->values[i]->docFreq();
+	}
+	return docFreq;
+}
+
 int32_t MultiTermDocs::doc() const {
   CND_PRECONDITION(current!=NULL,"current==NULL, check that next() was called");
   return base + current->doc();
@@ -575,6 +591,14 @@ void MultiTermDocs::seek( Term* tterm) {
 	base = 0;
 	pointer = 0;
 	current = NULL;
+
+	if (readerTermDocs) {
+		for (int32_t i = 0; i < readerTermDocs->length; i++) {
+			termDocs(i);
+		}
+		base = starts[pointer];
+		current = termDocs(pointer++);
+	}
 }
 
 bool MultiTermDocs::next() {
@@ -609,6 +633,32 @@ int32_t MultiTermDocs::read(int32_t* docs, int32_t* freqs, int32_t length) {
 	      docs[i] += b;
 	    return end;
 	  }
+	}
+}
+
+bool MultiTermDocs::readRange(DocRange* docRange) {
+	while (true) {
+		while (current == NULL) {
+			if (pointer < subReaders->length) {
+				base = starts[pointer];
+				current = termDocs(pointer++);
+			} else {
+				return false;
+			}
+		}
+		if (!current->readRange(docRange)) {
+			current = nullptr;
+		} else {
+			if (docRange->type_ == DocRangeType::kMany) {
+				auto begin = docRange->doc_many->begin();
+				auto end = docRange->doc_many->begin() + docRange->doc_many_size_;
+				std::transform(begin, end, begin, [this](int32_t val) { return val + base; });
+			} else if (docRange->type_ == DocRangeType::kRange) {
+				docRange->doc_range.first += base;
+				docRange->doc_range.second += base;
+			}
+			return true;
+		}
 	}
 }
 

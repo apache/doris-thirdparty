@@ -16,7 +16,9 @@
 #include "CLucene/util/Array.h"
 #include "CLucene/util/CLStreams.h"
 #include "CLucene/util/Misc.h"
+#include "CLucene/util/PFORUtil.h"
 #include "CLucene/util/_Arrays.h"
+#include "CLucene/index/CodeMode.h"
 #include "IndexWriter.h"
 #include "Term.h"
 #include "_Term.h"
@@ -30,17 +32,10 @@
 #include "_FieldsWriter.h"
 #include "_IndexFileNames.h"
 #include "_SkipListWriter.h"
-#include "vp4.h"
 
 #include <algorithm>
 #include <assert.h>
 #include <iostream>
-
-#if defined(USE_AVX2) && defined(__x86_64__)
-#define  P4ENC     p4nd1enc256v32
-#else
-#define  P4ENC     p4nd1enc128v32
-#endif
 
 CL_NS_USE(util)
 CL_NS_USE(store)
@@ -65,7 +60,7 @@ const int32_t DocumentsWriter::levelSizeArray[10] = {5, 14, 20, 30, 40, 40, 80, 
 const int32_t DocumentsWriter::POSTING_NUM_BYTE = OBJECT_HEADER_BYTES + 9 * INT_NUM_BYTE + 5 * POINTER_NUM_BYTE;
 
 const int32_t DocumentsWriter::BYTE_BLOCK_SHIFT = 15;
-const int32_t DocumentsWriter::BYTE_BLOCK_SIZE = (int32_t) pow(2.0, BYTE_BLOCK_SHIFT);
+const int32_t DocumentsWriter::BYTE_BLOCK_SIZE = 1 << BYTE_BLOCK_SHIFT;//(int32_t) pow(2.0, BYTE_BLOCK_SHIFT);
 const int32_t DocumentsWriter::BYTE_BLOCK_MASK = BYTE_BLOCK_SIZE - 1;
 const int32_t DocumentsWriter::BYTE_BLOCK_NOT_MASK = ~BYTE_BLOCK_MASK;
 
@@ -132,7 +127,7 @@ DocumentsWriter::~DocumentsWriter() {
     // Make sure unused posting slots aren't attempted delete on
     if (this->postingsFreeListDW.values) {
         if (this->postingsFreeCountDW < this->postingsFreeListDW.length) {
-            memset(this->postingsFreeListDW.values + this->postingsFreeCountDW, NULL, sizeof(Posting *));
+            memset(this->postingsFreeListDW.values + this->postingsFreeCountDW, 0, sizeof(Posting *));
         }
         postingsFreeListDW.deleteUntilNULL();
     }
@@ -556,7 +551,7 @@ void DocumentsWriter::writeSegment(std::vector<std::string> &flushedFiles) {
     IndexOutput *freqOut = directory->createOutput((segmentName + ".frq").c_str());
     // TODO:add options in field index
     IndexOutput *proxOut = nullptr;
-    if (0) {
+    if (fieldInfos->hasProx()) {
         proxOut = directory->createOutput((segmentName + ".prx").c_str());
     }
 
@@ -619,7 +614,7 @@ void DocumentsWriter::writeSegment(std::vector<std::string> &flushedFiles) {
     // Record all files we have flushed
     flushedFiles.push_back(segmentFileName(IndexFileNames::FIELD_INFOS_EXTENSION));
     flushedFiles.push_back(segmentFileName(IndexFileNames::FREQ_EXTENSION));
-    if (0) {
+    if (fieldInfos->hasProx()) {
         flushedFiles.push_back(segmentFileName(IndexFileNames::PROX_EXTENSION));
     }
     flushedFiles.push_back(segmentFileName(IndexFileNames::TERMS_EXTENSION));
@@ -747,12 +742,34 @@ void DocumentsWriter::appendPostings(ArrayBase<ThreadState::FieldData *> *fields
 
         skipListWriter->resetSkip();
 
+        auto encode = [](IndexOutput* out, std::vector<uint32_t>& buffer, bool isDoc) {
+            std::vector<uint8_t> compress(4 * buffer.size() + PFOR_BLOCK_SIZE);
+            size_t size = 0;
+            if (isDoc) {
+                size = P4ENC(buffer.data(), buffer.size(), compress.data());
+            } else {
+                size = P4NZENC(buffer.data(), buffer.size(), compress.data());
+            }
+            out->writeVInt(size);
+            out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
+            buffer.resize(0);
+        };
+
         // Now termStates has numToMerge FieldMergeStates
         // which all share the same term.  Now we must
         // interleave the docID streams.
         while (numToMerge > 0) {
 
             if ((++df % skipInterval) == 0) {
+                if (fieldInfos->hasProx()) {
+                    freqOut->writeByte((char)CodeMode::kPfor);
+                    freqOut->writeVInt(docDeltaBuffer.size());
+                    // doc
+                    encode(freqOut, docDeltaBuffer, true);
+                    // freq
+                    encode(freqOut, freqBuffer, false);
+                }
+
                 skipListWriter->setSkipData(lastDoc, currentFieldStorePayloads, lastPayloadLength);
                 skipListWriter->bufferSkip(df);
             }
@@ -801,24 +818,23 @@ void DocumentsWriter::appendPostings(ArrayBase<ThreadState::FieldData *> *fields
                 }
             }
 
-            docDeltaBuffer.push_back(doc);
-
-            /*if (1 == termDocFreq) {
-                freqOut->writeVInt(newDocCode | 1);
+            if (fieldInfos->hasProx()) {
+                docDeltaBuffer.push_back(doc);
+                freqBuffer.push_back(termDocFreq);
             } else {
-                freqOut->writeVInt(newDocCode);
-                freqOut->writeVInt(termDocFreq);
-            }*/
-            if (docDeltaBuffer.size() == PFOR_BLOCK_SIZE) {
-                std::vector<uint8_t> compresseddata(4 * docDeltaBuffer.size() + PFOR_BLOCK_SIZE);
-                auto size = P4ENC(docDeltaBuffer.data(), docDeltaBuffer.size(), compresseddata.data());
-                //auto size = p4nd1enc256v32(docDeltaBuffer.data(), docDeltaBuffer.size(), compresseddata.data());
-                freqOut->writeVInt(docDeltaBuffer.size());
-                freqOut->writeVInt(size);
-                freqOut->writeBytes(reinterpret_cast<const uint8_t *>(compresseddata.data()), size);
-                docDeltaBuffer.resize(0);
-            }
+                docDeltaBuffer.push_back(doc);
 
+                /*if (1 == termDocFreq) {
+                    freqOut->writeVInt(newDocCode | 1);
+                } else {
+                    freqOut->writeVInt(newDocCode);
+                    freqOut->writeVInt(termDocFreq);
+                }*/
+                if (docDeltaBuffer.size() == PFOR_BLOCK_SIZE) {
+                    freqOut->writeVInt(docDeltaBuffer.size());
+                    encode(freqOut, docDeltaBuffer, true);
+                }
+            }
 
             if (!minState->nextDoc()) {
 
@@ -849,13 +865,35 @@ void DocumentsWriter::appendPostings(ArrayBase<ThreadState::FieldData *> *fields
         assert(df > 0);
 
         // Done merging this term
-        freqOut->writeVInt(docDeltaBuffer.size());
-        uint32_t lDoc = 0;
-        for (auto &docDelta: docDeltaBuffer) {
-            freqOut->writeVInt(docDelta - lDoc);
-            lDoc = docDelta;
+        {
+            if (fieldInfos->hasProx()) {
+                freqOut->writeByte((char)CodeMode::kDefault);
+                freqOut->writeVInt(docDeltaBuffer.size());
+                uint32_t lastDoc = 0;
+                for (int32_t i = 0; i < docDeltaBuffer.size(); i++) {
+                    uint32_t newDocCode = (docDeltaBuffer[i] - lastDoc) << 1;
+                    lastDoc = docDeltaBuffer[i];
+                    uint32_t freq = freqBuffer[i];
+                    if (1 == freq) {
+                        freqOut->writeVInt(newDocCode | 1);
+                    } else {
+                        freqOut->writeVInt(newDocCode);
+                        freqOut->writeVInt(freq);
+                    }
+                }
+                docDeltaBuffer.resize(0);
+                freqBuffer.resize(0);
+            } else {
+                freqOut->writeVInt(docDeltaBuffer.size());
+                uint32_t lDoc = 0;
+                for (auto &docDelta: docDeltaBuffer) {
+                    freqOut->writeVInt(docDelta - lDoc);
+                    lDoc = docDelta;
+                }
+                docDeltaBuffer.resize(0);
+            }
         }
-        docDeltaBuffer.resize(0);
+        
         int64_t skipPointer = skipListWriter->writeSkip(freqOut);
 
         // Write term
@@ -1157,6 +1195,8 @@ void DocumentsWriter::finishDocument(ThreadState *state) {
 int64_t DocumentsWriter::getRAMUsed() {
     return numBytesUsed;
 }
+
+bool DocumentsWriter::hasProx() { return fieldInfos->hasProx(); }
 
 void DocumentsWriter::fillBytes(IndexOutput *out, uint8_t b, int32_t numBytes) {
     for (int32_t i = 0; i < numBytes; i++)

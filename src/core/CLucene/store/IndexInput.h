@@ -163,25 +163,25 @@ CL_NS_DEF(store)
 		LUCENE_STATIC_CONSTANT(int32_t, BUFFER_SIZE=LUCENE_STREAM_BUFFER_SIZE);
 
 		virtual ~BufferedIndexInput();
-		virtual IndexInput* clone() const = 0;
-		void close();
-		inline uint8_t readByte(){
+		virtual IndexInput* clone() const override = 0;
+		void close() override;
+		inline uint8_t readByte() override {
 			if (bufferPosition >= bufferLength)
 				refill();
 
 			return buffer[bufferPosition++];
 		}
-		void readBytes(uint8_t* b, const int32_t len);
-		void readBytes(uint8_t* b, const int32_t len, bool useBuffer);
-        void readBytes(uint8_t* b, const int32_t len, int32_t offset);
-        void readBytes(uint8_t* b, const int32_t len, int32_t offset, bool useBuffer);
-		int64_t getFilePointer() const;
-		void seek(const int64_t pos);
+		void readBytes(uint8_t* b, const int32_t len) override;
+		void readBytes(uint8_t* b, const int32_t len, bool useBuffer) override;
+        void readBytes(uint8_t* b, const int32_t len, int32_t offset) override;
+        void readBytes(uint8_t* b, const int32_t len, int32_t offset, bool useBuffer) override;
+		int64_t getFilePointer() const override;
+		void seek(const int64_t pos) override;
 
 		void setBufferSize( int32_t newSize );
 
-		const char* getObjectName();
-		static const char* getClassName();
+		virtual const char* getObjectName() const override;
+		static const char* getClassName() ;
 
 	protected:
       /** Expert: implements buffer refill.  Reads bytes from the current position

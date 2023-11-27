@@ -22,6 +22,7 @@
     - email    : powturbo [_AT_] gmail [_DOT_] com
 **/
 //  "Integer Compression" variable simple
+#include <string.h>
   #ifndef USIZE
     #ifdef __SSE2__
 #include <emmintrin.h>

@@ -101,6 +101,7 @@ public:
     virtual int64_t getRAMUsed() = 0;
     virtual const std::vector<int32_t>* getBufferedDeleteDocIDs() = 0;
     virtual ~IDocumentsWriter() {}
+    virtual bool hasProx() = 0;
 };
 
 /**
@@ -209,6 +210,7 @@ private:
   // Currently used only for deleting a doc on hitting an non-aborting exception
   std::vector<int32_t> bufferedDeleteDocIDs;
   std::vector<uint32_t> docDeltaBuffer;
+  std::vector<uint32_t> freqBuffer;
 
   // The max number of delete terms that can be buffered before
   // they must be flushed to disk.
@@ -994,6 +996,7 @@ public:
 
   std::string toMB(int64_t v);
 
+  bool hasProx() override;
 
 };
 

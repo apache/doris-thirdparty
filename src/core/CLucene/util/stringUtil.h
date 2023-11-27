@@ -11,6 +11,8 @@
 #include <sse2neon.h>
 #endif
 
+#include <cstring>
+
 template <typename T>
 const T* LUCENE_BLANK_SSTRING();
 
@@ -61,22 +63,21 @@ public:
     }
 };
 
-static void to_lower(const uint8_t* src, int64_t len, uint8_t* dst) {
+[[maybe_unused]] static void to_lower(const uint8_t* src, int64_t len, uint8_t* dst) {
     if (len <= 0) {
         return;
     }
     LowerUpperImpl<'A', 'Z'>::transfer(src, src + len, dst);
 }
 
-static void to_upper(const uint8_t* src, int64_t len, uint8_t* dst) {
+[[maybe_unused]] static void to_upper(const uint8_t* src, int64_t len, uint8_t* dst) {
     if (len <= 0) {
         return;
     }
-    LowerUpperImpl<'a', 'z'> lowerUpper;
     LowerUpperImpl<'a', 'z'>::transfer(src, src + len, dst);
 }
 
-static __attribute__((__always_inline__)) bool is_alnum(uint8_t c) {
+[[maybe_unused]] static inline bool is_alnum(uint8_t c) {
     static constexpr uint8_t LUT[256] = {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -91,7 +92,7 @@ static __attribute__((__always_inline__)) bool is_alnum(uint8_t c) {
     return (bool)LUT[c];
 }
 
-static __attribute__((__always_inline__)) char to_lower(uint8_t c) {
+[[maybe_unused]] static inline char to_lower(uint8_t c) {
     static constexpr uint8_t LUT[256] = {
             0,   1,   2,   3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,  14,  15,
             16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  31,
@@ -111,5 +112,186 @@ static __attribute__((__always_inline__)) char to_lower(uint8_t c) {
             240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255};
     return (char)LUT[c];
 }
+
+class StringUtil {
+public:
+    template <typename T>
+    static inline T unaligned_load(const void* address) {
+        T res {};
+        memcpy(&res, address, sizeof(res));
+        return res;
+    }
+
+#if defined(__SSE2__)
+
+    static inline bool compareSSE2(const char* p1, const char* p2) {
+        return 0xFFFF == _mm_movemask_epi8(_mm_cmpeq_epi8(
+                                 _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1)),
+                                 _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2))));
+    }
+
+    static inline bool compareSSE2x4(const char* p1, const char* p2) {
+        return 0xFFFF ==
+               _mm_movemask_epi8(_mm_and_si128(
+                       _mm_and_si128(
+                               _mm_cmpeq_epi8(
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1)),
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2))),
+                               _mm_cmpeq_epi8(
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1) + 1),
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2) + 1))),
+                       _mm_and_si128(
+                               _mm_cmpeq_epi8(
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1) + 2),
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2) + 2)),
+                               _mm_cmpeq_epi8(
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1) + 3),
+                                       _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2) +
+                                                       3)))));
+    }
+
+    static inline bool memequalSSE2Wide(const char* p1, const char* p2, size_t size) {
+        if (size <= 16) {
+            if (size >= 8) {
+                /// Chunks of [8,16] bytes.
+                return unaligned_load<uint64_t>(p1) == unaligned_load<uint64_t>(p2) &&
+                       unaligned_load<uint64_t>(p1 + size - 8) ==
+                               unaligned_load<uint64_t>(p2 + size - 8);
+            } else if (size >= 4) {
+                /// Chunks of [4,7] bytes.
+                return unaligned_load<uint32_t>(p1) == unaligned_load<uint32_t>(p2) &&
+                       unaligned_load<uint32_t>(p1 + size - 4) ==
+                               unaligned_load<uint32_t>(p2 + size - 4);
+            } else if (size >= 2) {
+                /// Chunks of [2,3] bytes.
+                return unaligned_load<uint16_t>(p1) == unaligned_load<uint16_t>(p2) &&
+                       unaligned_load<uint16_t>(p1 + size - 2) ==
+                               unaligned_load<uint16_t>(p2 + size - 2);
+            } else if (size >= 1) {
+                /// A single byte.
+                return *p1 == *p2;
+            }
+            return true;
+        }
+
+        while (size >= 64) {
+            if (compareSSE2x4(p1, p2)) {
+                p1 += 64;
+                p2 += 64;
+                size -= 64;
+            } else {
+                return false;
+            }
+        }
+
+        switch (size / 16) {
+        case 3:
+            if (!compareSSE2(p1 + 32, p2 + 32)) {
+                return false;
+            }
+            [[fallthrough]];
+        case 2:
+            if (!compareSSE2(p1 + 16, p2 + 16)) {
+                return false;
+            }
+            [[fallthrough]];
+        case 1:
+            if (!compareSSE2(p1, p2)) {
+                return false;
+            }
+        }
+
+        return compareSSE2(p1 + size - 16, p2 + size - 16);
+    }
+
+#endif
+
+    static inline int32_t utf8_byte_count(uint8_t c) {
+        static constexpr int32_t LUT[256] = {
+            1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+            1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+            1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+            1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+            1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+            1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+            1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+            1,  1,  1,  1,  1,  1,  1,  1,  1,  -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, 2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+            2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+            2,  2,  2,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,
+            3,  3,  4,  4,  4,  4,  4,  4,  4,  4,  -1, -1, -1, -1, -1, -1, -1};
+        return LUT[c];
+    }
+
+    static inline bool is_valid_codepoint(uint32_t code_point) {
+        return code_point < 0xD800u ||
+               (code_point >= 0xE000u && code_point <= 0x10FFFFu);
+    }
+
+    static inline int32_t validate_utf8(const std::string_view& str) {
+        int32_t bytes_in_char = 0;
+        int32_t surplus_bytes = 0;
+        uint32_t codepoint = 0;
+        for (uint8_t c : str) {
+            if (bytes_in_char == 0) {
+                if ((c & 0x80) == 0) {
+                    codepoint = c;
+                    continue;
+                } else if ((c & 0xE0) == 0xC0) {
+                    codepoint = c & 0x1F;
+                    bytes_in_char = 1;
+                } else if ((c & 0xF0) == 0xE0) {
+                    codepoint = c & 0x0F;
+                    bytes_in_char = 2;
+                } else if ((c & 0xF8) == 0xF0) {
+                    codepoint = c & 0x07;
+                    bytes_in_char = 3;
+                } else {
+                    return -1;
+                }
+                surplus_bytes = 1;
+            } else {
+                if ((c & 0xC0) != 0x80) return -1;
+                codepoint = (codepoint << 6) | (c & 0x3F);
+                if (!is_valid_codepoint(codepoint)) {
+                    return -1;
+                }
+                bytes_in_char--;
+                surplus_bytes++;
+            }
+        }
+        return bytes_in_char == 0 ? 0 : surplus_bytes;
+    }
+
+    // utf8: 1-4 char = 1 wchar_t, invalid utf8: 1 char = 1 wchar_t
+    static inline std::wstring string_to_wstring(const std::string_view& utf8_str) {
+        std::wstring wstr;
+        wstr.reserve(utf8_str.size());
+        size_t i = 0;
+        while (i < utf8_str.size()) {
+            wchar_t wc = utf8_str[i];
+            int32_t n = utf8_byte_count(utf8_str[i]);
+            if ((n >= 1 && n <= 4) &&
+                (i + n <= utf8_str.size()) &&
+                validate_utf8(std::string_view(utf8_str.data() + i, n)) == 0) {
+                if (n == 2) {
+                    wc = ((utf8_str[i] & 0x1F) << 6) | (utf8_str[i + 1] & 0x3F);
+                } else if (n == 3) {
+                    wc = ((utf8_str[i] & 0x0F) << 12) | ((utf8_str[i + 1] & 0x3F) << 6) | (utf8_str[i + 2] & 0x3F);
+                } else if (n == 4) {
+                    wc = ((utf8_str[i] & 0x07) << 18) | ((utf8_str[i + 1] & 0x3F) << 12) | ((utf8_str[i + 2] & 0x3F) << 6) | (utf8_str[i + 3] & 0x3F);
+                }
+                i += n;
+            } else {
+                i += 1;
+            }
+            wstr.push_back(wc);
+        }
+        return wstr;
+    }
+};
 
 #endif//_lucene_util__stringutil_H

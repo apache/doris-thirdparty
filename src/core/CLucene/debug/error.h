@@ -33,6 +33,7 @@
 #define CL_ERR_MergeAborted 22
 #define CL_ERR_OutOfMemory 23
 #define CL_ERR_FieldReader 24
+#define CL_ERR_MaxBytesLength 25
 
 ////////////////////////////////////////////////////////
 //error try/throw/catch definitions

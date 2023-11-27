@@ -11,6 +11,7 @@
 #include "CLucene/util/Array.h"
 #include "CLucene/util/VoidList.h"
 #include "CLucene/LuceneThreads.h"
+#include "CLucene/index/IndexVersion.h"
 
 CL_CLASS_DEF(store,Directory)
 CL_CLASS_DEF(store,LuceneLock)
@@ -155,6 +156,9 @@ public:
    */
   static IndexReader* open(CL_NS(store)::Directory* directory, bool closeDirectoryOnCleanup=false, IndexDeletionPolicy* deletionPolicy=NULL);
 
+  static IndexReader* open(CL_NS(store)::Directory* directory, int32_t readBufferSize,
+                           bool closeDirectoryOnCleanup = false,
+                           IndexDeletionPolicy* deletionPolicy = NULL);
 
   /**
    * Refreshes an IndexReader if the index has changed since this instance
@@ -675,6 +679,8 @@ public:
 	* should pass their callback function to this.
 	*/
 	void addCloseCallback(CloseCallback callback, void* parameter);
+
+  virtual IndexVersion getIndexVersion();
 
   friend class SegmentReader;
   friend class MultiReader;

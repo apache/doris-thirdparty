@@ -148,7 +148,7 @@ public:
 
 protected:
 	/** Collects only characters which satisfy _istalpha.*/
-    bool isTokenChar(const T c) const;
+    bool isTokenChar(const T c) const override;
 };
 
 /** A WhitespaceTokenizer is a tokenizer that divides text at whitespace.
@@ -180,20 +180,30 @@ template <typename T>
 class CLUCENE_EXPORT SimpleAnalyzer: public Analyzer {
 public:
     SimpleAnalyzer(){}
+
+    bool isSDocOpt() override { return true; }
+
     TokenStream* tokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader) override{
         return _CLNEW SimpleTokenizer<T>(reader);
     }
     TokenStream* reusableTokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader) override{
-        auto* tokenizer = dynamic_cast<Tokenizer*>(getPreviousTokenStream());
-        if (tokenizer == nullptr) {
-            tokenizer = _CLNEW SimpleTokenizer<T>(reader);
-            setPreviousTokenStream(tokenizer);
-        } else
-            tokenizer->reset(reader);
-        return tokenizer;
+        if (tokenizer_ == nullptr) {
+            tokenizer_ = new SimpleTokenizer<T>(reader);
+        } else {
+            tokenizer_->reset(reader);
+        }
+        return tokenizer_;
     };
 
-    virtual ~SimpleAnalyzer(){}
+    virtual ~SimpleAnalyzer() {
+        if (tokenizer_) {
+            delete tokenizer_;
+            tokenizer_ = nullptr;
+        }
+    }
+
+private:
+    SimpleTokenizer<T>* tokenizer_ = nullptr;
 };
 
 /**

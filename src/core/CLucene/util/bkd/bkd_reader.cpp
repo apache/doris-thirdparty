@@ -1,3 +1,4 @@
+#include "CLucene/SharedHeader.h"
 #include "CLucene/_ApiHeader.h"
 
 #include "CLucene/util/CodecUtil.h"

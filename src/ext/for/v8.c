@@ -32,6 +32,7 @@
 #include "conf.h"
 #include "vint.h"
 #include "bitutil.h"
+#include <string.h>
 
 #define LEN32(_m_,_i_) len32[(uint8_t)(_m_>>(_i_*8))]
 static const unsigned char len32[256] = {

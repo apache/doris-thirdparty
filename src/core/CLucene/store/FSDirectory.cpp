@@ -22,6 +22,7 @@
 #include <errno.h>
 
 #include <assert.h>
+#include <iostream>
 
 #include "FSDirectory.h"
 #include "LockFactory.h"
@@ -241,6 +242,12 @@ void FSDirectory::FSIndexInput::readInternal(uint8_t* b, const int32_t len) {
 	CND_PRECONDITION(handle->fhandle>=0,"file is not open");
 	SCOPED_LOCK_MUTEX(*handle->SHARED_LOCK)
 
+	// todo: The file pointer may be wrong
+	int64_t position = getFilePointer();
+	if (_pos != position) {
+		_pos = position;
+	}
+
 	if ( handle->_fpos != _pos ){
 		if ( fileSeek(handle->fhandle,_pos,SEEK_SET) != _pos ){
 			_CLTHROWA( CL_ERR_IO, "File IO Seek error");
@@ -372,7 +379,7 @@ void FSDirectory::FSIndexInput::readInternal(uint8_t* b, const int32_t len) {
 
     if ( lockFactory == NULL ) {
     	if ( disableLocks ) {
-    		lockFactory = NoLockFactory::getNoLockFactory();
+				lockFactory = _CLNEW NoLockFactory();
     	} else {
     		lockFactory = _CLNEW FSLockFactory( directory.c_str(), this->filemode );
     		doClearLockID = true;
@@ -485,8 +492,8 @@ void FSDirectory::FSIndexInput::readInternal(uint8_t* b, const int32_t len) {
     
     struct cl_stat_t fstat;
 		if ( fileStat(file,&fstat) == 0 && !(fstat.st_mode & S_IFDIR) ){
-	      char tmp[1024];
-	      _snprintf(tmp,1024,"%s not a directory", file);
+	      char tmp[4112];
+	      _snprintf(tmp,4112,"%s not a directory", file);
 	      _CLTHROWA(CL_ERR_IO,tmp);
 		}
 
