@@ -9,11 +9,8 @@ std::vector<uint8_t> BytesRef::EMPTY_BYTES = std::vector<uint8_t>(0);
 
 BytesRef::BytesRef() : BytesRef((EMPTY_BYTES)) {}
 
-BytesRef::BytesRef(std::vector<uint8_t> &bytes, int offset, int length) {
-    this->bytes = bytes;
-    this->offset = offset;
-    this->length = length;
-    //assert(isValid());
+BytesRef::BytesRef(std::vector<uint8_t>& bytes, int offset, int length)
+        : bytes(std::move(bytes)), offset(offset), length(length) {
 }
 
 BytesRef::BytesRef(std::vector<uint8_t> &bytes) : BytesRef(bytes, 0, bytes.size()) {

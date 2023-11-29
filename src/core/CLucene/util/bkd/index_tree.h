@@ -24,6 +24,7 @@ public:
     virtual int32_t get_num_leaves();
     virtual std::shared_ptr<index_tree> clone() = 0;
     virtual std::shared_ptr<BytesRef> get_split_dim_value() = 0;
+    virtual std::vector<uint8_t>& get_split_1dim_value() = 0;
     virtual int64_t get_leaf_blockFP() = 0;
 private:
     int32_t GetNumLeavesSlow(int32_t node);

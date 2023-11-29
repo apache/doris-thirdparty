@@ -9,16 +9,15 @@ CL_NS_DEF2(util,bkd)
 packed_index_tree::packed_index_tree(std::shared_ptr<bkd_reader>&& reader)
     : index_tree(reader) {
     int32_t treeDepth = reader->get_tree_depth();
-    leaf_block_fp_stack_ = std::vector<int64_t>(treeDepth + 1);
-    left_node_positions_ = std::vector<int32_t>(treeDepth + 1);
-    right_node_positions_ = std::vector<int32_t>(treeDepth + 1);
-    split_values_stack_ = std::vector<std::vector<uint8_t>>(treeDepth + 1);
-    split_dims_ = std::vector<int32_t>(treeDepth + 1);
-    negative_deltas_ = std::vector<bool>(reader->num_index_dims_ * (treeDepth + 1));
+    leaf_block_fp_stack_.resize(treeDepth + 1);
+    left_node_positions_.resize(treeDepth + 1);
+    right_node_positions_.resize(treeDepth + 1);
+    split_values_stack_.resize(treeDepth + 1);
+    split_dims_.resize(treeDepth + 1);
+    negative_deltas_.resize(reader->num_index_dims_ * (treeDepth + 1));
 
-    in2_ = std::make_shared<store::ByteArrayDataInput>(reader->packed_index_);
-    //in_ = std::unique_ptr<store::IndexInput>(reader->clone_index_input->clone());
-    split_values_stack_[0] = std::vector<uint8_t>(reader->packed_index_bytes_length_);
+    in_ = std::make_unique<store::ByteArrayDataInput>(reader->packed_index_);
+    split_values_stack_[0].resize(reader->packed_index_bytes_length_);
     read_node_data(false);
     scratch_ = std::make_shared<BytesRef>();
     scratch_->length = reader->bytes_per_dim_;
@@ -48,7 +47,7 @@ void packed_index_tree::push_left() {
               negative_deltas_.begin() + level_ * reader->num_index_dims_);
     assert(split_dim_ != -1);
     negative_deltas_[level_ * reader->num_index_dims_ + split_dim_] = true;
-    in2_->setPosition(nodePosition);
+    in_->setPosition(nodePosition);
     read_node_data(true);
 }
 
@@ -60,7 +59,7 @@ void packed_index_tree::push_right() {
               negative_deltas_.begin() + level_ * reader->num_index_dims_);
     assert(split_dim_ != -1);
     negative_deltas_[level_ * reader->num_index_dims_ + split_dim_] = false;
-    in2_->setPosition(nodePosition);
+    in_->setPosition(nodePosition);
     read_node_data(false);
 }
 
@@ -81,17 +80,22 @@ std::shared_ptr<BytesRef> packed_index_tree::get_split_dim_value() {
     return scratch_;
 }
 
+std::vector<uint8_t>& packed_index_tree::get_split_1dim_value() {
+    assert(is_leaf_node() == false);
+    return split_values_stack_[level_];
+}
+
 void packed_index_tree::read_node_data(bool isLeft) {
     leaf_block_fp_stack_[level_] = leaf_block_fp_stack_[level_ - 1];
 
     if (!isLeft) {
-        leaf_block_fp_stack_[level_] += in2_->readVLong();
+        leaf_block_fp_stack_[level_] += in_->readVLong();
     }
 
     if (is_leaf_node()) {
         split_dim_ = -1;
     } else {
-        int32_t code = in2_->readVInt();
+        int32_t code = in_->readVInt();
         split_dim_ = code % reader->num_index_dims_;
         split_dims_[level_] = split_dim_;
         code /= reader->num_index_dims_;
@@ -111,7 +115,7 @@ void packed_index_tree::read_node_data(bool isLeft) {
             }
             int32_t oldByte = split_values_stack_[level_][split_dim_ * reader->bytes_per_dim_ + prefix] & 0xFF;
             split_values_stack_[level_][split_dim_ * reader->bytes_per_dim_ + prefix] = static_cast<uint8_t>(oldByte + firstDiffByteDelta);
-            in2_->readBytes(split_values_stack_[level_],
+            in_->readBytes(split_values_stack_[level_],
                            suffix - 1,
                            split_dim_ * reader->bytes_per_dim_ + prefix + 1);
         } else {
@@ -120,12 +124,12 @@ void packed_index_tree::read_node_data(bool isLeft) {
 
         int32_t leftNumBytes;
         if (node_id_ * 2 < reader->leaf_node_offset_) {
-            leftNumBytes = in2_->readVInt();
+            leftNumBytes = in_->readVInt();
         } else {
             leftNumBytes = 0;
         }
 
-        left_node_positions_[level_] = in2_->getPosition();
+        left_node_positions_[level_] = in_->getPosition();
 
         right_node_positions_[level_] = left_node_positions_[level_] + leftNumBytes;
     }

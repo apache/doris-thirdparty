@@ -36,9 +36,7 @@ int FutureArrays::Mismatch(std::vector<uint8_t> &a, int aFromIndex, int aToIndex
 int FutureArrays::CompareUnsigned(const uint8_t *a, int aFromIndex,
                                   int aToIndex, const uint8_t *b,
                                   int bFromIndex, int bToIndex) {
-    int aLen = aToIndex - aFromIndex;
-    int bLen = bToIndex - bFromIndex;
-    int len = std::min(aLen, bLen);
+    int len = std::min(aToIndex - aFromIndex, bToIndex - bFromIndex);
     for (int i = 0; i < len; i++) {
         int aByte = a[i + aFromIndex] & 0xFF;
         int bByte = b[i + bFromIndex] & 0xFF;
@@ -48,8 +46,7 @@ int FutureArrays::CompareUnsigned(const uint8_t *a, int aFromIndex,
         }
     }
 
-    // One is a prefix of the other, or, they are equal:
-    return aLen - bLen;
+    return (aToIndex - aFromIndex) - (bToIndex - bFromIndex);
 }
 
 int FutureArrays::CompareNumeric(const uint8_t *a,

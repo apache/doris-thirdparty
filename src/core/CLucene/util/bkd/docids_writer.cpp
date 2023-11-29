@@ -2,6 +2,7 @@
 #include "docids_writer.h"
 
 #include "CLucene/debug/error.h"
+#include "CLucene/store/ByteArrayDataInput.h"
 
 CL_NS_DEF2(util, bkd)
 
@@ -164,12 +165,26 @@ void docids_writer::read_delta_vints(store::IndexInput *in, int32_t count, std::
     }
 }
 
+int32_t calculateTotalBytesForDocIds(int32_t count) {
+    int32_t bytesForGroups = (count / 8) * 24; // Bytes for full groups of 8 docids
+
+    int32_t remainingDocIds = count % 8; // Number of remaining docids
+    int32_t bytesForRemaining = remainingDocIds * 3; // Bytes for remaining docids, 3 bytes each
+
+    return bytesForGroups + bytesForRemaining;
+}
+
 void docids_writer::read_ints24(store::IndexInput *in, int32_t count, std::vector<int32_t> &docids) {
     int32_t i = 0;
+    auto data_size = calculateTotalBytesForDocIds(count);
+    std::vector<uint8_t> packed_docids(data_size);
+    in->readBytes(packed_docids.data(), data_size);
+    auto in2= std::make_unique<store::ByteArrayDataInput>(packed_docids);
+
     for (i = 0; i < count - 7; i += 8) {
-        int64_t l1 = in->readLong();
-        int64_t l2 = in->readLong();
-        int64_t l3 = in->readLong();
+        int64_t l1 = in2->readLong();
+        int64_t l2 = in2->readLong();
+        int64_t l3 = in2->readLong();
         docids[i] = (int) (static_cast<uint64_t>(l1) >> 40);
         docids[i + 1] = (int) (static_cast<uint64_t>(l1) >> 16) & 0xffffff;
         docids[i + 2] = (int) (((static_cast<uint64_t>(l1) & 0xffff) << 8) | (static_cast<uint64_t>(l2) >> 56));
@@ -180,7 +195,7 @@ void docids_writer::read_ints24(store::IndexInput *in, int32_t count, std::vecto
         docids[i + 7] = (int) l3 & 0xffffff;
     }
     for (; i < count; ++i) {
-        docids[i] = ((static_cast<int32_t>(in->readShort()) & 0xffff) << 8) | static_cast<uint8_t>(in->readByte());
+        docids[i] = ((static_cast<int32_t>(in2->readShort()) & 0xffff) << 8) | static_cast<uint8_t>(in2->readByte());
     }
 }
 

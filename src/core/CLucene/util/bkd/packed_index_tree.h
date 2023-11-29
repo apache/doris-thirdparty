@@ -19,13 +19,13 @@ public:
     void pop() override;
     int64_t get_leaf_blockFP() override;
     std::shared_ptr<BytesRef> get_split_dim_value() override;
+    std::vector<uint8_t>& get_split_1dim_value() override;
 
 private:
     void read_node_data(bool isLeft);
 
 private:
-    std::shared_ptr<store::ByteArrayDataInput> in2_;
-    //std::unique_ptr<store::IndexInput> in_;
+    std::unique_ptr<store::ByteArrayDataInput> in_;
     std::vector<int64_t> leaf_block_fp_stack_;
     std::vector<int32_t> left_node_positions_;
     std::vector<int32_t> right_node_positions_;

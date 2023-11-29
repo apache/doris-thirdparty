@@ -16,6 +16,7 @@ public:
     void pop() override;
     int64_t get_leaf_blockFP() override;
     std::shared_ptr<BytesRef> get_split_dim_value() override;
+    std::vector<uint8_t>& get_split_1dim_value() override;
 
 private:
     void set_node_data();

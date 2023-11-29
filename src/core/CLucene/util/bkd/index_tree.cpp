@@ -6,17 +6,17 @@ CL_NS_DEF2(util,bkd)
 index_tree::index_tree(std::shared_ptr<bkd_reader>& reader)
     : reader(reader) {
     int32_t treeDepth = reader->get_tree_depth();
-    split_packed_value_stack_ = std::vector<std::vector<uint8_t>>(treeDepth + 1);
+    split_packed_value_stack_.resize(treeDepth + 1);
     node_id_ = 1;
     level_ = 1;
-    split_packed_value_stack_[level_] = std::vector<uint8_t>(reader->packed_index_bytes_length_);
+    split_packed_value_stack_[level_].resize(reader->packed_index_bytes_length_);
 }
 
 void index_tree::push_left() {
     node_id_ *= 2;
     level_++;
     if (split_packed_value_stack_[level_].empty()) {
-        split_packed_value_stack_[level_] = std::vector<uint8_t>(reader->packed_index_bytes_length_);
+        split_packed_value_stack_[level_].resize(reader->packed_index_bytes_length_);
     }
 }
 
@@ -24,7 +24,7 @@ void index_tree::push_right() {
     node_id_ = node_id_ * 2 + 1;
     level_++;
     if (split_packed_value_stack_[level_].empty()) {
-        split_packed_value_stack_[level_] = std::vector<uint8_t>(reader->packed_index_bytes_length_);
+        split_packed_value_stack_[level_].resize(reader->packed_index_bytes_length_);
     }
 }
 
