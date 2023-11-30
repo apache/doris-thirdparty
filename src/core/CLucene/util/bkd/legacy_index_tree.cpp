@@ -43,6 +43,11 @@ std::shared_ptr<BytesRef> legacy_index_tree::get_split_dim_value() {
     return scratch_;
 }
 
+std::vector<uint8_t>& legacy_index_tree::get_split_1dim_value() {
+    assert(is_leaf_node() == false);
+    return scratch_->bytes;
+}
+
 void legacy_index_tree::pop() {
     index_tree::pop();
     leaf_block_fp_ = -1;

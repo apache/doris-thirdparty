@@ -45,6 +45,9 @@ public:
     static const char *PLAIN_NORMS_EXTENSION;
     static const char *SEPARATE_NORMS_EXTENSION;
     static const char *GEN_EXTENSION;
+    static const char *BKD_DATA;
+    static const char *BKD_META;
+    static const char *BKD_INDEX;
 
     LUCENE_STATIC_CONSTANT(int32_t, COMPOUND_EXTENSIONS_LENGTH = 7);
     LUCENE_STATIC_CONSTANT(int32_t, VECTOR_EXTENSIONS_LENGTH = 3);

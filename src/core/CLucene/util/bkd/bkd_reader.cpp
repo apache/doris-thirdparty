@@ -4,6 +4,7 @@
 #include "CLucene/util/CodecUtil.h"
 #include "CLucene/util/FutureArrays.h"
 #include "CLucene/util/Time.h"
+#include "CLucene/index/_IndexFileNames.h"
 #include "bkd_reader.h"
 #include "bkd_writer.h"
 #include "docids_writer.h"
@@ -11,11 +12,36 @@
 #include "packed_index_tree.h"
 
 #include <cmath>
+#include <iostream>
+#include <iomanip>
 
+CL_NS_USE(index)
 CL_NS_DEF2(util, bkd)
 
 bkd_reader::bkd_reader(store::IndexInput *in) {
     in_ = std::unique_ptr<store::IndexInput>(in);
+}
+
+bkd_reader::~bkd_reader() {
+    if(_close_directory && _dir){
+        _dir->close();
+    }
+    _CLDECDELETE(_dir);
+}
+
+bkd_reader::bkd_reader(store::Directory *dir, bool close_directory): _close_directory(close_directory) {
+    _dir = _CL_POINTER(dir);
+}
+
+bool bkd_reader::open() {
+    in_ = std::unique_ptr<store::IndexInput>(_dir->openInput(IndexFileNames::BKD_DATA));
+    auto meta_in = std::unique_ptr<store::IndexInput>(_dir->openInput(IndexFileNames::BKD_META));
+    auto index_in =std::unique_ptr<store::IndexInput>(_dir->openInput(IndexFileNames::BKD_INDEX));
+    if (0 == read_meta(meta_in.get())) {
+        return false;
+    }
+    read_index(index_in.get());
+    return true;
 }
 
 int bkd_reader::read_meta(store::IndexInput* meta_in) {
@@ -73,9 +99,8 @@ void bkd_reader::read_index(store::IndexInput* index_in) {
         int32_t numBytes = index_in->readVInt();
         metaOffset = index_in->getFilePointer();
 
-        clone_index_input = std::shared_ptr<store::IndexInput>(index_in->clone());
-        packed_index_ = std::make_shared<std::vector<uint8_t>>(numBytes);
-        index_in->readBytes(packed_index_->data(), numBytes);
+        packed_index_ = std::vector<uint8_t>(numBytes);
+        index_in->readBytes(packed_index_.data(), numBytes);
         leaf_block_fps_.clear();
         split_packed_values_.clear();
     } else {
@@ -115,7 +140,7 @@ void bkd_reader::read_index(store::IndexInput* index_in) {
         }
 
         leaf_block_fps_ = leafBlockFPs;
-        packed_index_->clear();
+        packed_index_.clear();
     }
 }
 
@@ -125,26 +150,23 @@ bkd_reader::intersect_state::intersect_state(store::IndexInput *in,
                                              int32_t packedIndexBytesLength,
                                              int32_t maxPointsInLeafNode,
                                              bkd_reader::intersect_visitor *visitor,
-                                             const std::shared_ptr<index_tree> &indexVisitor) {
-    in_ = std::shared_ptr<store::IndexInput>(in);
+                                             index_tree* indexVisitor) {
+    in_ = std::unique_ptr<store::IndexInput>(in);
     visitor_ = visitor;
-    common_prefix_lengths_ = std::vector<int32_t>(numDims);
+    common_prefix_lengths_.resize(numDims);
     docid_set_iterator = std::make_unique<bkd_docid_set_iterator>(maxPointsInLeafNode);
-    scratch_doc_ids_ = std::vector<int32_t>(maxPointsInLeafNode);
-    scratch_data_packed_value_ = std::vector<uint8_t>(packedBytesLength);
-    scratch_min_index_packed_value_ = std::vector<uint8_t>(packedIndexBytesLength);
-    scratch_max_index_packed_value_ = std::vector<uint8_t>(packedIndexBytesLength);
-    index_ = indexVisitor;
+    scratch_data_packed_value_.resize(packedBytesLength);
+    scratch_min_index_packed_value_.resize(packedIndexBytesLength);
+    scratch_max_index_packed_value_.resize(packedIndexBytesLength);
+    index_ = std::unique_ptr<index_tree>(indexVisitor);
 }
 
 std::shared_ptr<bkd_reader::intersect_state> bkd_reader::get_intersect_state(bkd_reader::intersect_visitor *visitor) {
-    // because we will reuse BKDReader, we need to seek to packed tree index offset every time.
-    clone_index_input->seek(metaOffset);
-    std::shared_ptr<index_tree> index;
-    if (!packed_index_->empty()) {
-        index = std::make_shared<packed_index_tree>(shared_from_this());
+    index_tree* index;
+    if (!packed_index_.empty()) {
+        index = new packed_index_tree(shared_from_this());
     } else {
-        index = std::make_shared<legacy_index_tree>(shared_from_this());
+        index = new legacy_index_tree(shared_from_this());
     }
     return std::make_shared<intersect_state>(in_->clone(),
                                              num_data_dims_,
@@ -158,11 +180,20 @@ std::shared_ptr<bkd_reader::intersect_state> bkd_reader::get_intersect_state(bkd
 void bkd_reader::intersect(bkd_reader::intersect_visitor *visitor)
 
 {
-    intersect(get_intersect_state(visitor), min_packed_value_, max_packed_value_);
+    if (indexFP == 0) {
+        return;
+    }
+    // because we will modify min/max packed value in intersect, so we copy them in the first time.
+    auto min_packed_value = min_packed_value_;
+    auto max_packed_value = max_packed_value_;
+    intersect(get_intersect_state(visitor), min_packed_value, max_packed_value);
 }
 
 int64_t bkd_reader::estimate_point_count(bkd_reader::intersect_visitor *visitor) {
-    return estimate_point_count(get_intersect_state(visitor), min_packed_value_, max_packed_value_);
+    // because we will modify min/max packed value in intersect, so we copy them in the first time.
+    auto min_packed_value = min_packed_value_;
+    auto max_packed_value = max_packed_value_;
+    return estimate_point_count(get_intersect_state(visitor), min_packed_value, max_packed_value);
 }
 
 int64_t bkd_reader::estimate_point_count(const std::shared_ptr<bkd_reader::intersect_state> &s, std::vector<uint8_t> &cellMinPacked, std::vector<uint8_t> &cellMaxPacked)
@@ -253,9 +284,7 @@ void bkd_reader::add_all(const std::shared_ptr<intersect_state> &state, bool gro
     if (state->index_->is_leaf_node()) {
         assert(grown);
         if (state->index_->node_exists()) {
-            auto start = UnixMillis();
             visit_doc_ids(state->in_.get(), state->index_->get_leaf_blockFP(), state->visitor_);
-            stats.add_doc_id_visit_time_duration(UnixMillis() - start);
         }
     } else {
         state->index_->push_left();
@@ -317,12 +346,28 @@ void bkd_reader::visit_compressed_doc_values(std::vector<int32_t> &commonPrefixL
     for (i = 0; i < count;) {
         scratchPackedValue[compressedByteOffset] = in->readByte();
         int32_t runLen = static_cast<int32_t>(in->readByte()) & 0xFF;
+        // under runLen, we compare prefix first, if outside matched value, we can skip the whole runLen values.
+        std::vector<uint8_t> prefix(scratchPackedValue.begin(), scratchPackedValue.begin() + compressedByteOffset + 1);
+        if (visitor->compare_prefix(prefix) == relation::CELL_OUTSIDE_QUERY) {
+            size_t skip_bytes = 0;
+            for (int32_t dim = 0; dim < num_data_dims_; dim++) {
+                int32_t prefix = commonPrefixLengths[dim];
+                skip_bytes += bytes_per_dim_ - prefix;
+            }
+            in->seek(in->getFilePointer() + skip_bytes * (runLen));
+            i += runLen;
+            continue;
+        }
         for (int32_t j = 0; j < runLen; ++j) {
             for (int32_t dim = 0; dim < num_data_dims_; dim++) {
                 int32_t prefix = commonPrefixLengths[dim];
                 in->readBytes(scratchPackedValue.data(), bytes_per_dim_ - prefix, dim * bytes_per_dim_ + prefix);
             }
-            visitor->visit(iter->docid_set->docids[i + j], scratchPackedValue);
+            // if scratchPackedValue is larger than matched value, we can skip the left values match because values are sorted from low to high.
+            auto res = visitor->visit(iter->docid_set->docids[i + j], scratchPackedValue);
+            if ( res > 0) {
+                return;
+            }
         }
         i += runLen;
     }
@@ -416,7 +461,6 @@ void bkd_reader::visit_doc_values(std::vector<int32_t> &commonPrefixLengths,
                                   bkd_docid_set_iterator *iter,
                                   int32_t count,
                                   bkd_reader::intersect_visitor *visitor) {
-    auto start = UnixMillis();
     read_common_prefixes(commonPrefixLengths, scratchDataPackedValue, in);
 
     if (num_index_dims_ != 1 && version_ >= bkd_writer::VERSION_LEAF_STORES_BOUNDS) {
@@ -432,9 +476,7 @@ void bkd_reader::visit_doc_values(std::vector<int32_t> &commonPrefixLengths,
 
         read_min_max(commonPrefixLengths, minPackedValue, maxPackedValue, in);
 
-        auto start_time = UnixMillis();
         relation r = visitor->compare(minPackedValue, maxPackedValue);
-        stats.add_visit_compare_time_duration(UnixMillis() - start_time);
         if (r == relation::CELL_OUTSIDE_QUERY) {
             return;
         }
@@ -455,23 +497,17 @@ void bkd_reader::visit_doc_values(std::vector<int32_t> &commonPrefixLengths,
     if (compressedDim == -1) {
         assert(iter->bitmap_set!= nullptr);
         assert(iter->bitmap_set->docids.size() == 1);
-        auto uniq_start = UnixMillis();
         visit_unique_raw_doc_values(scratchDataPackedValue, iter, count, visitor);
-        stats.add_uniq_doc_value_visit_time_duration(UnixMillis() - uniq_start);
     } else {
         if (compressedDim == -2) {
-            auto sparse_start = UnixMillis();
-            // low cardinality values
             visit_sparse_raw_doc_values(commonPrefixLengths,
                                         scratchDataPackedValue,
                                         in,
                                         iter,
                                         count,
                                         visitor);
-            stats.add_sparse_doc_value_visit_time_duration(UnixMillis() - sparse_start);
         } else {
             // high cardinality
-            auto compress_start = UnixMillis();
             visit_compressed_doc_values(commonPrefixLengths,
                                         scratchDataPackedValue,
                                         in,
@@ -479,25 +515,19 @@ void bkd_reader::visit_doc_values(std::vector<int32_t> &commonPrefixLengths,
                                         count,
                                         visitor,
                                         compressedDim);
-            stats.add_compress_doc_value_visit_time_duration(UnixMillis() - compress_start);
         }
     }
-    stats.add_doc_value_visit_time_duration(UnixMillis() - start);
 }
 
 void bkd_reader::intersect(const std::shared_ptr<bkd_reader::intersect_state> &s, std::vector<uint8_t> &cellMinPacked, std::vector<uint8_t> &cellMaxPacked) {
-    auto start_time = UnixMillis();
     relation r = s->visitor_->compare(cellMinPacked, cellMaxPacked);
-    stats.add_visit_compare_time_duration(UnixMillis() - start_time);
 
     if (r == relation::CELL_OUTSIDE_QUERY) {
     } else if (r == relation::CELL_INSIDE_QUERY) {
         add_all(s, false);
     } else if (s->index_->is_leaf_node()) {
         if (s->index_->node_exists()) {
-            auto start = UnixMillis();
             int32_t count = read_doc_ids(s->in_.get(), s->index_->get_leaf_blockFP(), s->docid_set_iterator.get());
-            stats.add_read_doc_id_time_duration(UnixMillis() - start);
 
             visit_doc_values(s->common_prefix_lengths_,
                              s->scratch_data_packed_value_,
@@ -512,46 +542,54 @@ void bkd_reader::intersect(const std::shared_ptr<bkd_reader::intersect_state> &s
         int32_t splitDim = s->index_->get_split_dim();
         assert(splitDim >= 0);
         assert(splitDim < num_index_dims_);
+        // fast path for 1-D BKD
+        if (splitDim == 0) {
+            auto &splitPackedValue = s->index_->get_split_packed_value();
+            auto& splitValue = s->index_->get_split_1dim_value();
+            std::copy(splitValue.begin(), splitValue.end(), splitPackedValue.begin());
 
-        std::vector<uint8_t> &splitPackedValue = s->index_->get_split_packed_value();
-        std::shared_ptr<BytesRef> splitDimValue = s->index_->get_split_dim_value();
-        assert(splitDimValue->length == bytes_per_dim_);
-        assert(FutureArrays::CompareUnsigned(cellMinPacked,
-                                             splitDim * bytes_per_dim_,
-                                             splitDim * bytes_per_dim_ + bytes_per_dim_,
-                                             (splitDimValue->bytes),
-                                             splitDimValue->offset,
-                                             splitDimValue->offset + bytes_per_dim_) <= 0);
-        assert(FutureArrays::CompareUnsigned(cellMaxPacked,
-                                             splitDim * bytes_per_dim_,
-                                             splitDim * bytes_per_dim_ + bytes_per_dim_,
-                                             (splitDimValue->bytes),
-                                             splitDimValue->offset,
-                                             splitDimValue->offset + bytes_per_dim_) >= 0);
+            s->index_->push_left();
+            intersect(s, cellMinPacked, splitPackedValue);
+            s->index_->pop();
 
-        std::copy(cellMaxPacked.begin(),
-                  cellMaxPacked.begin() + packed_index_bytes_length_,
-                  splitPackedValue.begin());
-        std::copy(splitDimValue->bytes.begin() + splitDimValue->offset,
-                  splitDimValue->bytes.begin() + splitDimValue->offset + bytes_per_dim_,
-                  splitPackedValue.begin() + splitDim * bytes_per_dim_);
-        s->index_->push_left();
-        intersect(s, cellMinPacked, splitPackedValue);
-        s->index_->pop();
+            s->index_->push_right();
+            intersect(s, splitPackedValue, cellMaxPacked);
+            s->index_->pop();
+        } else {
+            std::vector<uint8_t>& splitPackedValue = s->index_->get_split_packed_value();
+            std::shared_ptr<BytesRef> splitDimValue = s->index_->get_split_dim_value();
+            assert(splitDimValue->length == bytes_per_dim_);
+            assert(FutureArrays::CompareUnsigned(cellMinPacked, splitDim * bytes_per_dim_,
+                                                 splitDim * bytes_per_dim_ + bytes_per_dim_,
+                                                 (splitDimValue->bytes), splitDimValue->offset,
+                                                 splitDimValue->offset + bytes_per_dim_) <= 0);
+            assert(FutureArrays::CompareUnsigned(cellMaxPacked, splitDim * bytes_per_dim_,
+                                                 splitDim * bytes_per_dim_ + bytes_per_dim_,
+                                                 (splitDimValue->bytes), splitDimValue->offset,
+                                                 splitDimValue->offset + bytes_per_dim_) >= 0);
 
-        std::copy(splitPackedValue.begin() + splitDim * bytes_per_dim_,
-                  splitPackedValue.begin() + splitDim * bytes_per_dim_ + bytes_per_dim_,
-                  splitDimValue->bytes.begin() + splitDimValue->offset);
+            std::copy(cellMaxPacked.begin(), cellMaxPacked.begin() + packed_index_bytes_length_,
+                      splitPackedValue.begin());
+            std::copy(splitDimValue->bytes.begin() + splitDimValue->offset,
+                      splitDimValue->bytes.begin() + splitDimValue->offset + bytes_per_dim_,
+                      splitPackedValue.begin() + splitDim * bytes_per_dim_);
+            s->index_->push_left();
+            intersect(s, cellMinPacked, splitPackedValue);
+            s->index_->pop();
 
-        std::copy(cellMinPacked.begin(),
-                  cellMinPacked.begin() + packed_index_bytes_length_,
-                  splitPackedValue.begin());
-        std::copy(splitDimValue->bytes.begin() + splitDimValue->offset,
-                  splitDimValue->bytes.begin() + splitDimValue->offset + bytes_per_dim_,
-                  splitPackedValue.begin() + splitDim * bytes_per_dim_);
-        s->index_->push_right();
-        intersect(s, splitPackedValue, cellMaxPacked);
-        s->index_->pop();
+            std::copy(splitPackedValue.begin() + splitDim * bytes_per_dim_,
+                      splitPackedValue.begin() + splitDim * bytes_per_dim_ + bytes_per_dim_,
+                      splitDimValue->bytes.begin() + splitDimValue->offset);
+
+            std::copy(cellMinPacked.begin(), cellMinPacked.begin() + packed_index_bytes_length_,
+                      splitPackedValue.begin());
+            std::copy(splitDimValue->bytes.begin() + splitDimValue->offset,
+                      splitDimValue->bytes.begin() + splitDimValue->offset + bytes_per_dim_,
+                      splitPackedValue.begin() + splitDim * bytes_per_dim_);
+            s->index_->push_right();
+            intersect(s, splitPackedValue, cellMaxPacked);
+            s->index_->pop();
+        }
     }
 }
 
@@ -560,8 +598,8 @@ int32_t bkd_reader::get_tree_depth() const {
 }
 
 int64_t bkd_reader::ram_bytes_used() {
-    if (!packed_index_->empty()) {
-        return packed_index_->capacity();
+    if (!packed_index_.empty()) {
+        return packed_index_.capacity();
     } else {
         return split_packed_values_.capacity() + leaf_block_fps_.capacity() * sizeof(int64_t);
     }

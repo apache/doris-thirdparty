@@ -1,20 +1,23 @@
-#include "bkd_reader.h"
 #include "packed_index_tree.h"
+
+#include "CLucene/store/ByteArrayDataInput.h"
+#include "bkd_reader.h"
+#include <iostream>
 
 CL_NS_DEF2(util,bkd)
 
 packed_index_tree::packed_index_tree(std::shared_ptr<bkd_reader>&& reader)
     : index_tree(reader) {
     int32_t treeDepth = reader->get_tree_depth();
-    leaf_block_fp_stack_ = std::vector<int64_t>(treeDepth + 1);
-    left_node_positions_ = std::vector<int32_t>(treeDepth + 1);
-    right_node_positions_ = std::vector<int32_t>(treeDepth + 1);
-    split_values_stack_ = std::vector<std::shared_ptr<std::vector<uint8_t>>>(treeDepth + 1);
-    split_dims_ = std::vector<int32_t>(treeDepth + 1);
-    negative_deltas_ = std::vector<bool>(reader->num_index_dims_ * (treeDepth + 1));
+    leaf_block_fp_stack_.resize(treeDepth + 1);
+    left_node_positions_.resize(treeDepth + 1);
+    right_node_positions_.resize(treeDepth + 1);
+    split_values_stack_.resize(treeDepth + 1);
+    split_dims_.resize(treeDepth + 1);
+    negative_deltas_.resize(reader->num_index_dims_ * (treeDepth + 1));
 
-    in_ = reader->clone_index_input;
-    split_values_stack_[0] = std::make_shared<std::vector<uint8_t>>(reader->packed_index_bytes_length_);
+    in_ = std::make_unique<store::ByteArrayDataInput>(reader->packed_index_);
+    split_values_stack_[0].resize(reader->packed_index_bytes_length_);
     read_node_data(false);
     scratch_ = std::make_shared<BytesRef>();
     scratch_->length = reader->bytes_per_dim_;
@@ -44,7 +47,7 @@ void packed_index_tree::push_left() {
               negative_deltas_.begin() + level_ * reader->num_index_dims_);
     assert(split_dim_ != -1);
     negative_deltas_[level_ * reader->num_index_dims_ + split_dim_] = true;
-    in_->seek(nodePosition);
+    in_->setPosition(nodePosition);
     read_node_data(true);
 }
 
@@ -56,7 +59,7 @@ void packed_index_tree::push_right() {
               negative_deltas_.begin() + level_ * reader->num_index_dims_);
     assert(split_dim_ != -1);
     negative_deltas_[level_ * reader->num_index_dims_ + split_dim_] = false;
-    in_->seek(nodePosition);
+    in_->setPosition(nodePosition);
     read_node_data(false);
 }
 
@@ -72,9 +75,14 @@ int64_t packed_index_tree::get_leaf_blockFP() {
 
 std::shared_ptr<BytesRef> packed_index_tree::get_split_dim_value() {
     assert(is_leaf_node() == false);
-    scratch_->bytes = *split_values_stack_[level_];
+    scratch_->bytes = split_values_stack_[level_];
     scratch_->offset = split_dim_ * reader->bytes_per_dim_;
     return scratch_;
+}
+
+std::vector<uint8_t>& packed_index_tree::get_split_1dim_value() {
+    assert(is_leaf_node() == false);
+    return split_values_stack_[level_];
 }
 
 void packed_index_tree::read_node_data(bool isLeft) {
@@ -94,20 +102,20 @@ void packed_index_tree::read_node_data(bool isLeft) {
         int32_t prefix = code % (1 + reader->bytes_per_dim_);
         int32_t suffix = reader->bytes_per_dim_ - prefix;
 
-        if (split_values_stack_[level_]==nullptr) {
-            split_values_stack_[level_] = std::make_shared<std::vector<uint8_t>>(reader->packed_index_bytes_length_);
+        if (split_values_stack_[level_].empty()) {
+            split_values_stack_[level_].resize(reader->packed_index_bytes_length_);
         }
-        std::copy(split_values_stack_[level_ - 1]->begin(),
-                  split_values_stack_[level_ - 1]->begin() + reader->packed_index_bytes_length_,
-                  split_values_stack_[level_]->begin());
+        std::copy(split_values_stack_[level_ - 1].begin(),
+                  split_values_stack_[level_ - 1].begin() + reader->packed_index_bytes_length_,
+                  split_values_stack_[level_].begin());
         if (suffix > 0) {
             int32_t firstDiffByteDelta = code / (1 + reader->bytes_per_dim_);
             if (negative_deltas_[level_ * reader->num_index_dims_ + split_dim_]) {
                 firstDiffByteDelta = -firstDiffByteDelta;
             }
-            int32_t oldByte = (*split_values_stack_[level_])[split_dim_ * reader->bytes_per_dim_ + prefix] & 0xFF;
-            (*split_values_stack_[level_])[split_dim_ * reader->bytes_per_dim_ + prefix] = static_cast<uint8_t>(oldByte + firstDiffByteDelta);
-            in_->readBytes((split_values_stack_[level_])->data(),
+            int32_t oldByte = split_values_stack_[level_][split_dim_ * reader->bytes_per_dim_ + prefix] & 0xFF;
+            split_values_stack_[level_][split_dim_ * reader->bytes_per_dim_ + prefix] = static_cast<uint8_t>(oldByte + firstDiffByteDelta);
+            in_->readBytes(split_values_stack_[level_],
                            suffix - 1,
                            split_dim_ * reader->bytes_per_dim_ + prefix + 1);
         } else {
@@ -121,7 +129,7 @@ void packed_index_tree::read_node_data(bool isLeft) {
             leftNumBytes = 0;
         }
 
-        left_node_positions_[level_] = in_->getFilePointer();
+        left_node_positions_[level_] = in_->getPosition();
 
         right_node_positions_[level_] = left_node_positions_[level_] + leftNumBytes;
     }

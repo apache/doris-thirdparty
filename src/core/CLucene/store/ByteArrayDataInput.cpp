@@ -23,7 +23,7 @@ void ByteArrayDataInput::reset(std::vector<uint8_t>& b) {
 
 void ByteArrayDataInput::rewind() { pos = 0; }
 
-int ByteArrayDataInput::getPosition() { return pos; }
+int ByteArrayDataInput::getPosition() const { return pos; }
 
 void ByteArrayDataInput::setPosition(int p) { pos = p; }
 
@@ -33,109 +33,46 @@ void ByteArrayDataInput::reset(std::vector<uint8_t> &b, int offset, int len) {
     limit = offset + len;
 }
 
-int ByteArrayDataInput::length() { return limit; }
+int ByteArrayDataInput::length() const { return limit; }
 
-bool ByteArrayDataInput::eof() { return pos == limit; }
+bool ByteArrayDataInput::eof() const { return pos == limit; }
 
 void ByteArrayDataInput::skipBytes(int64_t count) { pos += count; }
 
 short ByteArrayDataInput::readShort() {
-    return static_cast<short>(((bytes.at(pos++) & 0xFF) << 8) |
-                              (bytes.at(pos++) & 0xFF));
+    return static_cast<short>(((readByte() & 0xFF) << 8) | (readByte() & 0xFF));
 }
 
 int ByteArrayDataInput::readInt() {
-    return ((bytes.at(pos++) & 0xFF) << 24) | ((bytes.at(pos++) & 0xFF) << 16) |
-           ((bytes.at(pos++) & 0xFF) << 8) | (bytes.at(pos++) & 0xFF);
+    int32_t b = (readByte() << 24);
+    b |= (readByte() << 16);
+    b |= (readByte() <<  8);
+    return (b | readByte());
 }
 
 int64_t ByteArrayDataInput::readLong() {
-    int i1 = ((bytes.at(pos++) & 0xff) << 24) |
-             ((bytes.at(pos++) & 0xff) << 16) |
-             ((bytes.at(pos++) & 0xff) << 8) | (bytes.at(pos++) & 0xff);
-    int i2 = ((bytes.at(pos++) & 0xff) << 24) |
-             ((bytes.at(pos++) & 0xff) << 16) |
-             ((bytes.at(pos++) & 0xff) << 8) | (bytes.at(pos++) & 0xff);
-    return ((static_cast<int64_t>(i1)) << 32) | (i2 & 0xFFFFFFFFLL);
+    int64_t i = ((int64_t)readInt() << 32);
+    return (i | ((int64_t)readInt() & 0xFFFFFFFFL));
 }
 
 int ByteArrayDataInput::readVInt() {
-    uint8_t b = bytes.at(pos++);
-    if (b >= 0) {
-        return b;
+    uint8_t b = readByte();
+    int32_t i = b & 0x7F;
+    for (int32_t shift = 7; (b & 0x80) != 0; shift += 7) {
+        b = readByte();
+        i |= (b & 0x7F) << shift;
     }
-    int i = b & 0x7F;
-    b = bytes.at(pos++);
-    i |= (b & 0x7F) << 7;
-    if (b >= 0) {
-        return i;
-    }
-    b = bytes.at(pos++);
-    i |= (b & 0x7F) << 14;
-    if (b >= 0) {
-        return i;
-    }
-    b = bytes.at(pos++);
-    i |= (b & 0x7F) << 21;
-    if (b >= 0) {
-        return i;
-    }
-    b = bytes.at(pos++);
-    // Warning: the next ands use 0x0F / 0xF0 - beware copy/paste errors:
-    i |= (b & 0x0F) << 28;
-    if ((b & 0xF0) == 0) {
-        return i;
-    }
-    _CLTHROWA(CL_ERR_Runtime, "Invalid vInt detected (too many bits)");
+    return i;
 }
 
 int64_t ByteArrayDataInput::readVLong() {
-    uint8_t b = bytes.at(pos++);
-    if (b >= 0) {
-        return b;
-    }
-    int64_t i = b & 0x7FLL;
-    b = bytes.at(pos++);
-    i |= (b & 0x7FLL) << 7;
-    if (b >= 0) {
+        uint8_t b = readByte();
+        int64_t i = b & 0x7F;
+        for (int32_t shift = 7; (b & 0x80) != 0; shift += 7) {
+            b = readByte();
+            i |= (((int64_t)b) & 0x7FL) << shift;
+        }
         return i;
-    }
-    b = bytes.at(pos++);
-    i |= (b & 0x7FLL) << 14;
-    if (b >= 0) {
-        return i;
-    }
-    b = bytes.at(pos++);
-    i |= (b & 0x7FLL) << 21;
-    if (b >= 0) {
-        return i;
-    }
-    b = bytes.at(pos++);
-    i |= (b & 0x7FLL) << 28;
-    if (b >= 0) {
-        return i;
-    }
-    b = bytes.at(pos++);
-    i |= (b & 0x7FLL) << 35;
-    if (b >= 0) {
-        return i;
-    }
-    b = bytes.at(pos++);
-    i |= (b & 0x7FLL) << 42;
-    if (b >= 0) {
-        return i;
-    }
-    b = bytes.at(pos++);
-    i |= (b & 0x7FLL) << 49;
-    if (b >= 0) {
-        return i;
-    }
-    b = bytes.at(pos++);
-    i |= (b & 0x7FLL) << 56;
-    if (b >= 0) {
-        return i;
-    }
-    _CLTHROWA(CL_ERR_Runtime, "Invalid vLong detected (negative values disallowed)");
 }
 
 uint8_t ByteArrayDataInput::readByte() { return bytes.at(pos++); }

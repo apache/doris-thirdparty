@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 
+CL_CLASS_DEF(store,Directory)
 CL_NS_DEF2(util, bkd)
 
 enum class relation {
@@ -37,8 +38,8 @@ public:
     int64_t point_count_{};
     int32_t doc_count_{};
     int32_t version_{};
-    std::shared_ptr<std::vector<uint8_t>> packed_index_;
-    std::shared_ptr<store::IndexInput> clone_index_input;
+    std::vector<uint8_t> packed_index_;
+    //std::shared_ptr<store::IndexInput> clone_index_input;
     int32_t bytes_per_index_entry_{};
     std::vector<int64_t> leaf_block_fps_;
 
@@ -48,6 +49,7 @@ public:
     int32_t type{};
     int64_t metaOffset{};
     int64_t indexFP{};
+    std::shared_ptr<index_tree> index_tree_{};
 
 public:
     class intersect_visitor {
@@ -60,7 +62,7 @@ public:
          *  it.  In the 1D case, values are visited in increasing order, and in the
          *  case of ties, in increasing docid order.
          */
-        virtual void visit(int docid, std::vector<uint8_t> &packedValue) = 0;
+        virtual int visit(int docid, std::vector<uint8_t> &packedValue) = 0;
         virtual void visit(roaring::Roaring &docid) = 0;
         virtual void visit(roaring::Roaring &&docid) = 0;
         virtual void visit(bkd_docid_set_iterator *iter, std::vector<uint8_t> &packedValue) = 0;
@@ -71,6 +73,7 @@ public:
          *  determine how to further recurse down the tree. */
         virtual relation compare(std::vector<uint8_t> &minPackedValue,
                                  std::vector<uint8_t> &maxPackedValue) = 0;
+        virtual relation compare_prefix(std::vector<uint8_t> &prefix) = 0;
         void grow(int count){};
 
         virtual void inc_hits(int count) {}
@@ -85,19 +88,18 @@ public:
                         int32_t packedIndexBytesLength,
                         int32_t maxPointsInLeafNode,
                         bkd_reader::intersect_visitor *visitor,
-                        const std::shared_ptr<index_tree> &indexVisitor);
+                        index_tree* indexVisitor);
 
     public:
-        std::shared_ptr<store::IndexInput> in_;
+        std::unique_ptr<store::IndexInput> in_;
         std::unique_ptr<bkd_docid_set_iterator> docid_set_iterator;
-        std::vector<int32_t> scratch_doc_ids_;
         std::vector<uint8_t> scratch_data_packed_value_;
         std::vector<uint8_t> scratch_min_index_packed_value_;
         std::vector<uint8_t> scratch_max_index_packed_value_;
         std::vector<int32_t> common_prefix_lengths_;
 
         bkd_reader::intersect_visitor *visitor_;
-        std::shared_ptr<index_tree> index_;
+        std::unique_ptr<index_tree> index_;
     };
 
 public:
@@ -142,10 +144,13 @@ public:
                                      bkd_reader::intersect_visitor *visitor) const;
 
 public:
+    ~bkd_reader();
     bkd_reader() = default;
     void read_index(store::IndexInput* index_in);
     int read_meta(store::IndexInput* meta_in);
     explicit bkd_reader(store::IndexInput *in);
+    bkd_reader(store::Directory* directory, bool close_directory = true);
+    bool open();
     int64_t estimate_point_count(bkd_reader::intersect_visitor *visitor);
     int64_t estimate_point_count(const std::shared_ptr<intersect_state> &s,
                                  std::vector<uint8_t> &cellMinPacked,
@@ -158,58 +163,7 @@ public:
 
 private:
     int64_t ram_bytes_used();
-
-public:
-    struct reader_stats {
-    private:
-        uint64_t visit_doc_values_time_duration_ms{0};
-        uint64_t visit_uniq_doc_values_time_duration_ms{0};
-        uint64_t visit_sparse_doc_values_time_duration_ms{0};
-        uint64_t visit_compress_doc_values_time_duration_ms{0};
-        uint64_t visit_doc_id_time_duration_ms{0};
-        uint64_t read_doc_id_time_duration_ms{0};
-        uint64_t visit_compare_time_duration_ms{0};
-
-    public:
-        void set_doc_value_visit_time_duration(uint64_t time_duration) { visit_doc_values_time_duration_ms = time_duration; }
-        void add_doc_value_visit_time_duration(uint64_t time_duration) { visit_doc_values_time_duration_ms += time_duration; }
-        uint64_t get_doc_value_visit_time_duration() const { return visit_doc_values_time_duration_ms; }
-
-        void set_uniq_doc_value_visit_time_duration(uint64_t time_duration) { visit_uniq_doc_values_time_duration_ms = time_duration; }
-        void add_uniq_doc_value_visit_time_duration(uint64_t time_duration) { visit_uniq_doc_values_time_duration_ms += time_duration; }
-        uint64_t get_uniq_doc_value_visit_time_duration() const { return visit_uniq_doc_values_time_duration_ms; }
-
-        void set_sparse_doc_value_visit_time_duration(uint64_t time_duration) { visit_sparse_doc_values_time_duration_ms = time_duration; }
-        void add_sparse_doc_value_visit_time_duration(uint64_t time_duration) { visit_sparse_doc_values_time_duration_ms += time_duration; }
-        uint64_t get_sparse_doc_value_visit_time_duration() const { return visit_sparse_doc_values_time_duration_ms; }
-
-        void set_compress_doc_value_visit_time_duration(uint64_t time_duration) { visit_compress_doc_values_time_duration_ms = time_duration; }
-        void add_compress_doc_value_visit_time_duration(uint64_t time_duration) { visit_compress_doc_values_time_duration_ms += time_duration; }
-        uint64_t get_compress_doc_value_visit_time_duration() const { return visit_compress_doc_values_time_duration_ms; }
-
-        void set_doc_id_visit_time_duration(uint64_t time_duration) { visit_doc_id_time_duration_ms = time_duration; }
-        void add_doc_id_visit_time_duration(uint64_t time_duration) { visit_doc_id_time_duration_ms += time_duration; }
-        uint64_t get_doc_id_visit_time_duration() const { return visit_doc_id_time_duration_ms; }
-
-        void set_read_doc_id_time_duration(uint64_t time_duration) { read_doc_id_time_duration_ms = time_duration; }
-        void add_read_doc_id_time_duration(uint64_t time_duration) { read_doc_id_time_duration_ms += time_duration; }
-        uint64_t get_read_doc_id_time_duration() const { return read_doc_id_time_duration_ms; }
-
-        void set_visit_compare_time_duration(uint64_t time_duration) { visit_compare_time_duration_ms = time_duration; }
-        void add_visit_compare_time_duration(uint64_t time_duration) { visit_compare_time_duration_ms += time_duration; }
-        uint64_t get_visit_compare_time_duration() const { return visit_compare_time_duration_ms; }
-
-        std::string to_string() const {
-            return "| visit compare time: " + std::to_string(visit_compare_time_duration_ms) + "ms " +
-                   "| read doc id time: " + std::to_string(read_doc_id_time_duration_ms) + "ms " +
-                   "| visit doc id time: " + std::to_string(visit_doc_id_time_duration_ms) + "ms " +
-                   "| visit doc value time: " + std::to_string(visit_doc_values_time_duration_ms) + "ms " +
-                   "| visit unique doc value time: " + std::to_string(visit_uniq_doc_values_time_duration_ms) + "ms " +
-                   "| visit sparse doc value time: " + std::to_string(visit_sparse_doc_values_time_duration_ms) + "ms " +
-                   "| visit compress doc value time: " + std::to_string(visit_compress_doc_values_time_duration_ms) + "ms "
-                    ;
-        }
-    };
-    reader_stats stats;
+    store::Directory* _dir;
+    bool _close_directory;
 };
 CL_NS_END2
