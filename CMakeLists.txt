@@ -139,9 +139,9 @@ if (USE_AVX2)
 	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_AVX2")
 endif()
 if (__COMPILER_CLANG)
-	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-c++11-narrowing")
+	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-c++11-narrowing -g -fno-omit-frame-pointer")
 else ()
-	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-narrowing")
+	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-narrowing -g -fno-omit-frame-pointer")
 endif ()
 
 #check flags...
