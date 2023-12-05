@@ -161,14 +161,14 @@ CL_NS_DEF(search)
       readerOwner = true;
   }
 
-  IndexSearcher::IndexSearcher(IndexReader* r){
+  IndexSearcher::IndexSearcher(IndexReader* r, bool isOwner){
   //Func - Constructor
   //       Creates a searcher searching the index with the provide IndexReader
   //Pre  - path != NULL
   //Post - The instance has been created
 
       reader      = r;
-      readerOwner = false;
+      readerOwner = isOwner;
   }
 
   IndexSearcher::~IndexSearcher(){
