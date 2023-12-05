@@ -63,7 +63,7 @@ public:
     IndexSearcher(CL_NS(store)::Directory* directory, bool closeDirector);
 
 	/** Creates a searcher searching the provided index. */
-	IndexSearcher(CL_NS(index)::IndexReader* r);
+	IndexSearcher(CL_NS(index)::IndexReader* r, bool isOwner = false);
 
 	~IndexSearcher();
 	    
