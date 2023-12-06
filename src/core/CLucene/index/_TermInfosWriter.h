@@ -24,7 +24,8 @@ private:
     FieldInfos *fieldInfos;
     CL_NS(store)::IndexOutput *output;
     TermInfo *lastTi;
-    int64_t size;
+    int64_t size = 0;
+    int64_t tisSize = 0;
 
     int64_t lastIndexPointer;
     bool isIndex;
@@ -44,7 +45,7 @@ private:
 public:
     int32_t maxSkipLevels;
 
-    LUCENE_STATIC_CONSTANT(int32_t, FORMAT = -3);
+    LUCENE_STATIC_CONSTANT(int32_t, FORMAT = -4);
     LUCENE_STATIC_CONSTANT(int32_t, DEFAULT_TERMDOCS_SKIP_INTERVAL = PFOR_BLOCK_SIZE);
 
     int32_t indexInterval;// = 128
@@ -96,7 +97,7 @@ public:
     int32_t maxSkipLevels;
 
     /** The file format version, a negative number. */
-    LUCENE_STATIC_CONSTANT(int32_t, FORMAT = -3);
+    LUCENE_STATIC_CONSTANT(int32_t, FORMAT = -4);
 
     //Expert: The fraction of {@link TermDocs} entries stored in skip tables,
     //used to accellerate {@link TermDocs#skipTo(int)}.  Larger values result in
