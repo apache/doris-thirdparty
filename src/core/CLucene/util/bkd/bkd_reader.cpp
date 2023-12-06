@@ -177,9 +177,7 @@ std::shared_ptr<bkd_reader::intersect_state> bkd_reader::get_intersect_state(bkd
                                              index);
 }
 
-void bkd_reader::intersect(bkd_reader::intersect_visitor *visitor)
-
-{
+void bkd_reader::intersect(bkd_reader::intersect_visitor *visitor) {
     if (indexFP == 0) {
         return;
     }
@@ -190,6 +188,10 @@ void bkd_reader::intersect(bkd_reader::intersect_visitor *visitor)
 }
 
 int64_t bkd_reader::estimate_point_count(bkd_reader::intersect_visitor *visitor) {
+    // indexFP is 0 means it's a empty tree, just return 0
+    if (indexFP == 0) {
+        return 0;
+    }
     // because we will modify min/max packed value in intersect, so we copy them in the first time.
     auto min_packed_value = min_packed_value_;
     auto max_packed_value = max_packed_value_;
