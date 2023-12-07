@@ -132,9 +132,7 @@ CL_NS_DEF(store)
 		virtual const char* getObjectName() const = 0;
         short readShort();
 
-		virtual void setIdxFileCache(bool index) {
-				_CLTHROWA(CL_ERR_UnsupportedOperation,"UnsupportedOperationException: IndexInput::setIdxFileCache");
-		}
+		virtual void setIdxFileCache(bool index) {}
 
     };
 

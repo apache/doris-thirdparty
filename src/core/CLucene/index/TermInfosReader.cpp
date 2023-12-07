@@ -50,20 +50,25 @@ CL_NS_DEF(index)
           indexIsRead = false;
 
 	  try {
-		  //Create an SegmentTermEnum for storing all the terms read of the segment
-		  origEnum = _CLNEW SegmentTermEnum( directory->openInput( tisFile.c_str(), readBufferSize ), fieldInfos, false);
-		  _size =  origEnum->size;
-		  totalIndexInterval = origEnum->indexInterval;
-		  indexEnum = _CLNEW SegmentTermEnum( directory->openInput( tiiFile.c_str(), readBufferSize ), fieldInfos, true);
+      //Create an SegmentTermEnum for storing all the terms read of the segment
 
-		  //Check if enumerator points to a valid instance
-		  CND_CONDITION(origEnum != NULL, "No memory could be allocated for orig enumerator");
-		  CND_CONDITION(indexEnum != NULL, "No memory could be allocated for index enumerator");
+      // tii
+      auto tiiStream = directory->openInput( tiiFile.c_str(), readBufferSize );
+      indexEnum = _CLNEW SegmentTermEnum(tiiStream, fieldInfos, true, -1);
+      CND_CONDITION(indexEnum != NULL, "No memory could be allocated for index enumerator");
 
-		  //call ensureIndexIsRead to load data to memory right now
-		  ensureIndexIsRead();
+      // tis
+      auto tisStream = directory->openInput( tisFile.c_str(), readBufferSize );
+      origEnum = _CLNEW SegmentTermEnum(tisStream, fieldInfos, false, indexEnum->getFormat());
+      origEnum->initByTii(indexEnum);
+      CND_CONDITION(origEnum != NULL, "No memory could be allocated for index enumerator");
+      _size = origEnum->size;
+      totalIndexInterval = origEnum->indexInterval;
 
-		  success = true;
+      //call ensureIndexIsRead to load data to memory right now
+      ensureIndexIsRead();
+
+      success = true;
 	  } _CLFINALLY({
 		  // With lock-less commits, it's entirely possible (and
 		  // fine) to hit a FileNotFound exception above. In
