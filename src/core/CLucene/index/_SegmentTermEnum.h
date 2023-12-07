@@ -34,13 +34,14 @@ private:
 
 	CL_NS(store)::IndexInput* input;    ///The IndexInput that reads from the Term Infos File
 	FieldInfos* fieldInfos;	///contains the Field Infos for the segment
-	int64_t size;			///The size of the enumeration
+	int64_t size = 0;			///The size of the enumeration
+	int64_t tisSize = 0;
 	int64_t position;		///The position of the current (term) in the enumeration
 	int64_t indexPointer;
 	Term* prev;				///The previous current
-	int32_t indexInterval;
-	int32_t skipInterval;
-	int32_t maxSkipLevels;
+	int32_t indexInterval = 0;
+	int32_t skipInterval = 0;
+	int32_t maxSkipLevels = 0;
 
 	friend class TermInfosReader;
 	friend class SegmentTermDocs;
@@ -54,10 +55,12 @@ protected:
 
 public:
 	///Constructor
-	SegmentTermEnum(CL_NS(store)::IndexInput* i, FieldInfos* fis, const bool isi );
+	SegmentTermEnum(CL_NS(store)::IndexInput* i, FieldInfos* fis, const bool isi, int32_t in_format = -1);
 
 	///Destructor
 	~SegmentTermEnum();
+
+	void initByTii(SegmentTermEnum* tii);
 
 	/**
 	 * Moves the current of the set to the next in the set
@@ -116,6 +119,8 @@ public:
 
 	const char* getObjectName() const;
 	static const char* getClassName();
+
+	int32_t getFormat() { return format; }
 
 private:
 	/**
