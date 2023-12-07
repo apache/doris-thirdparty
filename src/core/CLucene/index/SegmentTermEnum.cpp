@@ -17,7 +17,7 @@
 CL_NS_USE(store)
 CL_NS_DEF(index)
 
-	SegmentTermEnum::SegmentTermEnum(IndexInput* i, FieldInfos* fis, const bool isi):
+	SegmentTermEnum::SegmentTermEnum(IndexInput* i, FieldInfos* fis, const bool isi, int32_t in_format):
 		fieldInfos(fis){
 	//Func - Constructor
 	//Pre  - i holds a reference to an instance of IndexInput
@@ -40,8 +40,8 @@ CL_NS_DEF(index)
 		//Set isClone to false as the instance is not clone of another instance
 		isClone      = false;
 
+		int32_t firstInt = in_format == -4 ? in_format : input->readInt();
 
-		int32_t firstInt = input->readInt();
     if (firstInt >= 0) {
          // original-format file, without explicit format version number
          format = 0;
@@ -62,30 +62,47 @@ CL_NS_DEF(index)
             _CLTHROWT(CL_ERR_CorruptIndex,err);
          }
 
-         size = input->readLong();                    // read the size
-         if (size < 0) {                              // read the size at file footer, if size < 0
-             auto pos = input->getFilePointer();
-             input->seek(input->length() - 8);
-             size = input->readLong();
-             input->seek(pos);
-         }
-         
-         if(format == -1){
-            if (!isIndex) {
-               indexInterval = input->readInt();
-               formatM1SkipInterval = input->readInt();
-            }
-            // switch off skipTo optimization for file format prior to 1.4rc2 in order to avoid a bug in 
-            // skipTo implementation of these versions
-            skipInterval = LUCENE_INT32_MAX_SHOULDBE;
-         }else{
-            indexInterval = input->readInt();
-            skipInterval = input->readInt();
-            if ( format == -3 ) {
-		// this new format introduces multi-level skipping
-            	maxSkipLevels = input->readInt();
-            }
-         }
+				 if (format == -4) {
+						if (isIndex) {
+							size = input->readLong();
+							if (size < 0) {
+								auto pos = input->getFilePointer();
+								input->seek(input->length() - 16);
+								size = input->readLong();
+								tisSize = input->readLong();
+								input->seek(pos);
+							}
+							
+							indexInterval = input->readInt();
+							skipInterval = input->readInt();
+							maxSkipLevels = input->readInt();
+						}
+				 } else {
+						size = input->readLong();                    // read the size
+						if (size < 0) {                              // read the size at file footer, if size < 0
+								auto pos = input->getFilePointer();
+								input->seek(input->length() - 8);
+								size = input->readLong();
+								input->seek(pos);
+						}
+						
+						if(format == -1){
+								if (!isIndex) {
+									indexInterval = input->readInt();
+									formatM1SkipInterval = input->readInt();
+								}
+								// switch off skipTo optimization for file format prior to 1.4rc2 in order to avoid a bug in 
+								// skipTo implementation of these versions
+								skipInterval = LUCENE_INT32_MAX_SHOULDBE;
+						}else{
+								indexInterval = input->readInt();
+								skipInterval = input->readInt();
+								if ( format == -3 ) {
+									// this new format introduces multi-level skipping
+									maxSkipLevels = input->readInt();
+								}
+						}
+				 }
       }
 	}
 
@@ -113,6 +130,7 @@ CL_NS_DEF(index)
 		bufferLength = clone.bufferLength;
 		prev         = clone.prev==NULL?NULL:_CLNEW Term(clone.prev->field(),clone.prev->text(),false);
 		size         = clone.size;
+		tisSize     = clone.tisSize;
 
       format       = clone.format;
       indexInterval= clone.indexInterval;
@@ -154,6 +172,21 @@ CL_NS_DEF(index)
 			//delete the inputstream
 			_CLDELETE(input);
 			}
+	}
+
+	void SegmentTermEnum::initByTii(SegmentTermEnum* tii) {
+		if (format == -4) {
+			size = tii->tisSize;
+			indexInterval = tii->indexInterval;
+			skipInterval = tii->skipInterval;
+			maxSkipLevels = tii->maxSkipLevels;
+			size_t header = sizeof(format) +
+											sizeof(size) +
+											sizeof(indexInterval) + 
+											sizeof(skipInterval) + 
+											sizeof(maxSkipLevels);
+			input->seek(header);
+		}
 	}
 
 	const char* SegmentTermEnum::getObjectName() const{ return getClassName(); }
