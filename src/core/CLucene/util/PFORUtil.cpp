@@ -53,7 +53,7 @@ size_t DefaultDDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict 
             b = in[bufferSize++];
             docCode |= (b & 0x7F) << shift;
         }
-        docDelta += (docCode >> 1);
+        docDelta += docCode;  // Corrected line: Removed right shift
         out[i] = docDelta;
     }
     return n;
