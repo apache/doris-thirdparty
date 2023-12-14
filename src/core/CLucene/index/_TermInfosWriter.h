@@ -73,7 +73,8 @@ private:
     FieldInfos *fieldInfos;
     CL_NS(store)::IndexOutput *output;
     TermInfo *lastTi;
-    int64_t size;
+    int64_t size = 0;
+    int64_t tisSize = 0;
 
     int64_t lastIndexPointer;
     bool isIndex;
