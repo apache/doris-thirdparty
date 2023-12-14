@@ -410,11 +410,19 @@ void TermInfosWriter::close() {
     //Func - Closes the TermInfosWriter
     //Pre  - true
     //Post - The TermInfosWriter has been closed
-
     if (output) {
-        //write size at start
-        //output->seek(4);          // write size after format
-        output->writeLong(size);// do not seek now, directly write size at file footer
+        if (FORMAT == -4) {
+            output->writeLong(size);
+            if (!isIndex) {
+                other->tisSize = size;
+            } else {
+                output->writeLong(tisSize);
+            }
+        } else {
+            //write size at start
+            //output->seek(4);          // write size after format
+            output->writeLong(size);// do not seek now, directly write size at file footer
+        }
         output->close();
         _CLDELETE(output);
 
