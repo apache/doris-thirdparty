@@ -102,6 +102,10 @@ public:
    */
   int64_t getVersion();
 
+  bool hasProx();
+
+  FieldInfos* getFieldInfos();
+
   /**
    * Check whether this IndexReader is still using the
    * current (i.e., most recently committed) version of the

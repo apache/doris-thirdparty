@@ -1246,39 +1246,30 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     CND_CONDITION(dest_dirs.size() > 0, "Destination directory not found.");
     this->_trans_vec = std::move(trans_vec);
 
-    // order mapping: dir -> segment info -> segment reader
-    addIndexesSegments(src_dirs);
-
     // create segment readers
-    int32_t totDocCount = 0;
-    int numSegments = segmentInfos->size();
-    assert(numSegments > 0);
+    int numIndices = src_dirs.size();
 
     //Set of IndexReaders
     if (infoStream != NULL) {
-        message(string("src index dir size: ") + Misc::toString(numSegments));
+        message(string("src index dir size: ") + Misc::toString(numIndices));
     }
-    for (int32_t i = 0; i < numSegments; i++) {
-        SegmentInfo *si = segmentInfos->info(i);
-        IndexReader *reader = SegmentReader::get(si, MERGE_READ_BUFFER_SIZE, false /* mergeDocStores */);
+    for (int32_t i = 0; i < numIndices; i++) {
+        IndexReader* reader = lucene::index::IndexReader::open(src_dirs[i], MERGE_READ_BUFFER_SIZE, false);
         readers.push_back(reader);
-        totDocCount += reader->numDocs();
         if (infoStream != NULL) {
             message(src_dirs[i]->toString());
         }
     }
-    if (infoStream != NULL) {
-        message(string("index compaction total doc count: ") + Misc::toString(totDocCount));
-    }
+    assert(readers.size() == numIndices);
 
     // check hasProx
     bool hasProx = false;
     {
         if (!readers.empty()) {
-            auto reader = static_cast<SegmentReader*>(readers[0]);
-            hasProx = reader->getFieldInfos()->hasProx();
+            IndexReader* reader = readers[0];
+            hasProx = reader->hasProx();
             for (int32_t i = 1; i < readers.size(); i++) {
-                if (hasProx != reader->getFieldInfos()->hasProx()) {
+                if (hasProx != readers[i]->hasProx()) {
                     _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs hasProx inconformity");
                 }
             }
@@ -1515,9 +1506,9 @@ void IndexWriter::addIndexesSegments(std::vector<lucene::store::Directory *> &di
         {
             SCOPED_LOCK_MUTEX(this->THIS_LOCK)
             for (auto dir: dirs) {
-                SegmentInfos sis;// read infos from dir
-                sis.read(dir);
-                segmentInfos->insert(&sis, true);
+                SegmentInfos* sis = new SegmentInfos(); // Create SegmentInfos on heap
+                sis->read(dir);
+                segmentInfos->insert(sis, true);
             }
         }
     } catch (CLuceneError &e) {
@@ -1536,14 +1527,11 @@ void IndexWriter::mergeFields(bool hasProx) {
     // fields of all readers are the same, so we pick the first one.
     IndexReader *reader = readers[0];
 
-    if (reader->instanceOf(SegmentReader::getClassName())) {
-        SegmentReader *segmentReader = (SegmentReader *) reader;
-        for (size_t j = 0; j < segmentReader->getFieldInfos()->size(); j++) {
-            FieldInfo *fi = segmentReader->getFieldInfos()->fieldInfo(j);
-            fieldInfos->add(fi->name, fi->isIndexed, fi->storeTermVector,
-                            fi->storePositionWithTermVector, fi->storeOffsetWithTermVector,
-                            !reader->hasNorms(fi->name), hasProx, fi->storePayloads);
-        }
+    for (size_t j = 0; j < reader->getFieldInfos()->size(); j++) {
+        FieldInfo *fi = reader->getFieldInfos()->fieldInfo(j);
+        fieldInfos->add(fi->name, fi->isIndexed, fi->storeTermVector,
+                        fi->storePositionWithTermVector, fi->storeOffsetWithTermVector,
+                        !reader->hasNorms(fi->name), hasProx, fi->storePayloads);
     }
 }
 
@@ -1618,11 +1606,25 @@ void IndexWriter::mergeTerms(bool hasProx) {
 
         match[matchSize++] = queue->pop();
         Term *smallestTerm = match[0]->term;
-        // std::wstring ws = smallestTerm->text();
-        // std::string name = std::string(ws.begin(), ws.end());
-        // std::cout << name << std::endl;
-
         SegmentMergeInfo *top = queue->top();
+        if (infoStream != nullptr) {
+            std::wstring ws = smallestTerm->text();
+            std::wstring f = smallestTerm->field();
+            std::string name = std::string(ws.begin(), ws.end());
+            std::string field = std::string(f.begin(), f.end());
+            message("smallestTerm name: " + name);
+            message("smallestTerm field: " + field);
+
+            if (top != nullptr) {
+                Term* topTerm = top->term;
+                std::wstring ws1 = topTerm->text();
+                auto name1 = std::string(ws1.begin(), ws1.end());
+                std::wstring f1 = topTerm->field();
+                auto field1 = std::string(f1.begin(), f1.end());
+                message("topTerm name: " + name1);
+                message("topTerm field: " + field1);
+            }
+        }
         while (top != nullptr && smallestTerm->equals(top->term)) {
             match[matchSize++] = queue->pop();
             top = queue->top();
