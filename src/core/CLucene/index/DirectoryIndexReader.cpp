@@ -259,15 +259,8 @@ CL_NS_DEF(index)
 /** Not implemented.
 * @throws UnsupportedOperationException
 */
-bool DirectoryIndexReader::hasProx() {
-    _CLTHROWA(CL_ERR_UnsupportedOperation, "MultiReader does not support this method.");
-}
-
-/** Not implemented.
-* @throws UnsupportedOperationException
-*/
 FieldInfos* DirectoryIndexReader::getFieldInfos() {
-    _CLTHROWA(CL_ERR_UnsupportedOperation, "MultiReader does not support this method.");
+    _CLTHROWA(CL_ERR_UnsupportedOperation, "DirectoryIndexReader does not support this method.");
 }
   /**
    * Check whether this IndexReader is still using the

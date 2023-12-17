@@ -669,10 +669,6 @@ void SegmentReader::norms(const TCHAR *field, uint8_t *bytes) {
     }
 }
 
-bool SegmentReader::hasProx() {
-    return _fieldInfos->hasProx();
-}
-
 uint8_t *SegmentReader::createFakeNorms(int32_t size) {
     uint8_t *ones = _CL_NEWARRAY(uint8_t, size);
     if (size > 0)

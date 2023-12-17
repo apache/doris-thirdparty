@@ -1254,6 +1254,9 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         message(string("src index dir size: ") + Misc::toString(numIndices));
     }
     for (int32_t i = 0; i < numIndices; i++) {
+        // One index dir may have more than one segment, so we change the code to open all segments by using IndexReader::open
+        // To keep the number of readers consistent with the number of src dirs.
+        // Using IndexWriter::segmentInfos will be incorrect when there are more than one segment in one index dir
         IndexReader* reader = lucene::index::IndexReader::open(src_dirs[i], MERGE_READ_BUFFER_SIZE, false);
         readers.push_back(reader);
         if (infoStream != NULL) {
@@ -1267,9 +1270,9 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     {
         if (!readers.empty()) {
             IndexReader* reader = readers[0];
-            hasProx = reader->hasProx();
+            hasProx = reader->getFieldInfos()->hasProx();
             for (int32_t i = 1; i < readers.size(); i++) {
-                if (hasProx != readers[i]->hasProx()) {
+                if (hasProx != readers[i]->getFieldInfos()->hasProx()) {
                     _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs hasProx inconformity");
                 }
             }
@@ -1494,25 +1497,6 @@ void IndexWriter::compareIndexes(lucene::store::Directory *other) {
         } else {
             _CLTHROWA(CL_ERR_CorruptIndex, (string("not found term(") + Misc::toString(t->toString())).c_str());
         }
-    }
-}
-
-void IndexWriter::addIndexesSegments(std::vector<lucene::store::Directory *> &dirs) {
-    ensureOpen();
-    try {
-        if (infoStream != NULL)
-            message(string("add indexes segments"));
-
-        {
-            SCOPED_LOCK_MUTEX(this->THIS_LOCK)
-            for (auto dir: dirs) {
-                SegmentInfos* sis = new SegmentInfos(); // Create SegmentInfos on heap
-                sis->read(dir);
-                segmentInfos->insert(sis, true);
-            }
-        }
-    } catch (CLuceneError &e) {
-        throw e;
     }
 }
 

@@ -267,10 +267,6 @@ public:
 	virtual void norms(const TCHAR* field, uint8_t* bytes) = 0;
 
     /**
-     *  Check whether index has prox
-     */
-    virtual bool hasProx() =0;
-    /**
      * Get index field infos
      */
     virtual FieldInfos* getFieldInfos() = 0;

@@ -325,16 +325,6 @@ void MultiSegmentReader::norms(const TCHAR* field, uint8_t* result) {
 	  (*subReaders)[i]->norms(field, result + starts[i]);
 }
 
-bool MultiSegmentReader::hasProx() {
-	ensureOpen();
-	for (size_t i = 0; i < subReaders->length; i++) {
-		if (!(*subReaders)[i]->hasProx()) {
-			return false;
-		}
-	}
-	return true;
-}
-
 FieldInfos* MultiSegmentReader::getFieldInfos() {
     // field infos of subReaders are same, so we return the first one.
     assert(subReaders->length > 0);

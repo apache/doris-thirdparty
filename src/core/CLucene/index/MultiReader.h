@@ -94,7 +94,6 @@ public:
 	bool hasDeletions() const;
 	uint8_t* norms(const TCHAR* field);
 	void norms(const TCHAR* field, uint8_t* result);
-    bool hasProx();
     FieldInfos* getFieldInfos();
 	TermEnum* terms();
 	TermEnum* terms(const Term* term);

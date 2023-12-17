@@ -102,8 +102,6 @@ public:
    */
   int64_t getVersion();
 
-  bool hasProx();
-
   FieldInfos* getFieldInfos();
 
   /**

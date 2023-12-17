@@ -357,13 +357,6 @@ int64_t MultiReader::getVersion() {
 /** Not implemented.
  * @throws UnsupportedOperationException
  */
-bool MultiReader::hasProx() {
-    _CLTHROWA(CL_ERR_UnsupportedOperation, "MultiReader does not support this method.");
-}
-
-/** Not implemented.
- * @throws UnsupportedOperationException
- */
 FieldInfos* MultiReader::getFieldInfos() {
     _CLTHROWA(CL_ERR_UnsupportedOperation, "MultiReader does not support this method.");
 }

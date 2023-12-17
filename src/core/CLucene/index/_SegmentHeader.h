@@ -433,8 +433,6 @@ public:
   ///Reads the Norms for field from disk
   void norms(const TCHAR* field, uint8_t* bytes);
 
-  bool hasProx();
-
   ///concatenating segment with ext and x
   std::string SegmentName(const char* ext, const int32_t x=-1);
   ///Creates a filename in buffer by concatenating segment with ext and x
