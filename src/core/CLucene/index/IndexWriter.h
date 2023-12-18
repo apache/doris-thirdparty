@@ -319,13 +319,6 @@ public:
                             std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec,
                             std::vector<uint32_t> dest_index_docs);
 
-    /**
-     * Merges all segments from an array of indexes into this index, just merging segment infos.
-     * Simplified from addIndexesNoOptimize(CL_NS(util)::ArrayBase<CL_NS(store)::Directory*>& dirs)
-     * @param dirs
-     */
-    void addIndexesSegments(std::vector<lucene::store::Directory*>& dirs);
-
     // create new fields info
     void mergeFields(bool hasProx);
     // write fields info file
