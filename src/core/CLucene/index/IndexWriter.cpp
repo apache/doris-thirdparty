@@ -1592,19 +1592,15 @@ void IndexWriter::mergeTerms(bool hasProx) {
         Term *smallestTerm = match[0]->term;
         SegmentMergeInfo *top = queue->top();
         if (infoStream != nullptr) {
-            std::wstring ws = smallestTerm->text();
-            std::wstring f = smallestTerm->field();
-            std::string name = std::string(ws.begin(), ws.end());
-            std::string field = std::string(f.begin(), f.end());
+            std::string name = lucene_wcstoutf8string(smallestTerm->text(), smallestTerm->textLength());
+            std::string field = lucene_wcstoutf8string(smallestTerm->field(), wcslen(smallestTerm->field()));
             message("smallestTerm name: " + name);
             message("smallestTerm field: " + field);
 
             if (top != nullptr) {
                 Term* topTerm = top->term;
-                std::wstring ws1 = topTerm->text();
-                auto name1 = std::string(ws1.begin(), ws1.end());
-                std::wstring f1 = topTerm->field();
-                auto field1 = std::string(f1.begin(), f1.end());
+                std::string name1 = lucene_wcstoutf8string(topTerm->text(), topTerm->textLength());
+                std::string field1 = lucene_wcstoutf8string(topTerm->field(), wcslen(topTerm->field()));
                 message("topTerm name: " + name1);
                 message("topTerm field: " + field1);
             }
