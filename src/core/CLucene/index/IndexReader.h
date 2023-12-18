@@ -10,8 +10,10 @@
 
 #include "CLucene/util/Array.h"
 #include "CLucene/util/VoidList.h"
+#include "CLucene/util/VoidMap.h"
 #include "CLucene/LuceneThreads.h"
 #include "CLucene/index/IndexVersion.h"
+#include "CLucene/index/_FieldInfos.h"
 
 CL_CLASS_DEF(store,Directory)
 CL_CLASS_DEF(store,LuceneLock)
@@ -264,6 +266,10 @@ public:
 	*/
 	virtual void norms(const TCHAR* field, uint8_t* bytes) = 0;
 
+    /**
+     * Get index field infos
+     */
+    virtual FieldInfos* getFieldInfos() = 0;
   /** Expert: Resets the normalization factor for the named field of the named
   * document.
   *
