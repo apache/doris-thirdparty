@@ -1021,6 +1021,10 @@ public:
   void addDocument(CL_NS(document)::Document* doc, CL_NS(analysis)::Analyzer* analyzer=NULL);
   //void addDocument(CL_NS(document)::Document* doc, CL_NS(analysis)::SAnalyzer* sanalyzer);
 
+  /**
+  * Add a empty document to the index.
+  */
+  void addNullDocument(CL_NS(document)::Document* doc);
 
   /**
    * Expert: asks the mergePolicy whether any merges are
