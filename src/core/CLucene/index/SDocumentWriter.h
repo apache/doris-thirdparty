@@ -685,7 +685,11 @@ public:
     bool addDocument(CL_NS(document)::Document *doc, CL_NS(analysis)::Analyzer *sanalyzer) override {
         return updateDocument(doc, sanalyzer);
     }
+    bool addNullDocument(CL_NS(document)::Document *doc) override {
+        return updateNullDocument(doc);
+    }
     bool updateDocument(CL_NS(document)::Document *doc, CL_NS(analysis)::Analyzer *sanalyzer);
+    bool updateNullDocument(CL_NS(document)::Document *doc);
     ThreadState *getThreadState(CL_NS(document)::Document *doc);
     T *getSCharBlock();
     void recycleSCharBlocks(CL_NS(util)::ArrayBase<T *> &blocks, int32_t start, int32_t numBlocks);
