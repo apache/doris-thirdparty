@@ -12,6 +12,7 @@
 #endif
 
 #include <cstring>
+#include "SSEUtil.h"
 
 template <typename T>
 const T* LUCENE_BLANK_SSTRING();
@@ -202,6 +203,44 @@ public:
         }
 
         return compareSSE2(p1 + size - 16, p2 + size - 16);
+    }
+
+    // Compare two strings using sse4.2 intrinsics if they are available. This code assumes
+    // that the trivial cases are already handled (i.e. one string is empty).
+    // Returns:
+    //   < 0 if s1 < s2
+    //   0 if s1 == s2
+    //   > 0 if s1 > s2
+    // The SSE code path is just under 2x faster than the non-sse code path.
+    //   - s1/n1: ptr/len for the first string
+    //   - s2/n2: ptr/len for the second string
+    //   - len: min(n1, n2) - this can be more cheaply passed in by the caller
+    static inline int string_compare(const char* s1, int64_t n1, const char* s2, int64_t n2, int64_t len) {
+        assert(len == std::min(n1, n2));
+    #if defined(__SSE4_2__) || defined(__aarch64__)
+        while (len >= sse_util::CHARS_PER_128_BIT_REGISTER) {
+            __m128i xmm0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s1));
+            __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s2));
+            int chars_match = _mm_cmpestri(xmm0, sse_util::CHARS_PER_128_BIT_REGISTER, xmm1,
+                                        sse_util::CHARS_PER_128_BIT_REGISTER, sse_util::STRCMP_MODE);
+            if (chars_match != sse_util::CHARS_PER_128_BIT_REGISTER) {
+                return (unsigned char)s1[chars_match] - (unsigned char)s2[chars_match];
+            }
+            len -= sse_util::CHARS_PER_128_BIT_REGISTER;
+            s1 += sse_util::CHARS_PER_128_BIT_REGISTER;
+            s2 += sse_util::CHARS_PER_128_BIT_REGISTER;
+        }
+    #endif
+        unsigned char u1, u2;
+        while (len-- > 0) {
+            u1 = (unsigned char)*s1++;
+            u2 = (unsigned char)*s2++;
+            if (u1 != u2) {
+                return u1 - u2;
+            }
+        }
+
+        return n1 - n2;
     }
 
 #endif
