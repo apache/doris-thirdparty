@@ -851,6 +851,15 @@ bool SDocumentsWriter<T>::updateDocument(Document *doc, Analyzer *sanalyzer) {
     return state->doFlushAfter;
 }
 
+template<typename T>
+bool SDocumentsWriter<T>::updateNullDocument(Document *doc) {
+    ThreadState *state = getThreadState(doc);
+    if (nextWriteDocID == state->docID) {
+        nextWriteDocID++;
+    }
+    return true;
+}
+
 template<>
 TCHAR *SDocumentsWriter<TCHAR>::getSCharBlock() {
     const size_t size = freeSCharBlocks.size();

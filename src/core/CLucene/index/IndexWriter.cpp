@@ -727,6 +727,11 @@ void IndexWriter::addDocument(Document *doc, Analyzer *an) {
     }
 }
 
+void IndexWriter::addNullDocument(Document *doc) {
+    ensureOpen();
+    docWriter->addNullDocument(doc);
+}
+
 void IndexWriter::deleteDocuments(Term *term) {
     ensureOpen();
     try {
