@@ -343,6 +343,7 @@ class CLUCENE_EXPORT Tokenizer:public TokenStream {
 protected:
     /** The text source for this Tokenizer. */
     CL_NS(util)::Reader* input;
+    bool _to_lower = false;
 
 public:
     /** Construct a tokenizer with null input. */
@@ -370,6 +371,14 @@ public:
     virtual ~Tokenizer() {
         close();
     };
+
+    virtual void set_tolower(bool tolower) {
+        _to_lower = tolower;
+    }
+
+    virtual bool get_tolower() const {
+        return _to_lower;
+    }
 };
 
 /** A TokenFilter is a TokenStream whose input is another token stream.

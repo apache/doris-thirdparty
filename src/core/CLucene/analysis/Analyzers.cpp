@@ -50,6 +50,7 @@ template class LowerCaseTokenizer<TCHAR>;
 
 template<typename T>
 SimpleTokenizer<T>::SimpleTokenizer(CL_NS(util)::Reader *in) : LowerCaseTokenizer<T>(in) {
+    Tokenizer::_to_lower = true;
 }
 
 template<typename T>
@@ -86,7 +87,11 @@ Token *SimpleTokenizer<char>::next(Token *token) {
             if (length == 0)// start of token
                 start = offset - 1;
 
-            buffer[length++] = to_lower(c);          // buffer it, normalized
+            if (_to_lower) {
+                buffer[length++] = to_lower(c); // buffer it, normalized
+            } else {
+                buffer[length++] = c; // buffer it, normalized
+            }
             if (length == LUCENE_MAX_WORD_LEN)// buffer overflow!
                 break;
 
