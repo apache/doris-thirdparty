@@ -9,12 +9,12 @@ CL_NS_USE(util)
 
 ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m) : Tokenizer(reader), mode(m) {
     reset(reader);
-    _to_lower = false;
+    Tokenizer::lowercase = false;
 }
 
 ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m, bool lowercase) : Tokenizer(reader), mode(m) {
     reset(reader);
-    _to_lower = lowercase;
+    Tokenizer::lowercase = lowercase;
 }
 
 void ChineseTokenizer::init(const std::string &dictPath) {
@@ -28,7 +28,7 @@ CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
 
     std::string_view& token_text = tokens_text[bufferIndex++];
     size_t size = std::min(token_text.size(), static_cast<size_t>(LUCENE_MAX_WORD_LEN));
-    if (_to_lower) {
+    if (Tokenizer::lowercase) {
         if (token_text[0] < 0x80) {
             std::transform(token_text.begin(), token_text.end(),
                            const_cast<char*>(token_text.data()),
