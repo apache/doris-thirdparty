@@ -6,17 +6,18 @@ namespace lucene::analysis::standard95 {
 
 class StandardAnalyzer : public Analyzer {
  public:
+     StandardAnalyzer() : Analyzer() { _lowercase = true; }
   bool isSDocOpt() override { return true; }
   
   TokenStream* tokenStream(const TCHAR* fieldName,
                            lucene::util::Reader* reader) override {
-    return _CLNEW StandardTokenizer(reader, useStopWords_);
+    return _CLNEW StandardTokenizer(reader, useStopWords_, _lowercase);
   }
 
   TokenStream* reusableTokenStream(const TCHAR* fieldName,
                                    lucene::util::Reader* reader) override {
     if (tokenizer_ == nullptr) {
-      tokenizer_ = new StandardTokenizer(reader, useStopWords_);
+      tokenizer_ = new StandardTokenizer(reader, useStopWords_, _lowercase);
     } else {
       tokenizer_->reset(reader);
     }

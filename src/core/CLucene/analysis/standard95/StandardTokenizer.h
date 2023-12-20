@@ -22,6 +22,12 @@ class StandardTokenizer : public Tokenizer {
   StandardTokenizer(lucene::util::Reader* in, bool useStopWords)
       : Tokenizer(in), useStopWords_(useStopWords) {
     scanner_ = std::make_unique<StandardTokenizerImpl>(in);
+    Tokenizer::lowercase = true;
+  }
+  StandardTokenizer(lucene::util::Reader* in, bool useStopWords, bool lowercase)
+          : Tokenizer(in), useStopWords_(useStopWords) {
+      scanner_ = std::make_unique<StandardTokenizerImpl>(in);
+      Tokenizer::lowercase = lowercase;
   }
 
   Token* next(Token* token) override {
@@ -37,9 +43,10 @@ class StandardTokenizer : public Tokenizer {
       if (scanner_->yylength() <= maxTokenLength) {
         std::string_view term = scanner_->getText();
         if (tokenType == StandardTokenizerImpl::WORD_TYPE) {
-          std::transform(term.begin(), term.end(),
-                         const_cast<char*>(term.data()),
-                         [](char c) { return to_lower(c); });
+          if (Tokenizer::lowercase) {
+            std::transform(term.begin(), term.end(), const_cast<char*>(term.data()),
+                           [](char c) { return to_lower(c); });
+          }
           if (useStopWords_ && stop_words.count(term)) {
             skippedPositions++;
             continue;
