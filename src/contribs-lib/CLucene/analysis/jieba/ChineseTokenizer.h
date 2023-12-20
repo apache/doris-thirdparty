@@ -45,6 +45,7 @@ private:
 public:
     // Constructor
     explicit ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode mode);
+    explicit ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode mode, bool lowercase);
     static void init(const std::string& dictPath="");
 
     // Destructor

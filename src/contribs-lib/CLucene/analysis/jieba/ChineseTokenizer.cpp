@@ -12,6 +12,11 @@ ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m)
     _to_lower = false;
 }
 
+ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m, bool lowercase) : Tokenizer(reader), mode(m) {
+    reset(reader);
+    _to_lower = lowercase;
+}
+
 void ChineseTokenizer::init(const std::string &dictPath) {
     JiebaSingleton::getInstance(dictPath);
 }

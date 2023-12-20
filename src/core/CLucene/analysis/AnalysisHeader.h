@@ -293,6 +293,10 @@ public:
 	*  performance.
 	*/
     virtual TokenStream* reusableTokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader);
+
+    virtual void set_lowercase(bool lowercase) {
+        _lowercase = lowercase;
+    }
 private:
 
     DEFINE_MUTEX(THIS_LOCK)
@@ -309,6 +313,8 @@ protected:
 	*  to save a TokenStream for later re-use by the same
 	*  thread. */
     virtual void setPreviousTokenStream(TokenStream* obj);
+    bool _lowercase = false;
+
 public:
     /**
 	* Invoked before indexing a Field instance if

@@ -54,6 +54,11 @@ SimpleTokenizer<T>::SimpleTokenizer(CL_NS(util)::Reader *in) : LowerCaseTokenize
 }
 
 template<typename T>
+SimpleTokenizer<T>::SimpleTokenizer(CL_NS(util)::Reader *in, bool lowercase) : LowerCaseTokenizer<T>(in) {
+    Tokenizer::_to_lower = lowercase;
+}
+
+template<typename T>
 SimpleTokenizer<T>::~SimpleTokenizer()= default;
 
 template<typename T>

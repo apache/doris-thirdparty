@@ -24,6 +24,11 @@ class StandardTokenizer : public Tokenizer {
     scanner_ = std::make_unique<StandardTokenizerImpl>(in);
     _to_lower = true;
   }
+  StandardTokenizer(lucene::util::Reader* in, bool useStopWords, bool lowercase)
+          : Tokenizer(in), useStopWords_(useStopWords) {
+      scanner_ = std::make_unique<StandardTokenizerImpl>(in);
+      _to_lower = lowercase;
+  }
 
   Token* next(Token* token) override {
     skippedPositions = 0;

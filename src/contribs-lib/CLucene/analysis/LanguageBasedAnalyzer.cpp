@@ -31,6 +31,7 @@ LanguageBasedAnalyzer::LanguageBasedAnalyzer(const TCHAR *language, bool stem, A
         _tcsncpy(lang, language, 100);
     this->stem = stem;
     this->mode = mode;
+    _lowercase = false;
 }
 
 LanguageBasedAnalyzer::~LanguageBasedAnalyzer() {
@@ -78,7 +79,7 @@ TokenStream *LanguageBasedAnalyzer::reusableTokenStream(const TCHAR * /*fieldNam
             streams->filteredTokenStream =
                     _CLNEW StopFilter(streams->tokenStream, true, stopSet);
         } else if (_tcscmp(lang, _T("chinese")) == 0) {
-            streams->tokenStream = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader, mode);
+            streams->tokenStream = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader, mode, _lowercase);
             streams->filteredTokenStream = streams->tokenStream;
         } else {
             CL_NS(util)::BufferedReader* bufferedReader = reader->__asBufferedReader();
@@ -111,7 +112,7 @@ TokenStream *LanguageBasedAnalyzer::tokenStream(const TCHAR *fieldName, Reader *
     if (_tcscmp(lang, _T("cjk")) == 0) {
         ret = _CLNEW CL_NS2(analysis, cjk)::CJKTokenizer(reader);
     } else if (_tcscmp(lang, _T("chinese")) == 0) {
-        ret = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader, mode);
+        ret = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader, mode, _lowercase);
     } else {
         CL_NS(util)::BufferedReader* bufferedReader = reader->__asBufferedReader();
 
