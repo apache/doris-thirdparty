@@ -29,7 +29,7 @@ CL_NS(analysis)::Token *ChineseTokenizer::next(lucene::analysis::Token *token) {
     std::string_view& token_text = tokens_text[bufferIndex++];
     size_t size = std::min(token_text.size(), static_cast<size_t>(LUCENE_MAX_WORD_LEN));
     if (Tokenizer::lowercase) {
-        if (token_text[0] < 0x80) {
+        if (!token_text.empty() && token_text[0] < 0x80) {
             std::transform(token_text.begin(), token_text.end(),
                            const_cast<char*>(token_text.data()),
                            [](char c) { return to_lower(c); });
