@@ -12,6 +12,7 @@
 #endif
 
 #include <cstring>
+#include <assert.h>
 #include "SSEUtil.h"
 
 template <typename T>

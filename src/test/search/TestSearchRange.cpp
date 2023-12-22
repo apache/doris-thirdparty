@@ -1087,7 +1087,7 @@ static void testSearchEqual(CuTest* tc) {
           searcher._search(query, [&result2](DocRange* docRange) {
             if (docRange->type_ == DocRangeType::kMany) {
               result2.addMany(docRange->doc_many_size_,
-                              docRange->doc_many.data());
+                              docRange->doc_many->data());
             } else if (docRange->type_ == DocRangeType::kRange) {
               result2.addRange(docRange->doc_range.first,
                                docRange->doc_range.second);

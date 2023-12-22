@@ -58,95 +58,123 @@ public:
 void TestReaderValueField(CuTest *tc) {
     RAMDirectory dir;
 
-    SimpleAnalyzer<TCHAR> analyzer;
+    SimpleAnalyzer<char> analyzer;
     IndexWriter w(&dir, &analyzer, true);
+    w.setUseCompoundFile(false);
     auto field_name = lucene::util::Misc::_charToWide("f3");
 
     Document doc;
     auto field = _CLNEW Field(field_name, Field::INDEX_TOKENIZED | Field::STORE_NO);
-    auto value1 = lucene::util::Misc::_charToWide("value1");
 
-    auto stringReader = _CLNEW StringReader(value1, wcslen(value1), false);
-    field->setValue(stringReader);
+    auto char_string_reader = std::make_unique<lucene::util::SStringReader<char>>();
+    char_string_reader->init("value1", 6, true);
+    auto stream = analyzer.tokenStream(field->name(), char_string_reader.get());
+    field->setValue(stream);
     doc.add(*field);
 
     w.addDocument(&doc);
     w.close();
 
     IndexSearcher searcher(&dir);
-    Term *t1 = _CLNEW Term(_T("f3"), _T("value1"));
-    auto *query1 = _CLNEW TermQuery(t1);
-    Hits *hits1 = searcher.search(query1);
+    auto t1 = std::make_unique<Term>(_T("f3"), _T("value1"));
+    auto query1 =std::make_unique<TermQuery>(t1.get());
+    Hits *hits1 = searcher.search(query1.get());
     CLUCENE_ASSERT(1 == hits1->length());
+    _CLDELETE(stream)
+    _CLDELETE(hits1)
+    _CLDELETE_ARRAY(field_name)
 }
 
 void TestMultiSetValueField(CuTest *tc) {
     RAMDirectory dir;
 
-    SimpleAnalyzer<TCHAR> analyzer;
+    SimpleAnalyzer<char> analyzer;
     IndexWriter w(&dir, &analyzer, true);
+    w.setUseCompoundFile(false);
     auto field_name = lucene::util::Misc::_charToWide("f3");
 
     Document doc;
     auto field = _CLNEW Field(field_name, Field::INDEX_TOKENIZED | Field::STORE_NO);
+    auto char_string_reader = std::make_unique<lucene::util::SStringReader<char>>();
+    char_string_reader->init("value1", 6, false);
+    auto stream = analyzer.tokenStream(field->name(), char_string_reader.get());
+    field->setValue(stream);
+    char_string_reader->init("value2", 6, false);
+    auto stream2 = analyzer.tokenStream(field->name(), char_string_reader.get());
+    field->setValue(stream2);
 
-    auto value1 = lucene::util::Misc::_charToWide("value1");
-    field->setValue(value1, false);
-    auto value2 = lucene::util::Misc::_charToWide("value2");
-    field->setValue(value2, false);
     doc.add(*field);
 
     w.addDocument(&doc);
     w.close();
 
     IndexSearcher searcher(&dir);
-    Term *t1 = _CLNEW Term(_T("f3"), _T("value1"));
-    auto *query1 = _CLNEW TermQuery(t1);
-    Hits *hits1 = searcher.search(query1);
+    auto t1 = std::make_unique<Term>(_T("f3"), _T("value1"));
+    auto query1 = std::make_unique<TermQuery>(t1.get());
+    Hits *hits1 = searcher.search(query1.get());
     CLUCENE_ASSERT(0 == hits1->length());
-    Term *t2 = _CLNEW Term(_T("f3"), _T("value2"));
-    auto *query2 = _CLNEW TermQuery(t2);
-    Hits *hits2 = searcher.search(query2);
+    auto t2 = std::make_unique<Term>(_T("f3"), _T("value2"));
+    auto query2 = std::make_unique<TermQuery>(t2.get());
+    Hits *hits2 = searcher.search(query2.get());
     CLUCENE_ASSERT(1 == hits2->length());
 
     doc.clear();
-    //_CLDELETE(field)
+    _CLDELETE(stream)
+    _CLDELETE(stream2)
+    _CLDELETE(hits1)
+    _CLDELETE(hits2)
+    _CLDELETE_ARRAY(field_name)
 }
 
 void TestMultiAddValueField(CuTest *tc) {
     RAMDirectory dir;
     auto field_name = lucene::util::Misc::_charToWide("f3");
 
-    SimpleAnalyzer<TCHAR> analyzer;
+    SimpleAnalyzer<char> analyzer;
     IndexWriter w(&dir, &analyzer, true);
+    w.setUseCompoundFile(false);
 
     Document doc;
-    doc.add(*_CLNEW Field(field_name, _T("value1"), Field::INDEX_TOKENIZED | Field::STORE_NO));
-    doc.add(*_CLNEW Field(field_name, _T("value2"), Field::INDEX_TOKENIZED | Field::STORE_NO));
+    auto field1 = _CLNEW Field(field_name, Field::INDEX_TOKENIZED | Field::STORE_NO);
+    auto char_string_reader = std::make_unique<lucene::util::SStringReader<char>>();
+    char_string_reader->init("value1", 6, false);
+    auto stream = analyzer.tokenStream(field1->name(), char_string_reader.get());
+    field1->setValue(stream);
+    doc.add(*field1);
 
-    w.addDocument(&doc);
-    w.close();
+    auto field2 = _CLNEW Field(field_name, Field::INDEX_TOKENIZED | Field::STORE_NO);
+    auto char_string_reader2 = std::make_unique<lucene::util::SStringReader<char>>();
+    char_string_reader2->init("value2", 6, false);
+    auto stream2 = analyzer.tokenStream(field2->name(), char_string_reader2.get());
+    field2->setValue(stream2);
+    doc.add(*field2);
 
-    Term *t1 = _CLNEW Term(_T("f3"), _T("value1"));
-    auto *query1 = _CLNEW TermQuery(t1);
+    try {
+        w.addDocument(&doc);
+        w.close();
+    } catch (CLuceneError& ae) {
+        std::cout <<ae.what() << std::endl;
+        throw ae;
+    }
+
+    auto t1 = std::make_unique<Term>(_T("f3"), _T("value1"));
+    auto query1 = std::make_unique<TermQuery>(t1.get());
     IndexSearcher searcher(&dir);
-    Hits *hits1 = searcher.search(query1);
+    Hits *hits1 = searcher.search(query1.get());
 
     CLUCENE_ASSERT(1 == hits1->length());
-    Term *t2 = _CLNEW Term(_T("f3"), _T("value2"));
-    auto *query2 = _CLNEW TermQuery(t2);
-    Hits *hits2 = searcher.search(query2);
+    auto t2 = std::make_unique<Term>(_T("f3"), _T("value2"));
+    auto query2 = std::make_unique<TermQuery>(t2.get());
+    Hits *hits2 = searcher.search(query2.get());
     CLUCENE_ASSERT(1 == hits2->length());
     doc.removeFields(_T("f3"));
     CLUCENE_ASSERT(doc.getFields()->size() == 0);
 
-
-    _CLDELETE(query1);
-    _CLDELETE(query2);
-    _CLDELETE(t1);
-    _CLDELETE(t2);
     _CLDELETE(hits1);
     _CLDELETE(hits2);
+    _CLDELETE(stream);
+    _CLDELETE(stream2);
+    _CLDELETE_ARRAY(field_name)
 }
 
 void TestFields(CuTest *tc) {
@@ -426,38 +454,42 @@ const int32_t MAX_FIELD_LEN = 0x7FFFFFFFL;
 const int32_t MAX_BUFFER_DOCS = 100000000;
 const int32_t MERGE_FACTOR = 100000000;
 void TestAddDocument(CuTest *tc) {
-    RAMDirectory dir;
-    SimpleAnalyzer<char> sanalyzer;
-    IndexWriter w(&dir, NULL, true);
-    w.setUseCompoundFile(false);
-    w.setMaxBufferedDocs(MAX_BUFFER_DOCS);
-    w.setRAMBufferSizeMB(256);
-    w.setMaxFieldLength(MAX_FIELD_LEN);
-    w.setMergeFactor(MERGE_FACTOR);
-    w.setDocumentWriter(_CLNEW SDocumentsWriter<char>(w.getDirectory(), &w));
-    Document doc;
-    auto field_name = lucene::util::Misc::_charToWide("f3");
-    auto field = _CLNEW Field(field_name, Field::INDEX_TOKENIZED | Field::STORE_NO);
-    doc.add(*field);
+    try {
+        RAMDirectory dir;
+        SimpleAnalyzer<char> sanalyzer;
+        IndexWriter w(&dir, &sanalyzer, true);
+        w.setUseCompoundFile(false);
+        w.setMaxBufferedDocs(MAX_BUFFER_DOCS);
+        w.setRAMBufferSizeMB(256);
+        w.setMaxFieldLength(MAX_FIELD_LEN);
+        w.setMergeFactor(MERGE_FACTOR);
+        w.setDocumentWriter(_CLNEW SDocumentsWriter<char>(w.getDirectory(), &w));
+        Document doc;
+        auto field_name = lucene::util::Misc::_charToWide("f3");
+        auto field = _CLNEW Field(field_name, Field::INDEX_TOKENIZED | Field::STORE_NO);
+        doc.add(*field);
 
-    for (int i = 0; i <= 2000000; i++) {
-        std::string value1 = "value1";
-        if (i > 0)
-            value1 = generateRandomString(2000);
-        auto stringReader = _CLNEW lucene::util::SStringReader<char>(
-                value1.c_str(), strlen(value1.c_str()), false);
-        auto stream = sanalyzer.reusableTokenStream(field_name, stringReader);
+        for (int i = 0; i <= 2000000; i++) {
+            std::string value1 = "value1";
+            if (i > 0) value1 = generateRandomString(2000);
+            auto stringReader = _CLNEW lucene::util::SStringReader<char>(
+                    value1.c_str(), strlen(value1.c_str()), false);
+            auto stream = sanalyzer.reusableTokenStream(field_name, stringReader);
 
-        field->setValue(stream);
-        w.addDocument(&doc, &sanalyzer);
+            field->setValue(stream);
+            w.addDocument(&doc, &sanalyzer);
+        }
+        IndexSearcher searcher(&dir);
+        Term* t2 = _CLNEW Term(_T("f3"), _T("value1"));
+        auto* query2 = _CLNEW TermQuery(t2);
+        Hits* hits2 = searcher.search(query2);
+        CLUCENE_ASSERT(1 == hits2->length());
+        doc.clear();
+        w.close();
+    } catch (CLuceneError& ae) {
+        std::cout <<ae.what() << std::endl;
+        throw ae;
     }
-    IndexSearcher searcher(&dir);
-    Term *t2 = _CLNEW Term(_T("f3"), _T("value1"));
-    auto *query2 = _CLNEW TermQuery(t2);
-    Hits *hits2 = searcher.search(query2);
-    CLUCENE_ASSERT(1 == hits2->length());
-    doc.clear();
-    w.close();
 }
 
 void TestNewFieldBench(CuTest *tc) {
@@ -495,18 +527,10 @@ void TestNewFieldBench(CuTest *tc) {
 CuSuite *testdocument(void) {
     CuSuite *suite = CuSuiteNew(_T("CLucene Document Test"));
 
-    //SUITE_ADD_TEST(suite, TestCompressedDocument);
-    //SUITE_ADD_TEST(suite, TestBinaryDocument);
-    //SUITE_ADD_TEST(suite, TestLazyCompressedDocument);
-    //SUITE_ADD_TEST(suite, TestLazyBinaryDocument);
-    // SUITE_ADD_TEST(suite, TestFieldSelectors);
     SUITE_ADD_TEST(suite, TestFields);
     SUITE_ADD_TEST(suite, TestMultiSetValueField);
     SUITE_ADD_TEST(suite, TestMultiAddValueField);
-    //SUITE_ADD_TEST(suite, TestSetFieldBench);
-    //SUITE_ADD_TEST(suite, TestNewFieldBench);
     SUITE_ADD_TEST(suite, TestReaderValueField);
-    SUITE_ADD_TEST(suite, TestAddDocument);
-    //SUITE_ADD_TEST(suite, TestDateTools);
+    //SUITE_ADD_TEST(suite, TestAddDocument);
     return suite;
 }
