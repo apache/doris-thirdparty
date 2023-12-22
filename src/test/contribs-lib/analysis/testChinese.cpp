@@ -142,13 +142,6 @@ void testCJK(CuTest *tc) {
     _testCJK(tc, "a\xe5\x95\xa4\xe9\x85\x92\xe5\x95\xa4x", exp2);
 }
 
-std::string get_dict_path() {
-    if(const char* env_p = std::getenv("DICT_PATH")) {
-        return env_p;
-    }
-    return "";
-}
-
 void testSimpleJiebaSearchModeTokenizer2(CuTest* tc) {
     LanguageBasedAnalyzer a;
     const char* field_value_data = "冰咒龙";
@@ -161,7 +154,7 @@ void testSimpleJiebaSearchModeTokenizer2(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Search);
-    a.initDict(get_dict_path());
+    a.initDict("./dict");
     ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -184,7 +177,7 @@ void testSimpleJiebaAllModeTokenizer2(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::All);
-    a.initDict(get_dict_path());
+    a.initDict("./dict");
     ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -209,7 +202,7 @@ void testSimpleJiebaAllModeTokenizer(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::All);
-    a.initDict(get_dict_path());
+    a.initDict("./dict");
     ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -240,7 +233,7 @@ void testSimpleJiebaDefaultModeTokenizer2(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Default);
-    a.initDict(get_dict_path());
+    a.initDict("./dict");
     ts = a.tokenStream(_T("contents"), stringReader);
 
     /*char tmp[255] = {};
@@ -277,7 +270,7 @@ void testSimpleJiebaDefaultModeTokenizer(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Default);
-    a.initDict(get_dict_path());
+    a.initDict("./dict");
     ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -302,7 +295,7 @@ void testSimpleJiebaSearchModeTokenizer(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Search);
-    a.initDict(get_dict_path());
+    a.initDict("./dict");
     ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -335,7 +328,7 @@ void testSimpleJiebaTokenizer(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Default);
-    a.initDict(get_dict_path());
+    a.initDict("./dict");
     ts = a.tokenStream(_T("contents"), stringReader);
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -652,7 +645,7 @@ void testJiebaMatchHuge(CuTest* tc) {
     auto analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
     analyzer->setLanguage(L"chinese");
     analyzer->setMode(lucene::analysis::AnalyzerMode::Default);
-    analyzer->initDict(get_dict_path());
+    analyzer->initDict("./dict");
 
     IndexWriter w(&dir, analyzer, true);
     auto field_name = lucene::util::Misc::_charToWide("chinese");

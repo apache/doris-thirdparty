@@ -272,6 +272,20 @@ IF (BUILD_STATIC_LIBRARIES)
 	    TARGET_LINK_LIBRARIES(cl_test clucene-core-static clucene-shared-static ic gtest ${EXTRA_LIBS} ${Roaring_LIBRARY})
     ENDIF (UNIX)
 
+    SET(DATA_SOURCE_DIR ${clucene_SOURCE_DIR}/src/test/data)
+    SET(DATA_TARGET_DIR "${EXECUTABLE_OUTPUT_PATH}/data")
+
+    ADD_CUSTOM_COMMAND(TARGET cl_test POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${DATA_SOURCE_DIR} ${DATA_TARGET_DIR}
+            COMMENT "Copying ${DATA_SOURCE_DIR} to ${DATA_TARGET_DIR}/data")
+
+    SET(DICT_SOURCE_DIR ${clucene_SOURCE_DIR}/src/contribs-lib/CLucene/analysis/jieba/dict)
+    SET(DICT_TARGET_DIR "${EXECUTABLE_OUTPUT_PATH}/dict")
+
+    ADD_CUSTOM_COMMAND(TARGET cl_test POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${DICT_SOURCE_DIR} ${DICT_TARGET_DIR}
+            COMMENT "Copying ${DATA_SOURCE_DIR} to ${DATA_TARGET_DIR}/dict")
+
 ENDIF (BUILD_STATIC_LIBRARIES)
 
 ############################
