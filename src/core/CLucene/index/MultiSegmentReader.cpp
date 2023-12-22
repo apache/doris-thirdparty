@@ -325,6 +325,11 @@ void MultiSegmentReader::norms(const TCHAR* field, uint8_t* result) {
 	  (*subReaders)[i]->norms(field, result + starts[i]);
 }
 
+FieldInfos* MultiSegmentReader::getFieldInfos() {
+    // field infos of subReaders are same, so we return the first one.
+    assert(subReaders->length > 0);
+    return (*subReaders)[0]->getFieldInfos();
+}
 
 void MultiSegmentReader::doSetNorm(int32_t n, const TCHAR* field, uint8_t value){
 	normsCache.removeitr( normsCache.find((TCHAR*)field) );                         // clear cache

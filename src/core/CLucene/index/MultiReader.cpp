@@ -354,6 +354,13 @@ int64_t MultiReader::getVersion() {
   _CLTHROWA(CL_ERR_UnsupportedOperation, "MultiReader does not support this method.");
 }
 
+/** Not implemented.
+ * @throws UnsupportedOperationException
+ */
+FieldInfos* MultiReader::getFieldInfos() {
+    _CLTHROWA(CL_ERR_UnsupportedOperation, "MultiReader does not support this method.");
+}
+
 const char* MultiReader::getClassName(){
   return "MultiReader";
 }
