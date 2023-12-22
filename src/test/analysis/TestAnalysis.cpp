@@ -5,6 +5,7 @@
 * the GNU Lesser General Public License, as specified in the COPYING file.
 ------------------------------------------------------------------------------*/
 #include "test.h"
+#include <memory>
 
 void test(CuTest *tc, Reader *reader, bool verbose, int64_t bytes) {
     StandardAnalyzer analyzer;
@@ -63,7 +64,7 @@ void testTokenStreamField(CuTest *tc) {
     TokenStream *stream = analyzer.reusableTokenStream(L"field1", &reader);
 
     int field_config = lucene::document::Field::STORE_NO | lucene::document::Field::INDEX_TOKENIZED;
-    auto field = _CLNEW Field(L"field1", field_config);
+    auto field = std::make_unique<Field>(L"field1", field_config);
     field->setValue(stream);
     auto s = field->tokenStreamValue();
     int32_t count = 0;
