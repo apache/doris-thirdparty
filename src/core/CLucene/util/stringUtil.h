@@ -205,6 +205,8 @@ public:
         return compareSSE2(p1 + size - 16, p2 + size - 16);
     }
 
+#endif
+
     // Compare two strings using sse4.2 intrinsics if they are available. This code assumes
     // that the trivial cases are already handled (i.e. one string is empty).
     // Returns:
@@ -222,7 +224,7 @@ public:
             __m128i xmm0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s1));
             __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s2));
             int chars_match = _mm_cmpestri(xmm0, sse_util::CHARS_PER_128_BIT_REGISTER, xmm1,
-                                        sse_util::CHARS_PER_128_BIT_REGISTER, sse_util::STRCMP_MODE);
+                                           sse_util::CHARS_PER_128_BIT_REGISTER, sse_util::STRCMP_MODE);
             if (chars_match != sse_util::CHARS_PER_128_BIT_REGISTER) {
                 return (unsigned char)s1[chars_match] - (unsigned char)s2[chars_match];
             }
@@ -242,8 +244,6 @@ public:
 
         return n1 - n2;
     }
-
-#endif
 
     static inline int32_t utf8_byte_count(uint8_t c) {
         static constexpr int32_t LUT[256] = {
