@@ -8,26 +8,23 @@
 #include "CJKAnalyzer.h"
 #include "CLucene/util/CLStreams.h"
 
-CL_NS_DEF2(analysis,cjk)
+CL_NS_DEF2(analysis, cjk)
 CL_NS_USE(analysis)
 CL_NS_USE(util)
-
 
 const TCHAR* CJKTokenizer::tokenTypeSingle = _T("single");
 const TCHAR* CJKTokenizer::tokenTypeDouble = _T("double");
 
-CJKTokenizer::CJKTokenizer(Reader* in):
-	Tokenizer(in)
-{
-	tokenType = Token::getDefaultType();
-	offset = 0;
-	bufferIndex = 0;
-	dataLen = 0;
-	preIsTokened = false;
-	ignoreSurrogates = true;
+CJKTokenizer::CJKTokenizer(Reader* in) : Tokenizer(in) {
+    tokenType = Token::getDefaultType();
+    offset = 0;
+    bufferIndex = 0;
+    dataLen = 0;
+    preIsTokened = false;
+    ignoreSurrogates = true;
 }
 
-CL_NS(analysis)::Token* CJKTokenizer::next(Token* token){
+CL_NS(analysis)::Token* CJKTokenizer::next(Token* token) {
     /** how many character(s) has been stored in buffer */
     int32_t length = 0;
 
@@ -37,13 +34,17 @@ CL_NS(analysis)::Token* CJKTokenizer::next(Token* token){
     while (true) {
         /** current character */
         clunichar c;
-	int charlen = 1;
+        int charlen = 1;
 
         offset++;
 
         if (bufferIndex >= dataLen) {
-            dataLen = input->read((const void**)&ioBuffer, 1, LUCENE_IO_BUFFER_SIZE);
+            dataLen = input->read((const void**)&cbuffer, 1, LUCENE_IO_BUFFER_SIZE);
             bufferIndex = 0;
+            if (dataLen > 0) {
+                lucene_utf8towcs(ioBuffer, cbuffer, LUCENE_MAX_WORD_LEN);
+                dataLen = _tcslen(ioBuffer);
+            }
         }
 
         if (dataLen == -1) {
@@ -62,33 +63,33 @@ CL_NS(analysis)::Token* CJKTokenizer::next(Token* token){
             c = ioBuffer[bufferIndex++];
         }
 
-		//to support surrogates, we'll need to convert the incoming utf16 into
-		//ucs4(c variable). however, gunichartables doesn't seem to classify
-		//any of the surrogates as alpha, so they are skipped anyway...
-		//so for now we just convert to ucs4 so that we dont corrupt the input.
-		if ( c >= 0xd800 || c <= 0xdfff ){
-			clunichar c2 = ioBuffer[bufferIndex];
-			if ( c2 >= 0xdc00 && c2 <= 0xdfff ){
-				bufferIndex++;
-				offset++;
-				charlen=2;
+        //to support surrogates, we'll need to convert the incoming utf16 into
+        //ucs4(c variable). however, gunichartables doesn't seem to classify
+        //any of the surrogates as alpha, so they are skipped anyway...
+        //so for now we just convert to ucs4 so that we dont corrupt the input.
+        if (c >= 0xd800 || c <= 0xdfff) {
+            clunichar c2 = ioBuffer[bufferIndex];
+            if (c2 >= 0xdc00 && c2 <= 0xdfff) {
+                bufferIndex++;
+                offset++;
+                charlen = 2;
 
-				c = (((c & 0x03ffL) << 10) | ((c2 & 0x03ffL) <<  0)) + 0x00010000L;
-			}
-		}
+                c = (((c & 0x03ffL) << 10) | ((c2 & 0x03ffL) << 0)) + 0x00010000L;
+            }
+        }
 
         //if the current character is ASCII or Extend ASCII
-        if ((c <= 0xFF) //is BASIC_LATIN
-            || (c>=0xFF00 && c<=0xFFEF) //ascii >0x74 cast to unsigned...
-           ) {
+        if ((c <= 0xFF)                     //is BASIC_LATIN
+            || (c >= 0xFF00 && c <= 0xFFEF) //ascii >0x74 cast to unsigned...
+        ) {
             if (c >= 0xFF00) {
-				//todo: test this... only happens on platforms where char is signed, i think...
+                //todo: test this... only happens on platforms where char is signed, i think...
                 /** convert  HALFWIDTH_AND_FULLWIDTH_FORMS to BASIC_LATIN */
                 c -= 0xFEE0;
             }
 
             // if the current character is a letter or "_" "+" "#"
-			if (_istalnum(c) || ((c == '_') || (c == '+') || (c == '#')) ) {
+            if (_istalnum(c) || ((c == '_') || (c == '+') || (c == '#'))) {
                 if (length == 0) {
                     // "javaC1C2C3C4linux" <br>
                     //      ^--: the current character begin to token the ASCII
@@ -98,8 +99,8 @@ CL_NS(analysis)::Token* CJKTokenizer::next(Token* token){
                     // "javaC1C2C3C4linux" <br>
                     //              ^--: the previous non-ASCII
                     // : the current character
-                    offset-=charlen;
-                    bufferIndex-=charlen;
+                    offset -= charlen;
+                    bufferIndex -= charlen;
                     tokenType = tokenTypeSingle;
 
                     if (preIsTokened == true) {
@@ -115,7 +116,7 @@ CL_NS(analysis)::Token* CJKTokenizer::next(Token* token){
 
                 // store the LowerCase(c) in the buffer
                 buffer[length++] = _totlower((TCHAR)c);
-				tokenType = tokenTypeSingle;
+                tokenType = tokenTypeSingle;
 
                 // break the procedure if buffer overflowed!
                 if (length == LUCENE_MAX_WORD_LEN) {
@@ -131,39 +132,39 @@ CL_NS(analysis)::Token* CJKTokenizer::next(Token* token){
             }
         } else {
             // non-ASCII letter, eg."C1C2C3C4"
-			if ( _istalpha(c) || (!ignoreSurrogates && c>=0x10000) ) {
+            if (_istalpha(c) || (!ignoreSurrogates && c >= 0x10000)) {
                 if (length == 0) {
                     start = offset - 1;
-                    
-					if ( c < 0x00010000L )
-						buffer[length++] = (TCHAR)c;
-					else{
-						clunichar ucs4 = c - 0x00010000L;
-						buffer[length++] = (TCHAR)((ucs4 >> 10) & 0x3ff) | 0xd800;
-						buffer[length++] = (TCHAR)((ucs4 >>  0) & 0x3ff) | 0xdc00;
-					}
+
+                    if (c < 0x00010000L)
+                        buffer[length++] = (TCHAR)c;
+                    else {
+                        clunichar ucs4 = c - 0x00010000L;
+                        buffer[length++] = (TCHAR)((ucs4 >> 10) & 0x3ff) | 0xd800;
+                        buffer[length++] = (TCHAR)((ucs4 >> 0) & 0x3ff) | 0xdc00;
+                    }
 
                     tokenType = tokenTypeDouble;
                 } else {
                     if (tokenType == tokenTypeSingle) {
-                        offset-=charlen;
-                        bufferIndex-=charlen;
+                        offset -= charlen;
+                        bufferIndex -= charlen;
 
                         //return the previous ASCII characters
                         break;
                     } else {
-						if ( c < 0x00010000L )
-							buffer[length++] = (TCHAR)c;
-						else{
-							clunichar ucs4 = c - 0x00010000L;
-							buffer[length++] = (TCHAR)((ucs4 >> 10) & 0x3ff) | 0xd800;
-							buffer[length++] = (TCHAR)((ucs4 >>  0) & 0x3ff) | 0xdc00;
-						}
-						tokenType = tokenTypeDouble;
+                        if (c < 0x00010000L)
+                            buffer[length++] = (TCHAR)c;
+                        else {
+                            clunichar ucs4 = c - 0x00010000L;
+                            buffer[length++] = (TCHAR)((ucs4 >> 10) & 0x3ff) | 0xd800;
+                            buffer[length++] = (TCHAR)((ucs4 >> 0) & 0x3ff) | 0xdc00;
+                        }
+                        tokenType = tokenTypeDouble;
 
                         if (length >= 2) {
-                            offset-=charlen;
-                            bufferIndex-=charlen;
+                            offset -= charlen;
+                            bufferIndex -= charlen;
                             preIsTokened = true;
 
                             break;
@@ -182,9 +183,10 @@ CL_NS(analysis)::Token* CJKTokenizer::next(Token* token){
         }
     }
 
-	buffer[length]='\0';
-	token->set(buffer,start, start+length, tokenType);
-	return token;
+    buffer[length] = '\0';
+    std::string term = lucene_wcstoutf8string(buffer, length);
+    token->set(term.c_str(), 0, term.length(), tokenType);
+    return token;
 }
 
 CL_NS_END2
