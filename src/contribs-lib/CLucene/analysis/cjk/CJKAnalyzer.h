@@ -40,12 +40,13 @@ private:
      * the returned Token
      */
     TCHAR buffer[LUCENE_MAX_WORD_LEN];
+    char* cbuffer;
 
     /**
      * I/O buffer, used to store the content of the input(one of the <br>
      * members of Tokenizer)
      */
-    const TCHAR* ioBuffer;
+     TCHAR ioBuffer[LUCENE_MAX_WORD_LEN]{};
 
     /** word type: single=>ASCII  double=>non-ASCII word=>default */
     const TCHAR* tokenType;
