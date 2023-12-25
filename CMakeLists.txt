@@ -101,7 +101,7 @@ OPTION(BUILD_CONTRIBS
   OFF)
 OPTION(BUILD_CONTRIBS_LIB
   "create targets for building the clucene-contribs-lib"
-  OFF)
+  ON)
 SET(LUCENE_SYS_INCLUDES "" CACHE PATH
       "location for non-system independent files. defaults to CMAKE_INSTALL_PREFIX. see INSTALL documentation for further information."
       )
