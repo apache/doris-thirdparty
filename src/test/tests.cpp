@@ -19,6 +19,6 @@ unittest tests[] = {
         {"MultiPhraseQuery", testMultiPhraseQuery},
         {"IndexCompaction", testIndexCompaction},
 #ifdef TEST_CONTRIB_LIBS
-        //{"chinese", testchinese},
+        {"chinese", testchinese},
 #endif
         {"LastTest", NULL}};
