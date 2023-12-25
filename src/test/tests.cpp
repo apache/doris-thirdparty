@@ -17,6 +17,6 @@ unittest tests[] = {
         {"strconvert", testStrConvert},
         {"searchRange", testSearchRange},
 #ifdef TEST_CONTRIB_LIBS
-        //{"chinese", testchinese},
+        {"chinese", testchinese},
 #endif
         {"LastTest", NULL}};

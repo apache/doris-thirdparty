@@ -43,10 +43,7 @@ LanguageBasedAnalyzer::~LanguageBasedAnalyzer() {
 }
 
 bool LanguageBasedAnalyzer::isSDocOpt() {
-    if (_tcscmp(lang, _T("chinese")) == 0) {
-        return true;
-    }
-    return false;
+    return true;
 }
 
 void LanguageBasedAnalyzer::setStopWords(const TCHAR** stopwords) {
