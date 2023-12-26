@@ -1168,6 +1168,27 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
             buffer.resize(0);
         };
 
+        auto encode_pos = [](IndexOutput* out, std::vector<uint32_t>& buffer) {
+            std::vector<uint8_t> compress(4 * PFOR_BLOCK_SIZE + PFOR_BLOCK_SIZE);
+            for (int32_t i = 0; i < buffer.size(); i += PFOR_BLOCK_SIZE) {
+                size_t buf_size = std::min(static_cast<size_t>(PFOR_BLOCK_SIZE), buffer.size() - i);
+                if (buf_size == PFOR_BLOCK_SIZE || buf_size == (PFOR_BLOCK_SIZE - 1)) {
+                    out->writeByte((char)CodeMode::kPfor);
+                    out->writeVInt(buf_size);
+                    size_t size = P4NZENC(buffer.data() + i, buf_size, compress.data());
+                    out->writeVInt(size);
+                    out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
+                } else {
+                    out->writeByte((char)CodeMode::kDefault);
+                    out->writeVInt(buf_size);
+                    for (int32_t j = 0; j < buf_size; j++) {
+                        out->writeVInt(buffer[i + j]);
+                    }
+                }
+            }
+            buffer.resize(0);
+        };
+
         // Now termStates has numToMerge FieldMergeStates
         // which all share the same term.  Now we must
         // interleave the docID streams.
@@ -1179,6 +1200,7 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
                 encode(freqOut, docDeltaBuffer, true);
                 if (hasProx_) {
                     encode(freqOut, freqBuffer, false);
+                    encode_pos(proxOut, positionBuffer);
                 }
 
                 skipListWriter->setSkipData(lastDoc, currentFieldStorePayloads, lastPayloadLength);
@@ -1210,7 +1232,7 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
                 for (int32_t j = 0; j < termDocFreq; j++) {
                     const int32_t code = prox.readVInt();
                     assert(0 == (code & 1));
-                    proxOut->writeVInt(code >> 1);
+                    positionBuffer.push_back(code >> 1);
                 }
                 freqBuffer.push_back(termDocFreq);
             }
@@ -1267,6 +1289,8 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
             }
             docDeltaBuffer.resize(0);
             freqBuffer.resize(0);
+
+            encode_pos(proxOut, positionBuffer);
         }
         
         int64_t skipPointer = skipListWriter->writeSkip(freqOut);

@@ -35,7 +35,7 @@ class FieldInfo :LUCENE_BASE{
 
 	bool omitNorms; // omit norms associated with indexed fields
 	bool hasProx = false;
-	IndexVersion indexVersion_ = IndexVersion::kV1;
+	IndexVersion indexVersion_ = IndexVersion::kV2;
 
 	bool storePayloads; // whether this field stores payloads together with term positions
 

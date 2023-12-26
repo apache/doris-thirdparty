@@ -190,19 +190,19 @@ void TermDocsBuffer::refill() {
     cur_doc_ = 0;
     cur_freq_ = 0;
 
-    if (indexVersion_ == IndexVersion::kV1) {
-        size_ = refillV1();
-    } else {
+    if (indexVersion_ == IndexVersion::kV0) {
         size_ = refillV0();
+    } else {
+        size_ = refillV1();
     }
 }
 
 void TermDocsBuffer::readRange(DocRange* docRange) {
     int32_t size = 0;
-    if (indexVersion_ == IndexVersion::kV1) {
-        size = refillV1();
-    } else {
+    if (indexVersion_ == IndexVersion::kV0) {
         size = refillV0();
+    } else {
+        size = refillV1();
     }
     docRange->type_ = DocRangeType::kMany;
     docRange->doc_many = &docs_;

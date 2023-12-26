@@ -6,6 +6,8 @@
 ------------------------------------------------------------------------------*/
 #include "CLucene/_ApiHeader.h"
 #include "_SegmentHeader.h"
+#include "CLucene/index/CodeMode.h"
+#include "CLucene/util/PFORUtil.h"
 
 #include "Terms.h"
 
@@ -16,7 +18,7 @@ CL_NS_DEF(index)
 
 SegmentTermPositions::SegmentTermPositions(const SegmentReader* _parent):
 	SegmentTermDocs(_parent), proxStream(NULL)// the proxStream will be cloned lazily when nextPosition() is called for the first time
-	,lazySkipPointer(-1), lazySkipProxCount(0)
+	,lazySkipPointer(-1), lazySkipProxCount(0), buffer_(indexVersion_)
 {
     CND_CONDITION(_parent != NULL, "Parent is NULL");
 }
@@ -64,18 +66,23 @@ int32_t SegmentTermPositions::nextPosition() {
 }
 
 int32_t SegmentTermPositions::readDeltaPosition() {
-	int32_t delta = proxStream->readVInt();
-	if (currentFieldStoresPayloads) {
-		// if the current field stores payloads then
-		// the position delta is shifted one bit to the left.
-		// if the LSB is set, then we have to read the current
-		// payload length
-		if ((delta & 1) != 0) {
-			payloadLength = proxStream->readVInt();
-		} 
-		delta = (int32_t)((uint32_t)delta >> (uint32_t)1);
-		needToLoadPayload = true;
-	}
+    int32_t delta = 0;
+    if (indexVersion_ >= IndexVersion::kV2) {
+        delta = buffer_.getPos();
+    } else {
+        delta = proxStream->readVInt();
+        if (currentFieldStoresPayloads) {
+            // if the current field stores payloads then
+            // the position delta is shifted one bit to the left.
+            // if the LSB is set, then we have to read the current
+            // payload length
+            if ((delta & 1) != 0) {
+                payloadLength = proxStream->readVInt();
+            } 
+            delta = (int32_t)((uint32_t)delta >> (uint32_t)1);
+            needToLoadPayload = true;
+        }
+    }
 	return delta;
 }
 
@@ -131,6 +138,10 @@ void SegmentTermPositions::lazySkip() {
     if (proxStream == NULL) {
       // clone lazily
       proxStream = parent->proxStream->clone();
+      
+      if (indexVersion_ >= IndexVersion::kV2) {
+        buffer_.setProxPoint(proxStream);
+      }
     }
     
     // we might have to skip the current payload
@@ -139,6 +150,11 @@ void SegmentTermPositions::lazySkip() {
       
     if (lazySkipPointer != -1) {
       proxStream->seek(lazySkipPointer);
+
+      if (indexVersion_ >= IndexVersion::kV2) {
+        buffer_.clear();
+      }
+
       lazySkipPointer = -1;
     }
      
@@ -171,5 +187,22 @@ uint8_t* SegmentTermPositions::getPayload(uint8_t* data) {
 	return retArray;
 }
 bool SegmentTermPositions::isPayloadAvailable() const { return needToLoadPayload && (payloadLength > 0); }
+
+void TermPositionsBuffer::refill() {
+    cur_pos_ = 0;
+
+    char mode = proxStream_->readByte();
+    size_ = proxStream_->readVInt();
+    if (mode == (char)CodeMode::kPfor) {
+        uint32_t SerializedSize = proxStream_->readVInt();
+        std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+        proxStream_->readBytes(buf.data(), SerializedSize);
+        P4NZDEC(buf.data(), size_, poss_.data());
+    } else if (mode == (char)CodeMode::kDefault) {
+        for (uint32_t i = 0; i < size_; i++) {
+            poss_[i] = proxStream_->readVInt();          
+        }
+    }
+}
 
 CL_NS_END

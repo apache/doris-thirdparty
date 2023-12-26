@@ -86,6 +86,48 @@ private:
   IndexVersion indexVersion_ = IndexVersion::kV0; 
 };
 
+class TermPositionsBuffer {
+public:
+  TermPositionsBuffer(IndexVersion indexVersion)
+          : poss_(PFOR_BLOCK_SIZE + 3), indexVersion_(indexVersion) {}
+
+  ~TermPositionsBuffer() {
+    size_ = 0;
+    cur_pos_ = 0;
+    poss_.clear();
+    proxStream_ = nullptr;
+  }
+
+  void setProxPoint(CL_NS(store)::IndexInput* proxStream) {
+    proxStream_ = proxStream;
+  }
+
+  inline int32_t getPos() {
+    if (cur_pos_ >= size_) {
+      refill();
+    }
+    return poss_[cur_pos_++];
+  }
+
+  void clear() {
+    size_ = 0;
+    cur_pos_ = 0;
+  }
+
+private:
+  void refill();
+
+private:
+  uint32_t size_ = 0;
+
+  uint32_t cur_pos_ = 0;
+  std::vector<uint32_t> poss_;
+
+  CL_NS(store)::IndexInput* proxStream_ = nullptr;
+
+  IndexVersion indexVersion_ = IndexVersion::kV2;
+};
+
 class SegmentTermDocs:public virtual TermDocs {
 protected:
   const SegmentReader* parent;
@@ -232,6 +274,9 @@ private:
   int32_t doc() const{ return SegmentTermDocs::doc(); }
   int32_t freq() const{ return SegmentTermDocs::freq(); }
   bool skipTo(const int32_t target){ return SegmentTermDocs::skipTo(target); }
+
+private:
+  TermPositionsBuffer buffer_;
 };
 
 

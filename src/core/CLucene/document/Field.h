@@ -333,7 +333,7 @@ protected:
 	uint32_t config;
 	float_t boost;
 
-	IndexVersion indexVersion_ = IndexVersion::kV1;
+	IndexVersion indexVersion_ = IndexVersion::kV2;
 };
 CL_NS_END
 #endif

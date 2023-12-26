@@ -51,10 +51,11 @@ private:
     std::string segment;// Current segment we are working on
     std::vector<uint32_t> docDeltaBuffer;
     std::vector<uint32_t> freqBuffer;
+    std::vector<uint32_t> positionBuffer;
     std::ostream* infoStream{};
     int64_t ramBufferSize;
     bool hasProx_ = false;
-    IndexVersion indexVersion_ = IndexVersion::kV1;
+    IndexVersion indexVersion_ = IndexVersion::kV2;
 
 public:
     class FieldMergeState;
