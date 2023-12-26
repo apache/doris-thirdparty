@@ -32,7 +32,6 @@ private:
 
 
     int64_t length;
-    int64_t sizeInBytes;// Only maintained if in a directory; updates synchronized on directory
 
     // This is publicly modifiable via Directory::touchFile(), so direct access not supported
     uint64_t lastModified;
@@ -64,6 +63,8 @@ public:
     int64_t getSizeInBytes() const;
 
     friend class RAMDirectory;
+
+    int64_t sizeInBytes; // Only maintained if in a directory; updates synchronized on directory
 };
 
 class CLUCENE_EXPORT RAMOutputStream : public IndexOutput {
@@ -89,9 +90,9 @@ public:
     /** Construct an empty output buffer. */
     virtual ~RAMOutputStream();
 
-    virtual void close();
+    virtual void close() override;
 
-    int64_t length() const;
+    int64_t length() const override;
     /** Resets this to an empty buffer. */
     void reset();
     /** Copy the current contents of this buffer to the named output. */
@@ -102,11 +103,11 @@ public:
     void writeBytes(const uint8_t *b, int32_t len) override;
     void writeBytes(const uint8_t *b, int32_t len, int32_t offset) override;
 
-    void seek(const int64_t pos);
+    void seek(const int64_t pos) override;
 
-    void flush();
+    void flush()override;
 
-    int64_t getFilePointer() const;
+    int64_t getFilePointer() const override;
 
     const char *getObjectName();
     static const char *getClassName();
