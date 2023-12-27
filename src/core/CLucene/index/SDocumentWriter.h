@@ -6,6 +6,7 @@
 #define _lucene_index_SDocumentsWriter_
 
 #include "CLucene/_ApiHeader.h"
+#include "CLucene/index/IndexWriter.h"
 #include "CLucene/store/Directory.h"
 #include "CLucene/store/_RAMDirectory.h"
 #include "CLucene/util/Array.h"
@@ -53,6 +54,9 @@ private:
     std::vector<uint32_t> freqBuffer;
     std::ostream* infoStream{};
     int64_t ramBufferSize;
+    // Flush @ this number of docs.  If rarmBufferSize is
+    // non-zero we will flush by RAM usage instead.
+    int32_t maxBufferedDocs;
     bool hasProx_ = false;
     IndexVersion indexVersion_ = IndexVersion::kV1;
 
@@ -679,6 +683,7 @@ public:
         postingsFreeCountDW = postingsAllocCountDW = 0;
         docStoreOffset = nextDocID = numDocsInRAM = numDocsInStore = nextWriteDocID = 0;
         ramBufferSize = (int64_t) (256 * 1024 * 1024);
+        maxBufferedDocs = IndexWriter::DEFAULT_MAX_BUFFERED_DOCS;
     }
     virtual ~SDocumentsWriter();
     int32_t flush(bool closeDocStore) override ;
@@ -730,7 +735,7 @@ public:
         return segmentFileName(string(extension));
     }
     int32_t getMaxBufferedDocs() override {
-        return 0;
+        return maxBufferedDocs;
     }
 
     int32_t getNumDocsInRAM() override {
@@ -748,7 +753,9 @@ public:
         return 0;
     }
     void abort(AbortException *ae) override {}
-    void setMaxBufferedDocs(int32_t count) override {}
+    void setMaxBufferedDocs(int32_t count) override {
+        maxBufferedDocs = count;
+    }
     void setInfoStream(std::ostream *is) override {
         this->infoStream = is;
     }

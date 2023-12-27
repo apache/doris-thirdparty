@@ -142,6 +142,13 @@ typename SDocumentsWriter<T>::ThreadState *SDocumentsWriter<T>::getThreadState(D
     // Only increment nextDocID & numDocsInRAM on successful init
     nextDocID++;
     numDocsInRAM++;
+    // We must at this point commit to flushing to ensure we
+    // always get N docs when we flush by doc count, even if
+    // > 1 thread is adding documents:
+    if (!flushPending && maxBufferedDocs != IndexWriter::DISABLE_AUTO_FLUSH && numDocsInRAM >= maxBufferedDocs) {
+        flushPending = true;
+        threadState->doFlushAfter = true;
+    }
 
     return threadState;
 }
