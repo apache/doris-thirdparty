@@ -93,8 +93,8 @@ protected:
   int32_t count;
   int32_t df;
   CL_NS(util)::BitSet* deletedDocs;
-  int32_t _doc;
-  int32_t _freq;
+  int32_t _doc = -1;
+  int32_t _freq = 0;
   int32_t docs[PFOR_BLOCK_SIZE];	  // buffered doc numbers
   int32_t freqs[PFOR_BLOCK_SIZE];	  // buffered term freqs
   int32_t pointer;
