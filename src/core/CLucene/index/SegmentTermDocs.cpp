@@ -19,7 +19,7 @@
 CL_NS_DEF(index)
 
 SegmentTermDocs::SegmentTermDocs(const SegmentReader *_parent) : parent(_parent), freqStream(_parent->freqStream->clone()),
-                                                                 count(0), df(0), deletedDocs(_parent->deletedDocs), _doc(0), _freq(0), skipInterval(_parent->tis->getSkipInterval()),
+                                                                 count(0), df(0), deletedDocs(_parent->deletedDocs), _doc(-1), _freq(0), skipInterval(_parent->tis->getSkipInterval()),
                                                                  maxSkipLevels(_parent->tis->getMaxSkipLevels()), skipListReader(NULL), freqBasePointer(0), proxBasePointer(0),
                                                                  skipPointer(0), haveSkipped(false), pointer(0), pointerMax(0), indexVersion_(_parent->_fieldInfos->getIndexVersion()),
                                                                  hasProx(_parent->_fieldInfos->hasProx()), buffer_(freqStream, hasProx, indexVersion_) {
@@ -73,7 +73,7 @@ void SegmentTermDocs::seek(const TermInfo *ti, Term *term) {
         df = 0;
     } else {// punt case
         df = ti->docFreq;
-        _doc = 0;
+        _doc = -1;
         freqBasePointer = ti->freqPointer;
         proxBasePointer = ti->proxPointer;
         skipPointer = freqBasePointer + ti->skipOffset;
