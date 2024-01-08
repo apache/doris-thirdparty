@@ -82,7 +82,7 @@ jobs:
           cd /tmp
 
           curl -L https://sourceforge.net/projects/libpng/files/zlib/1.2.11/zlib-1.2.11.tar.gz | tar -zxf -
-          curl -L https://github.com/boostorg/boost/releases/download/boost-1.81.0/boost-1.81.0.tar.gz -o - | tar -zxf -
+          curl -L https://archives.boost.io/release/1.81.0/source/boost_1_81_0.tar.gz -o - | tar -zxf -
 
           if [[ "${{ matrix.config.name }}" == 'macOS' ]]; then
             pushd "$(brew --repo)"
