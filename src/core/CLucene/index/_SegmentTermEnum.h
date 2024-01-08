@@ -55,7 +55,8 @@ protected:
 
 public:
 	///Constructor
-	SegmentTermEnum(CL_NS(store)::IndexInput* i, FieldInfos* fis, const bool isi, int32_t in_format = -1);
+	SegmentTermEnum(CL_NS(store)::IndexInput* i, FieldInfos* fis, const bool isi);
+        void init(int32_t in_format = -1);
 
 	///Destructor
 	~SegmentTermEnum();
