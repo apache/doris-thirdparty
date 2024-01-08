@@ -257,7 +257,12 @@ SegmentReader *SegmentReader::get(Directory *dir, SegmentInfo *si,
     instance->init(dir, sis, closeDir);
     // TODO: make this configurable...
     bool fieldsReaderExist = false;
-    instance->initialize(si, readBufferSize == -1 ? BufferedIndexInput::BUFFER_SIZE : readBufferSize, doOpenStores, fieldsReaderExist);
+    try {
+        instance->initialize(si, readBufferSize == -1 ? BufferedIndexInput::BUFFER_SIZE : readBufferSize, doOpenStores, fieldsReaderExist);
+    } catch (CLuceneError& e) {
+        _CLDELETE(instance)
+        throw e;
+    }
     return instance;
 }
 

@@ -35,12 +35,13 @@ CL_NS_DEF(store)
   		close();
   }
 
-  void BufferedIndexOutput::close(){
-    flush();
-    _CLDELETE_ARRAY( buffer );
-
-    bufferStart = 0;
-    bufferPosition = 0;
+  void BufferedIndexOutput::close() {
+      // flush may throw error here, if we do not delete buffer for all circumstances,
+      // we may close again in destructor above, that would cause pure virtual function call for flushBuffer
+      try {
+          flush();
+      }
+      _CLFINALLY(_CLDELETE_ARRAY(buffer); bufferStart = 0; bufferPosition = 0;)
   }
 
   void BufferedIndexOutput::writeByte(const uint8_t b) {
