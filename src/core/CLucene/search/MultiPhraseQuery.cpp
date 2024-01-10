@@ -211,8 +211,8 @@ Query* MultiPhraseQuery::rewrite(IndexReader* /*reader*/) {
 	  ArrayBase<Term*>* terms = termArrays->at(0);
 	  BooleanQuery* boq = _CLNEW BooleanQuery(true);
     for ( size_t i=0;i<terms->length;i++ ){
-		  boq->add(_CLNEW TermQuery((*terms)[i]), BooleanClause::SHOULD);
-	  }
+		  boq->add(_CLNEW TermQuery((*terms)[i]), true, BooleanClause::SHOULD);
+		}
 	  boq->setBoost(getBoost());
 	  return boq;
   } else {
