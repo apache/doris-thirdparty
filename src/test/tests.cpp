@@ -48,6 +48,7 @@ unittest tests[] = {
 //        {"termvectorsreader", testTermVectorsReader},
         {"strconvert", testStrConvert},
         {"searchRange", testSearchRange},
+        {"MultiPhraseQuery", testMultiPhraseQuery},
 #ifdef TEST_CONTRIB_LIBS
         {"chinese", testchinese},
 #endif

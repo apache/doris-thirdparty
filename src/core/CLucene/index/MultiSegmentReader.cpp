@@ -561,6 +561,10 @@ int32_t MultiTermDocs::docFreq() {
 
 int32_t MultiTermDocs::doc() const {
   CND_PRECONDITION(current!=NULL,"current==NULL, check that next() was called");
+  // if not found term, current will return INT_MAX, we could not add base, otherwise it will overflow.
+  if (current->doc() == LUCENE_INT32_MAX_SHOULDBE) {
+      return LUCENE_INT32_MAX_SHOULDBE;
+  }
   return base + current->doc();
 }
 int32_t MultiTermDocs::freq() const {

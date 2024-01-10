@@ -102,6 +102,7 @@ SET(test_files ./tests.cpp
         ./util/TestStringBuffer.cpp
         ./util/English.cpp
         ./util/TestStrConvert.cpp
+        ./query/TestMultiPhraseQuery.cpp
         ${test_HEADERS})
 IF (USE_SHARED_OBJECT_FILES)
     GET_SHARED_FILES(clucene_shared_Files)

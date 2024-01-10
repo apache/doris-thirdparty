@@ -826,6 +826,9 @@ string SegmentInfo::segString(Directory* dir) {
           // Try not to leave a truncated segments_N file in
           // the index:
           directory->deleteFile(segmentFileName.c_str());
+          if (output != nullptr) {
+              _CLDELETE(output);
+          }
         }
       )
     )
