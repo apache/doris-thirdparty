@@ -325,9 +325,20 @@ public:
     void writeFields(lucene::store::Directory* d, std::string segment);
     // merge terms and write files
     void mergeTerms(bool hasProx);
+    // merge null_bitmap
+    void mergeNullBitmap(std::vector<std::vector<uint32_t>> srcBitmapValues, std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList);
 
     // Compare current index with the other
     void compareIndexes(lucene::store::Directory* other);
+
+    // only for tests
+    void setNumDestIndexes(int32_t num_dest_indexes) {
+        numDestIndexes = num_dest_indexes;
+    }
+    // only for tests
+    void setTransVec(std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec) {
+      _trans_vec = std::move(trans_vec);
+    }
 
 	// Release the write lock, if needed.
 	SegmentInfos* segmentInfos;
@@ -413,6 +424,11 @@ public:
    * Name of the write lock in the index.
    */
   static const char* WRITE_LOCK_NAME; //"write.lock";
+
+  /**
+   * Name of the null bitmap in the index.
+   */
+  static const char* NULL_BITMAP_FILE_NAME; //"null_bitmap";
 
   /**
    * @deprecated
