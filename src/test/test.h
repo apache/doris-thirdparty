@@ -83,6 +83,7 @@ CuSuite *teststandard95(void);
 CuSuite *testStrConvert(void);
 CuSuite *testSearchRange(void);
 CuSuite *testMultiPhraseQuery(void);
+CuSuite *testIndexCompaction(void);
 
 #ifdef TEST_CONTRIB_LIBS
 //CuSuite *testGermanAnalyzer(void);

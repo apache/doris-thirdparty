@@ -40,6 +40,13 @@
 #include <memory>
 #include <assert.h>
 #include <iostream>
+#include <roaring/roaring.hh>
+
+#define FINALLY_CLOSE_OUTPUT(x)       \
+    try {                             \
+        if (x != nullptr) x->close(); \
+    } catch (...) {                   \
+    }
 
 CL_NS_USE(store)
 CL_NS_USE(util)
@@ -50,6 +57,7 @@ CL_NS_DEF(index)
 
 int64_t IndexWriter::WRITE_LOCK_TIMEOUT = 1000;
 const char *IndexWriter::WRITE_LOCK_NAME = "write.lock";
+const char *IndexWriter::NULL_BITMAP_FILE_NAME = "null_bitmap";
 std::ostream *IndexWriter::defaultInfoStream = NULL;
 
 const int32_t IndexWriter::MERGE_READ_BUFFER_SIZE = 4096;
@@ -1255,17 +1263,42 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     int numIndices = src_dirs.size();
 
     //Set of IndexReaders
-    if (infoStream != NULL) {
+    if (infoStream != nullptr) {
         message(string("src index dir size: ") + Misc::toString(numIndices));
     }
+
+    // first level vector index is src_index_id
+    // second level vector index is src_doc_id
+    std::vector<std::vector<uint32_t>> srcNullBitmapValues(numIndices);
+    IndexInput* null_bitmap_in = nullptr;
     for (int32_t i = 0; i < numIndices; i++) {
         // One index dir may have more than one segment, so we change the code to open all segments by using IndexReader::open
         // To keep the number of readers consistent with the number of src dirs.
         // Using IndexWriter::segmentInfos will be incorrect when there are more than one segment in one index dir
         IndexReader* reader = lucene::index::IndexReader::open(src_dirs[i], MERGE_READ_BUFFER_SIZE, false);
         readers.push_back(reader);
-        if (infoStream != NULL) {
+        if (infoStream != nullptr) {
             message(src_dirs[i]->toString());
+        }
+
+        // read null_bitmap and store values in srcBitmapValues
+        try {
+            if (src_dirs[i]->fileExists(NULL_BITMAP_FILE_NAME)) {
+                // get null_bitmap index input
+                null_bitmap_in = src_dirs[i]->openInput(NULL_BITMAP_FILE_NAME);
+                size_t null_bitmap_size = null_bitmap_in->length();
+                std::string buf;
+                buf.resize(null_bitmap_size);
+                null_bitmap_in->readBytes(reinterpret_cast<uint8_t*>(const_cast<char*>(buf.data())), null_bitmap_size);
+                auto null_bitmap = roaring::Roaring::read(buf.data(), false);
+                null_bitmap.runOptimize();
+                for (unsigned int v : null_bitmap) {
+                    srcNullBitmapValues[i].emplace_back(v);
+                }
+                FINALLY_CLOSE_OUTPUT(null_bitmap_in);
+            }
+        } catch (CLuceneError &e) {
+            FINALLY_CLOSE_OUTPUT(null_bitmap_in);
         }
     }
     assert(readers.size() == numIndices);
@@ -1302,6 +1335,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     docStoreSegment.clear();
 
     std::vector<lucene::index::IndexWriter *> destIndexWriterList;
+    std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList;
     try {
         /// merge fields
         mergeFields(hasProx);
@@ -1345,10 +1379,17 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
             skipInterval = termInfosWriter->skipInterval;
             maxSkipLevels = termInfosWriter->maxSkipLevels;
             skipListWriterList.push_back(_CLNEW DefaultSkipListWriter(skipInterval, maxSkipLevels, (int) dest_index_docs[j], freqOutputList[j], proxOutputList[j]));
+
+            // create null_bitmap index output
+            auto* null_bitmap_out = dest_dir->createOutput(NULL_BITMAP_FILE_NAME);
+            nullBitmapIndexOutputList.push_back(null_bitmap_out);
         }
 
         /// merge terms
         mergeTerms(hasProx);
+
+        /// merge null_bitmap
+        mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
     } catch (CLuceneError &e) {
         throw e;
     }
@@ -1387,6 +1428,13 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
                     _CLDELETE(r);
                 }
             } readers.clear(););
+            for (auto* null_bitmap_out
+                 : nullBitmapIndexOutputList) {
+                if (null_bitmap_out != nullptr) {
+                    null_bitmap_out->close();
+                    _CLDELETE(null_bitmap_out);
+                }
+            } nullBitmapIndexOutputList.clear();
 
     // update segment infos of dest index_writer in memory
     // close dest index writer
@@ -1815,6 +1863,49 @@ void IndexWriter::mergeTerms(bool hasProx) {
     if (queue != NULL) {
         queue->close();
         _CLDELETE(queue);
+    }
+}
+
+void IndexWriter::mergeNullBitmap(std::vector<std::vector<uint32_t>> srcNullBitmapValues, std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList) {
+    // first level vector index is dest_index_id
+    // second level vector index is dest_doc_id
+    std::vector<std::vector<uint32_t>> destNullBitmapValues(numDestIndexes);
+
+    // iterate srcNullBitmapValues to construct destNullBitmapValues
+    for (size_t i = 0; i < srcNullBitmapValues.size(); ++i) {
+        std::vector<uint32_t> &indexSrcBitmapValues = srcNullBitmapValues[i];
+        if (indexSrcBitmapValues.empty()) {
+            // empty indicates there is no null_bitmap file in this index
+            continue;
+        }
+        for (const auto& srcDocId : indexSrcBitmapValues) {
+            auto destIdx = _trans_vec[i][srcDocId].first;
+            auto destDocId = _trans_vec[i][srcDocId].second;
+            // <UINT32_MAX, UINT32_MAX> indicates current row not exist in Doris dest segment.
+            // So we ignore this doc here.
+            if (destIdx == UINT32_MAX || destDocId == UINT32_MAX) {
+                continue;
+            }
+            destNullBitmapValues[destIdx].emplace_back(destDocId);
+        }
+    }
+
+    // construct null_bitmap and write null_bitmap to dest index
+    for (size_t i = 0; i < destNullBitmapValues.size(); ++i) {
+        roaring::Roaring null_bitmap;
+        for (const auto& v : destNullBitmapValues[i]) {
+            null_bitmap.add(v);
+        }
+        // write null_bitmap file
+        auto* nullBitmapIndexOutput = nullBitmapIndexOutputList[i];
+        null_bitmap.runOptimize();
+        size_t size = null_bitmap.getSizeInBytes(false);
+        if (size > 0) {
+            std::string buf;
+            buf.resize(size);
+            null_bitmap.write(reinterpret_cast<char*>(buf.data()), false);
+            nullBitmapIndexOutput->writeBytes(reinterpret_cast<uint8_t*>(buf.data()), size);
+        }
     }
 }
 
