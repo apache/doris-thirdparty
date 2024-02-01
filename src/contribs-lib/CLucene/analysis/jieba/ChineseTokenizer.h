@@ -14,14 +14,25 @@
 CL_NS_DEF2(analysis,jieba)
 CL_NS_USE(analysis)
 
+struct ChineseDict {
+    std::string dictPath_;
+    std::vector<std::string> files_ = {
+        "jieba.dict.utf8",
+        "hmm_model.utf8",
+        "user.dict.utf8",
+        "idf.utf8",
+        "stop_words.utf8"
+    };
+};
+
 class JiebaSingleton {
 public:
-    static cppjieba::Jieba& getInstance(const std::string& dictPath = "") {
-        static cppjieba::Jieba instance(dictPath + "/" + "jieba.dict.utf8",
-                                        dictPath + "/" + "hmm_model.utf8",
-                                        dictPath + "/" + "user.dict.utf8",
-                                        dictPath + "/" + "idf.utf8",
-                                        dictPath + "/" + "stop_words.utf8");
+    static cppjieba::Jieba& getInstance(const ChineseDict* dict = nullptr) {
+        static cppjieba::Jieba instance(dict->dictPath_ + "/" + dict->files_[0],
+                                        dict->dictPath_ + "/" + dict->files_[1],
+                                        dict->dictPath_ + "/" + dict->files_[2],
+                                        dict->dictPath_ + "/" + dict->files_[3],
+                                        dict->dictPath_ + "/" + dict->files_[4]);
         return instance;
     }
 
@@ -46,7 +57,7 @@ public:
     // Constructor
     explicit ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode mode);
     explicit ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode mode, bool lowercase);
-    static void init(const std::string& dictPath="");
+    static void init(const ChineseDict* chineseDict);
 
     // Destructor
     ~ChineseTokenizer() override = default;
