@@ -89,23 +89,21 @@ void TestMSBRadixSorter::testOneValue()
 void TestMSBRadixSorter::testNValues()
 {
     const int n = 1000;
-    std::vector<uint8_t> scratch(4);
     auto y = std::vector<BytesRef>();
     auto z = std::vector<BytesRef>();
 
     for (int docID = 0; docID < n; docID++) {
+        std::vector<uint8_t> scratch(4);
         NumericUtils::intToSortableBytes(docID, scratch, 0);
-        BytesRef x1(scratch);
-        y.emplace_back(x1);
+        y.emplace_back(scratch);
     }
-    //for (int docID = 0; docID <n; docID++) {
     for (int docID = n-1; docID >= 0; docID--) {
+        std::vector<uint8_t> scratch(4);
         NumericUtils::intToSortableBytes(docID, scratch, 0);
-        BytesRef x1(scratch);
-        z.emplace_back(x1);
+        z.emplace_back(scratch);
     }
 
-    test(y,z, n);
+    test(y, z, n);
 }
 
 void testSorter(CuTest *tc) {
