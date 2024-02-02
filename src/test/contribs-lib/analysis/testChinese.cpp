@@ -362,6 +362,7 @@ void testSimpleJiebaTokenizer2(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Default);
+    a.initDict("./dict");
     ts = a.tokenStream(_T("contents"), stringReader.get());
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -393,6 +394,7 @@ void testSimpleJiebaTokenizer3(CuTest* tc) {
     a.setLanguage(_T("chinese"));
     a.setStem(false);
     a.setMode(lucene::analysis::AnalyzerMode::Default);
+    a.initDict("./dict");
     ts = a.tokenStream(_T("contents"), stringReader.get());
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -412,6 +414,7 @@ void testSimpleJiebaTokenizer4(CuTest* tc) {
     //test with chinese
     a.setLanguage(_T("chinese"));
     a.setStem(false);
+    a.initDict("./dict");
     ts = a.tokenStream(_T("contents"), stringReader.get());
 
     CLUCENE_ASSERT(ts->next(&t) != NULL);
@@ -509,6 +512,7 @@ void testJiebaMatch(CuTest* tc) {
         auto analyzer = std::make_unique<lucene::analysis::LanguageBasedAnalyzer>();
         analyzer->setLanguage(L"chinese");
         analyzer->setMode(lucene::analysis::AnalyzerMode::Default);
+        analyzer->initDict("./dict");
         IndexWriter w(&dir, analyzer.get(), true);
         w.setUseCompoundFile(false);
 
@@ -596,6 +600,7 @@ void testJiebaMatch2(CuTest* tc) {
     auto analyzer = std::make_unique<lucene::analysis::LanguageBasedAnalyzer>();
     analyzer->setLanguage(L"chinese");
     analyzer->setMode(lucene::analysis::AnalyzerMode::Default);
+    analyzer->initDict("./dict");
 
     IndexWriter w(&dir, analyzer.get(), true);
     w.setUseCompoundFile(false);
