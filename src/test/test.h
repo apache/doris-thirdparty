@@ -155,7 +155,7 @@ void TestAssertIndexReaderEquals(CuTest *tc,  IndexReader* reader1, IndexReader*
 
 extern unittest tests[];
 
-#define CLUCENE_DATA_LOCATION1 "./data/"
+#define CLUCENE_DATA_LOCATION1 "../../src/test/data/"
 #define CLUCENE_DATA_LOCATION2 "../src/test/data/"
 #define CLUCENE_DATA_LOCATION3 "../../../src/test/data/"
 #define CLUCENE_DATA_LOCATIONENV "srcdir"

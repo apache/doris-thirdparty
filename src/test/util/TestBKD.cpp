@@ -36,30 +36,25 @@ void TestVisitor1::visit(int docID) {
     }
 }
 
-int TestVisitor1::matches(uint8_t* packedValue) {
+bool TestVisitor1::matches(uint8_t *packedValue) {
     std::vector<uint8_t> result(4);
     std::copy(packedValue, packedValue + 4, result.begin());
     int x = NumericUtils::sortableBytesToInt(result, 0);
     if (x >= queryMin && x <= queryMax) {
-        return 0;
+        return true;
     }
-    if (x < queryMin) {
-        return -1;
-    }
-    if (x > queryMax) {
-        return 1;
-    }
+    return false;
 }
 
 void TestVisitor1::visit(roaring::Roaring *docID, std::vector<uint8_t> &packedValue) {
-    if (matches(packedValue.data()) != 0) {
+    if (!matches(packedValue.data())) {
         return;
     }
     visit(*docID);
 }
 
 void TestVisitor1::visit(bkd::bkd_docid_set_iterator *iter, std::vector<uint8_t> &packedValue) {
-    if (matches(packedValue.data()) != 0) {
+    if (!matches(packedValue.data())) {
         return;
     }
     int32_t docID = iter->docid_set->nextDoc();
@@ -69,7 +64,8 @@ void TestVisitor1::visit(bkd::bkd_docid_set_iterator *iter, std::vector<uint8_t>
     }
 }
 
-int TestVisitor1::visit(int docID, std::vector<uint8_t>& packedValue) {
+void TestVisitor1::visit(
+        int docID, std::vector<uint8_t> &packedValue) {
     int x = NumericUtils::sortableBytesToInt(packedValue, 0);
     if (0) {
         wcout << L"visit docID=" << docID << L" x=" << x << endl;
@@ -77,29 +73,17 @@ int TestVisitor1::visit(int docID, std::vector<uint8_t>& packedValue) {
     if (x >= queryMin && x <= queryMax) {
         //wcout << L"visit docID=" << docID << L" x=" << x << endl;
         hits->set(docID);
-        return 0;
     }
-    if (x < queryMin) {
-        return -1;
-    }
-    if (x > queryMax) {
-        return 1;
-    }
-    return 0;
 }
 
-lucene::util::bkd::relation TestVisitor1::compare_prefix(std::vector<uint8_t>& prefix) {
-    return lucene::util::bkd::relation::CELL_CROSSES_QUERY;
-}
-
-lucene::util::bkd::relation TestVisitor1::compare(std::vector<uint8_t>& minPacked,
-                                                  std::vector<uint8_t>& maxPacked) {
+lucene::util::bkd::relation TestVisitor1::compare(
+        std::vector<uint8_t> &minPacked, std::vector<uint8_t> &maxPacked) {
     int min = NumericUtils::sortableBytesToInt(minPacked, 0);
     int max = NumericUtils::sortableBytesToInt(maxPacked, 0);
     assert(max >= min);
     if (0) {
-        wcout << L"compare: min=" << min << L" max=" << max << L" vs queryMin=" << queryMin
-              << L" queryMax=" << queryMax << endl;
+        wcout << L"compare: min=" << min << L" max=" << max << L" vs queryMin="
+              << queryMin << L" queryMax=" << queryMax << endl;
     }
 
     if (max < queryMin || min > queryMax) {
@@ -111,284 +95,109 @@ lucene::util::bkd::relation TestVisitor1::compare(std::vector<uint8_t>& minPacke
     }
 }
 
-template <predicate QT>
-TestVisitor<QT>::TestVisitor(const uint8_t* qMin, const uint8_t* qMax, BitSet* h) {
+TestVisitor::TestVisitor(const uint8_t *qMin, const uint8_t *qMax,
+                         BitSet *h, predicate p) {
     queryMin = qMin;
     queryMax = qMax;
     hits = h;
+    pred = p;
 }
 
-template <predicate QT>
-int TestVisitor<QT>::matches(uint8_t* packed_value) {
-    bool all_greater_than_max = true;
-    bool all_within_range = true;
-
+bool TestVisitor::matches(uint8_t *packedValue) {
     for (int dim = 0; dim < reader->num_data_dims_; dim++) {
         int offset = dim * reader->bytes_per_dim_;
-
-        auto result_max = lucene::util::FutureArrays::CompareUnsigned(
-                packed_value, offset, offset + reader->bytes_per_dim_, queryMax, offset,
-                offset + reader->bytes_per_dim_);
-
-        auto result_min = lucene::util::FutureArrays::CompareUnsigned(
-                packed_value, offset, offset + reader->bytes_per_dim_, queryMin, offset,
-                offset + reader->bytes_per_dim_);
-
-        all_greater_than_max &= (result_max > 0);
-        all_within_range &= (result_min > 0 && result_max < 0);
-
-        if (!all_greater_than_max && !all_within_range) {
-            return -1;
-        }
-    }
-
-    if (all_greater_than_max) {
-        return 1;
-    } else if (all_within_range) {
-        return 0;
-    } else {
-        return -1;
-    }
-}
-
-template <>
-int TestVisitor<predicate::EQ>::matches(uint8_t* packed_value) {
-    // if query type is equal, query_min == query_max
-    if (reader->num_data_dims_ == 1) {
-        return std::memcmp(packed_value, queryMin, reader->bytes_per_dim_);
-    } else {
-        // if all dim value > matched value, then return > 0, otherwise return < 0
-        int return_result = 0;
-        for (int dim = 0; dim < reader->num_data_dims_; dim++) {
-            int offset = dim * reader->bytes_per_dim_;
-            auto result = lucene::util::FutureArrays::CompareUnsigned(
-                    packed_value, offset, offset + reader->bytes_per_dim_, queryMin, offset,
-                    offset + reader->bytes_per_dim_);
-            if (result < 0) {
-                return -1;
-            } else if (result > 0) {
-                return_result = 1;
+        if (pred == L) {
+            if (lucene::util::FutureArrays::CompareUnsigned(
+                        packedValue, offset, offset + reader->bytes_per_dim_, queryMax, offset,
+                        offset + reader->bytes_per_dim_) >= 0) {
+                // Doc's value is too high, in this dimension
+                return false;
+            }
+        } else if (pred == G) {
+            if (lucene::util::FutureArrays::CompareUnsigned(
+                        packedValue, offset, offset + reader->bytes_per_dim_, queryMin, offset,
+                        offset + reader->bytes_per_dim_) <= 0) {
+                // Doc's value is too high, in this dimension
+                return false;
+            }
+        } else {
+            if (lucene::util::FutureArrays::CompareUnsigned(
+                        packedValue, offset, offset + reader->bytes_per_dim_, queryMin, offset,
+                        offset + reader->bytes_per_dim_) < 0) {
+                // Doc's value is too low, in this dimension
+                return false;
+            }
+            if (lucene::util::FutureArrays::CompareUnsigned(
+                        packedValue, offset, offset + reader->bytes_per_dim_, queryMax, offset,
+                        offset + reader->bytes_per_dim_) > 0) {
+                // Doc's value is too high, in this dimension
+                return false;
             }
         }
-        return return_result;
     }
+    return true;
 }
 
-template <>
-int TestVisitor<predicate::L>::matches(uint8_t* packed_value) {
-    if (reader->num_data_dims_ == 1) {
-        auto result = std::memcmp(packed_value, queryMax, reader->bytes_per_dim_);
-        if (result >= 0) {
-            return 1;
-        }
-        return 0;
-    } else {
-        bool all_greater_or_equal = true;
-        bool all_lesser = true;
-
-        for (int dim = 0; dim < reader->num_data_dims_; dim++) {
-            int offset = dim * reader->bytes_per_dim_;
-            auto result = lucene::util::FutureArrays::CompareUnsigned(
-                    packed_value, offset, offset + reader->bytes_per_dim_, queryMax, offset,
-                    offset + reader->bytes_per_dim_);
-
-            all_greater_or_equal &=
-                    (result >= 0);      // Remains true only if all results are greater or equal
-            all_lesser &= (result < 0); // Remains true only if all results are lesser
-        }
-
-        // Return 1 if all values are greater or equal, 0 if all are lesser, otherwise -1
-        return all_greater_or_equal ? 1 : (all_lesser ? 0 : -1);
-    }
-}
-
-template <>
-int TestVisitor<predicate::LE>::matches(uint8_t* packed_value) {
-    if (reader->num_data_dims_ == 1) {
-        auto result = std::memcmp(packed_value, queryMax, reader->bytes_per_dim_);
-        if (result > 0) {
-            return 1;
-        }
-        return 0;
-    } else {
-        bool all_greater = true;
-        bool all_lesser_or_equal = true;
-
-        for (int dim = 0; dim < reader->num_data_dims_; dim++) {
-            int offset = dim * reader->bytes_per_dim_;
-            auto result = lucene::util::FutureArrays::CompareUnsigned(
-                    packed_value, offset, offset + reader->bytes_per_dim_, queryMax, offset,
-                    offset + reader->bytes_per_dim_);
-
-            all_greater &= (result > 0); // Remains true only if all results are greater
-            all_lesser_or_equal &=
-                    (result <= 0); // Remains true only if all results are lesser or equal
-        }
-
-        // Return 1 if all values are greater or equal, 0 if all are lesser, otherwise -1
-        return all_greater ? 1 : (all_lesser_or_equal ? 0 : -1);
-    }
-}
-
-template <>
-int TestVisitor<predicate::G>::matches(uint8_t* packed_value) {
-    if (reader->num_data_dims_ == 1) {
-        auto result = std::memcmp(packed_value, queryMin, reader->bytes_per_dim_);
-        if (result <= 0) {
-            return -1;
-        }
-        return 0;
-    } else {
-        for (int dim = 0; dim < reader->num_data_dims_; dim++) {
-            int offset = dim * reader->bytes_per_dim_;
-            auto result = lucene::util::FutureArrays::CompareUnsigned(
-                    packed_value, offset, offset + reader->bytes_per_dim_, queryMin, offset,
-                    offset + reader->bytes_per_dim_);
-            if (result <= 0) {
-                return -1;
-            }
-        }
-        return 0;
-    }
-}
-
-template <>
-int TestVisitor<predicate::GE>::matches(uint8_t* packed_value) {
-    if (reader->num_data_dims_ == 1) {
-        auto result = std::memcmp(packed_value, queryMin, reader->bytes_per_dim_);
-        if (result < 0) {
-            return -1;
-        }
-        return 0;
-    } else {
-        for (int dim = 0; dim < reader->num_data_dims_; dim++) {
-            int offset = dim * reader->bytes_per_dim_;
-            auto result = lucene::util::FutureArrays::CompareUnsigned(
-                    packed_value, offset, offset + reader->bytes_per_dim_, queryMin, offset,
-                    offset + reader->bytes_per_dim_);
-            if (result < 0) {
-                return -1;
-            }
-        }
-        return 0;
-    }
-}
-
-template <predicate QT>
-void TestVisitor<QT>::visit(int rowID) {
+void TestVisitor::visit(int rowID) {
     hits->set(rowID);
     if (0) {
         std::wcout << L"visit docID=" << rowID << std::endl;
     }
 }
 
-template <predicate QT>
-int TestVisitor<QT>::visit(int rowID, std::vector<uint8_t>& packedValue) {
+void TestVisitor::visit(int rowID, std::vector<uint8_t> &packedValue) {
     if (0) {
         int x = lucene::util::NumericUtils::sortableBytesToLong(packedValue, 0);
         std::wcout << L"visit docID=" << rowID << L" x=" << x << std::endl;
     }
-    auto result = matches(packedValue.data());
-    if (result != 0) {
-        return result;
+    if (matches(packedValue.data())) {
+        hits->set(rowID);
     }
-    hits->set(rowID);
-    return 0;
 }
 
-template <>
-lucene::util::bkd::relation TestVisitor<predicate::L>::compare(std::vector<uint8_t>& min_packed,
-                                                                std::vector<uint8_t>& max_packed) {
+lucene::util::bkd::relation TestVisitor::compare(std::vector<uint8_t> &minPacked,
+                                                 std::vector<uint8_t> &maxPacked) {
     bool crosses = false;
+
     for (int dim = 0; dim < reader->num_data_dims_; dim++) {
         int offset = dim * reader->bytes_per_dim_;
-        if (lucene::util::FutureArrays::CompareUnsigned(
-                    min_packed.data(), offset, offset + reader->bytes_per_dim_, queryMax, offset,
-                    offset + reader->bytes_per_dim_) >= 0) {
-            return lucene::util::bkd::relation::CELL_OUTSIDE_QUERY;
+
+        if (pred == L) {
+            if (lucene::util::FutureArrays::CompareUnsigned(
+                        minPacked.data(), offset, offset + reader->bytes_per_dim_, queryMax, offset,
+                        offset + reader->bytes_per_dim_) >= 0) {
+                return lucene::util::bkd::relation::CELL_OUTSIDE_QUERY;
+            }
+        } else if (pred == G) {
+            if (lucene::util::FutureArrays::CompareUnsigned(
+                        maxPacked.data(), offset, offset + reader->bytes_per_dim_, queryMin, offset,
+                        offset + reader->bytes_per_dim_) <= 0) {
+                return lucene::util::bkd::relation::CELL_OUTSIDE_QUERY;
+            }
+        } else {
+            if (lucene::util::FutureArrays::CompareUnsigned(
+                        minPacked.data(), offset, offset + reader->bytes_per_dim_, queryMax, offset,
+                        offset + reader->bytes_per_dim_) > 0 ||
+                lucene::util::FutureArrays::CompareUnsigned(
+                        maxPacked.data(), offset, offset + reader->bytes_per_dim_, queryMin, offset,
+                        offset + reader->bytes_per_dim_) < 0) {
+                return lucene::util::bkd::relation::CELL_OUTSIDE_QUERY;
+            }
         }
+
         crosses |= lucene::util::FutureArrays::CompareUnsigned(
-                           min_packed.data(), offset, offset + reader->bytes_per_dim_, queryMin,
+                           minPacked.data(), offset, offset + reader->bytes_per_dim_, queryMin,
                            offset, offset + reader->bytes_per_dim_) <= 0 ||
                    lucene::util::FutureArrays::CompareUnsigned(
-                           max_packed.data(), offset, offset + reader->bytes_per_dim_, queryMax,
+                           maxPacked.data(), offset, offset + reader->bytes_per_dim_, queryMax,
                            offset, offset + reader->bytes_per_dim_) >= 0;
     }
+
     if (crosses) {
         return lucene::util::bkd::relation::CELL_CROSSES_QUERY;
     } else {
         return lucene::util::bkd::relation::CELL_INSIDE_QUERY;
     }
-}
-
-template <>
-lucene::util::bkd::relation TestVisitor<predicate::G>::compare(std::vector<uint8_t>& min_packed,
-                                                                std::vector<uint8_t>& max_packed) {
-    bool crosses = false;
-    for (int dim = 0; dim < reader->num_data_dims_; dim++) {
-        int offset = dim * reader->bytes_per_dim_;
-        if (lucene::util::FutureArrays::CompareUnsigned(
-                    max_packed.data(), offset, offset + reader->bytes_per_dim_, queryMin, offset,
-                    offset + reader->bytes_per_dim_) <= 0) {
-            return lucene::util::bkd::relation::CELL_OUTSIDE_QUERY;
-        }
-        crosses |= lucene::util::FutureArrays::CompareUnsigned(
-                           min_packed.data(), offset, offset + reader->bytes_per_dim_, queryMin,
-                           offset, offset + reader->bytes_per_dim_) <= 0 ||
-                   lucene::util::FutureArrays::CompareUnsigned(
-                           max_packed.data(), offset, offset + reader->bytes_per_dim_, queryMax,
-                           offset, offset + reader->bytes_per_dim_) >= 0;
-    }
-    if (crosses) {
-        return lucene::util::bkd::relation::CELL_CROSSES_QUERY;
-    } else {
-        return lucene::util::bkd::relation::CELL_INSIDE_QUERY;
-    }
-}
-
-template <predicate QT>
-lucene::util::bkd::relation TestVisitor<QT>::compare(std::vector<uint8_t>& min_packed,
-                                                     std::vector<uint8_t>& max_packed) {
-    bool crosses = false;
-    for (int dim = 0; dim < reader->num_data_dims_; dim++) {
-        int offset = dim * reader->bytes_per_dim_;
-        if (lucene::util::FutureArrays::CompareUnsigned(
-                    min_packed.data(), offset, offset + reader->bytes_per_dim_, queryMax, offset,
-                    offset + reader->bytes_per_dim_) > 0 ||
-            lucene::util::FutureArrays::CompareUnsigned(
-                    max_packed.data(), offset, offset + reader->bytes_per_dim_, queryMin, offset,
-                    offset + reader->bytes_per_dim_) < 0) {
-            return lucene::util::bkd::relation::CELL_OUTSIDE_QUERY;
-        }
-        crosses |= lucene::util::FutureArrays::CompareUnsigned(
-                           min_packed.data(), offset, offset + reader->bytes_per_dim_, queryMin,
-                           offset, offset + reader->bytes_per_dim_) < 0 ||
-                   lucene::util::FutureArrays::CompareUnsigned(
-                           max_packed.data(), offset, offset + reader->bytes_per_dim_, queryMax,
-                           offset, offset + reader->bytes_per_dim_) > 0;
-    }
-    if (crosses) {
-        return lucene::util::bkd::relation::CELL_CROSSES_QUERY;
-    } else {
-        return lucene::util::bkd::relation::CELL_INSIDE_QUERY;
-    }
-}
-
-template <predicate QT>
-lucene::util::bkd::relation TestVisitor<QT>::compare_prefix(std::vector<uint8_t>& prefix) {
-    if (lucene::util::FutureArrays::CompareUnsigned(prefix.data(), 0, prefix.size(), queryMax, 0,
-                                                    prefix.size()) > 0 ||
-        lucene::util::FutureArrays::CompareUnsigned(prefix.data(), 0, prefix.size(), queryMin, 0,
-                                                    prefix.size()) < 0) {
-        return lucene::util::bkd::relation::CELL_OUTSIDE_QUERY;
-    }
-    if (lucene::util::FutureArrays::CompareUnsigned(prefix.data(), 0, prefix.size(), queryMin, 0,
-                                                    prefix.size()) > 0 &&
-        lucene::util::FutureArrays::CompareUnsigned(prefix.data(), 0, prefix.size(), queryMax, 0,
-                                                    prefix.size()) < 0) {
-        return lucene::util::bkd::relation::CELL_INSIDE_QUERY;
-    }
-    return lucene::util::bkd::relation::CELL_CROSSES_QUERY;
 }
 
 Directory *getDirectory(int numPoints) {
@@ -470,7 +279,7 @@ void testSameInts1DRead(CuTest *tc) {
             r->intersect(v.get());
         } catch (CLuceneError &r) {
             //printf("something wrong in read\n");
-            printf("clucene error in testSameInts1DRead: %s\n", r.what());
+            printf("clucene error: %s\n", r.what());
         }
         for (int docID = 0; docID < N; docID++) {
             bool expected = docID >= queryMin && docID <= queryMax;
@@ -502,7 +311,7 @@ void testSameInts1DRead(CuTest *tc) {
 
 void testBug1Write(CuTest *tc) {
     const int N = 8;
-    Directory *dir(FSDirectory::getDirectory("testBug1"));
+    Directory *dir(FSDirectory::getDirectory("TestBKDTree"));
     shared_ptr<bkd::bkd_writer> w =
             make_shared<bkd::bkd_writer>(N, 1, 1, 4, 4, 100.0f, N, true);
     w->docs_seen_ = N;
@@ -522,9 +331,9 @@ void testBug1Write(CuTest *tc) {
 
     int64_t indexFP;
     {
-        std::unique_ptr<IndexOutput> out(dir->createOutput("bkd"));
-        std::unique_ptr<IndexOutput> meta_out(dir->createOutput("bkd_meta"));
-        std::unique_ptr<IndexOutput> index_out(dir->createOutput("bkd_index"));
+        std::unique_ptr<IndexOutput> out(dir->createOutput("bkd3"));
+        std::unique_ptr<IndexOutput> meta_out(dir->createOutput("bkd3_meta"));
+        std::unique_ptr<IndexOutput> index_out(dir->createOutput("bkd3_index"));
         try {
             indexFP = w->finish(out.get(), index_out.get());
             w->meta_finish(meta_out.get(), indexFP, 0);
@@ -539,15 +348,13 @@ void testBug1Write(CuTest *tc) {
 
 void testBug1Read(CuTest *tc) {
     uint64_t str = Misc::currentTimeMillis();
-    auto *dir = FSDirectory::getDirectory("testBug1");
+    Directory *dir(FSDirectory::getDirectory("TestBKDTree"));
     {
-        auto closeDirectory = true;
-        auto bkd_reader =
-                std::make_shared<lucene::util::bkd::bkd_reader>(dir, closeDirectory);
-        if (!bkd_reader->open()) {
-            printf("can not open bkd file\n");
-            exit(1);
-        }
+        IndexInput *in_(dir->openInput("bkd3"));
+        IndexInput *meta_in_(dir->openInput("bkd3_meta"));
+        IndexInput *index_in_(dir->openInput("bkd3_index"));
+
+        shared_ptr<bkd::bkd_reader> r = make_shared<bkd::bkd_reader>(in_);
         // Simple 1D range query:
         int value = 0;
         auto result = std::make_unique<BitSet>(10);
@@ -557,24 +364,27 @@ void testBug1Read(CuTest *tc) {
         const auto *max = reinterpret_cast<const uint8_t *>(value_bytes.data());
         const auto *min = reinterpret_cast<const uint8_t *>(value_bytes.data());
 
-        auto v = std::make_unique<TestVisitor<EQ>>(min, max, result.get());
+        auto v = std::make_unique<TestVisitor>(min, max, result.get(), EQ);
         try {
-            v->setReader(bkd_reader);
-            bkd_reader->intersect(v.get());
+            v->setReader(r);
+            r->read_meta(meta_in_);
+            //auto type = r->read_type();
+            CuAssertEquals(tc, 0, r->type);
+            r->read_index(index_in_);
+            r->intersect(v.get());
         } catch (CLuceneError &r) {
             //printf("something wrong in read\n");
-            printf("clucene error in testBug1Read: %s\n", r.what());
+            printf("clucene error: %s\n", r.what());
         }
         //printf("hits count=%d\n", result->count());
         CuAssertEquals(tc, result->count(), 6);
         //printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
     }
-    _CLLDECDELETE(dir)
 }
 
 void testLowCardinalInts1DWrite(CuTest *tc) {
     const int N = 1024 * 1024;
-    Directory *dir(FSDirectory::getDirectory("testLowCardinalInts1D"));
+    Directory *dir(FSDirectory::getDirectory("TestBKDTree"));
     shared_ptr<bkd::bkd_writer> w =
             make_shared<bkd::bkd_writer>(N, 1, 1, 4, 512, 100.0f, N, true);
     w->docs_seen_ = N;
@@ -592,9 +402,9 @@ void testLowCardinalInts1DWrite(CuTest *tc) {
     // equivalent: ORIGINAL LINE: try (org.apache.lucene.store.IndexOutput out =
     // dir.createOutput("bkd", org.apache.lucene.store.IOContext.DEFAULT))
     {
-        std::unique_ptr<IndexOutput> out(dir->createOutput("bkd"));
-        std::unique_ptr<IndexOutput> meta_out(dir->createOutput("bkd_meta"));
-        std::unique_ptr<IndexOutput> index_out(dir->createOutput("bkd_index"));
+        std::unique_ptr<IndexOutput> out(dir->createOutput("bkd2"));
+        std::unique_ptr<IndexOutput> meta_out(dir->createOutput("bkd2_meta"));
+        std::unique_ptr<IndexOutput> index_out(dir->createOutput("bkd2_index"));
 
         //auto metaOffset = w->MetaInit(out.get());
         try {
@@ -612,68 +422,68 @@ void testLowCardinalInts1DWrite(CuTest *tc) {
 void testLowCardinalInts1DRead2(CuTest *tc) {
     uint64_t str = Misc::currentTimeMillis();
     const int N = 1024 * 1024;
-    Directory *dir = FSDirectory::getDirectory("testLowCardinalInts1D");
+    Directory *dir(FSDirectory::getDirectory("TestBKDTree"));
     {
+        IndexInput *in_(dir->openInput("bkd2"));
+        IndexInput *meta_in_(dir->openInput("bkd2_meta"));
+        IndexInput *index_in_(dir->openInput("bkd2_index"));
 
-        auto closeDirectory = true;
-        auto bkd_reader =
-                std::make_shared<lucene::util::bkd::bkd_reader>(dir, closeDirectory);
-        if (!bkd_reader->open()) {
-            printf("can not open bkd file\n");
-            exit(1);
-        }
+        shared_ptr<bkd::bkd_reader> r = make_shared<bkd::bkd_reader>(in_);
         // Simple 1D range query:
         constexpr int queryMin = 0;  //std::numeric_limits<int>::min();
         constexpr int queryMax = 100;//std::numeric_limits<int>::max();
         auto hits = std::make_shared<BitSet>(N);
         auto v = std::make_unique<TestVisitor1>(queryMin, queryMax, hits);
         try {
-            bkd_reader->intersect(v.get());
+            r->read_meta(meta_in_);
+            //auto type = r->read_type();
+            CuAssertEquals(tc, 0, r->type);
+            r->read_index(index_in_);
+            r->intersect(v.get());
         } catch (CLuceneError &r) {
             //printf("something wrong in read\n");
-            printf("clucene error in testLowCardinalInts1DRead2: %s\n", r.what());
+            printf("clucene error: %s\n", r.what());
         }
         //printf("hits count=%d\n", hits->count());
         CuAssertEquals(tc, hits->count(), 12928);
         //printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
-        _CLLDECDELETE(dir)
     }
 }
 
 void testLowCardinalInts1DRead(CuTest *tc) {
     uint64_t str = Misc::currentTimeMillis();
     const int N = 1024 * 1024;
-    Directory *dir = FSDirectory::getDirectory("testLowCardinalInts1D");
+    Directory *dir(FSDirectory::getDirectory("TestBKDTree"));
     {
-        auto closeDirectory = true;
-        auto bkd_reader =
-                std::make_shared<lucene::util::bkd::bkd_reader>(dir, closeDirectory);
-        if (!bkd_reader->open()) {
-            printf("can not open bkd file\n");
-            exit(1);
-        }
+        IndexInput *in_(dir->openInput("bkd2"));
+        IndexInput *meta_in_(dir->openInput("bkd2_meta"));
+        IndexInput *index_in_(dir->openInput("bkd2_index"));
 
+        shared_ptr<bkd::bkd_reader> r = make_shared<bkd::bkd_reader>(in_);
         // Simple 1D range query:
         constexpr int queryMin = 0;//std::numeric_limits<int>::min();
         constexpr int queryMax = 1;//std::numeric_limits<int>::max();
         auto hits = std::make_shared<BitSet>(N);
         auto v = std::make_unique<TestVisitor1>(queryMin, queryMax, hits);
         try {
-            bkd_reader->intersect(v.get());
+            r->read_meta(meta_in_);
+            //auto type = r->read_type();
+            CuAssertEquals(tc, 0, r->type);
+            r->read_index(index_in_);
+            r->intersect(v.get());
         } catch (CLuceneError &r) {
             //printf("something wrong in read\n");
-            printf("clucene error in testLowCardinalInts1DRead: %s\n", r.what());
+            printf("clucene error: %s\n", r.what());
         }
         //printf("hits count=%d\n", hits->count());
         CuAssertEquals(tc, hits->count(), 256);
         //printf("\nFirst search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
-        _CLLDECDELETE(dir)
     }
 }
 
 void testBasicsInts1DWrite(CuTest *tc) {
     const int N = 1024 * 1024;
-    Directory *dir(FSDirectory::getDirectory("testBasicsInts1D"));
+    Directory *dir(FSDirectory::getDirectory("TestBKDTree"));
     shared_ptr<bkd::bkd_writer> w =
             make_shared<bkd::bkd_writer>(N, 1, 1, 4, 512, 100.0f, N, true);
     w->docs_seen_ = N;
@@ -710,26 +520,26 @@ void testBasicsInts1DWrite(CuTest *tc) {
 void testBasicsInts1DRead(CuTest *tc) {
     uint64_t str = Misc::currentTimeMillis();
     const int N = 1024 * 1024;
-    Directory *dir = FSDirectory::getDirectory("testBasicsInts1D");
+    Directory *dir(FSDirectory::getDirectory("TestBKDTree"));
     {
-        auto closeDirectory = true;
-        auto bkd_reader =
-                std::make_shared<lucene::util::bkd::bkd_reader>(dir, closeDirectory);
-        if (!bkd_reader->open()) {
-            printf("can not open bkd file\n");
-            exit(1);
-        }
-
+        IndexInput *in_(dir->openInput("bkd"));
+        IndexInput *meta_in_(dir->openInput("bkd_meta"));
+        IndexInput *index_in_(dir->openInput("bkd_index"));
+        shared_ptr<bkd::bkd_reader> r = make_shared<bkd::bkd_reader>(in_);
         // Simple 1D range query:
         constexpr int queryMin = 1024;
         constexpr int queryMax = std::numeric_limits<int>::max();
         auto hits = std::make_shared<BitSet>(N);
         auto v = std::make_unique<TestVisitor1>(queryMin, queryMax, hits);
         try {
-            bkd_reader->intersect(v.get());
+            r->read_meta(meta_in_);
+            //auto type = r->read_type();
+            CuAssertEquals(tc, 0, r->type);
+            r->read_index(index_in_);
+            r->intersect(v.get());
         } catch (CLuceneError &r) {
             //printf("something wrong in read\n");
-            printf("clucene error in testBasicsInts1DRead: %s\n", r.what());
+            printf("clucene error: %s\n", r.what());
         }
         for (int docID = 0; docID < N; docID++) {
             bool expected = docID >= queryMin && docID <= queryMax;
@@ -746,7 +556,7 @@ void testBasicsInts1DRead(CuTest *tc) {
         auto v1 = std::make_unique<TestVisitor1>(queryMin, queryMax, hits1);
         str = Misc::currentTimeMillis();
 
-        bkd_reader->intersect(v1.get());
+        r->intersect(v1.get());
         for (int docID = 0; docID < N; docID++) {
             bool expected = docID >= queryMin && docID <= queryMax;
             bool actual = hits1->get(N - docID - 1);
@@ -758,7 +568,7 @@ void testBasicsInts1DRead(CuTest *tc) {
         }
         //printf("\nSecond search time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
     }
-    //dir->close();
+    dir->close();
     _CLDECDELETE(dir);
 }
 
@@ -785,7 +595,7 @@ void testHttplogsRead(CuTest *tc) {
         const auto *max = reinterpret_cast<const uint8_t *>(scratch2.data());
         const auto *min = reinterpret_cast<const uint8_t *>(scratch.data());
 
-        auto v = std::make_unique<TestVisitor<G>>(min, max, result.get());
+        auto v = std::make_unique<TestVisitor>(min, max, result.get(), G);
         v->setReader(r);
         try {
             str = Misc::currentTimeMillis();
@@ -798,7 +608,7 @@ void testHttplogsRead(CuTest *tc) {
             //printf("\nsearch time taken: %d ms\n\n", (int32_t) (Misc::currentTimeMillis() - str));
         } catch (CLuceneError &r) {
             //printf("something wrong in read\n");
-            printf("clucene error in testHttplogsRead: %s\n", r.what());
+            printf("clucene error: %s\n", r.what());
         }
         //printf("result size = %d\n", result->count());
         CuAssertEquals(tc, result->count(), 8445);
@@ -886,7 +696,7 @@ void testSame(CuTest *tc) {
     {
         //std::shared_ptr<Directory> dir{getDirectory(10001)};
         const int N = 1024 * 1024;
-        Directory *dir(FSDirectory::getDirectory("testSame"));
+        Directory *dir(FSDirectory::getDirectory("TestBKDTree"));
         shared_ptr<bkd::bkd_writer> w =
                 make_shared<bkd::bkd_writer>(N, 1, 1, 4, 512, 100.0f, N, true);
 
@@ -914,13 +724,11 @@ void testSame(CuTest *tc) {
         // equivalent: ORIGINAL LINE: try (org.apache.lucene.store.IndexInput in =
         // dir.openInput("bkd", org.apache.lucene.store.IOContext.DEFAULT))
         {
-            auto closeDirectory = true;
-            auto bkd_reader =
-                    std::make_shared<lucene::util::bkd::bkd_reader>(dir, closeDirectory);
-            if (!bkd_reader->open()) {
-                printf("can not open bkd file\n");
-                exit(1);
-            }
+            IndexInput *in_(dir->openInput("bkd"));
+            IndexInput *meta_in_(dir->openInput("bkd_meta"));
+            IndexInput *index_in_(dir->openInput("bkd_index"));
+            //in_->seek(indexFP);
+            shared_ptr<bkd::bkd_reader> r = make_shared<bkd::bkd_reader>(in_);
 
             // Simple 1D range query:
             constexpr int queryMin = 100;
@@ -929,7 +737,11 @@ void testSame(CuTest *tc) {
             //std::shared_ptr<BitSet> hits;
             auto hits = std::make_shared<BitSet>(N);
             auto v = std::make_unique<TestVisitor1>(queryMin, queryMax, hits);
-            bkd_reader->intersect(v.get());
+            r->read_meta(meta_in_);
+            //auto type = r->read_type();
+            CuAssertEquals(tc, 0, r->type);
+            r->read_index(index_in_);
+            r->intersect(v.get());
 
             for (int docID = 0; docID < N; docID++) {
                 bool expected = (100 >= queryMin && 100 <= queryMax);
@@ -941,7 +753,7 @@ void testSame(CuTest *tc) {
                 //assertEquals(L"docID=" + to_wstring(docID), expected, actual);
             }
         }
-        //dir->close();
+        dir->close();
         _CLDECDELETE(dir);
     }
 }
@@ -953,7 +765,7 @@ void equal_predicate(std::shared_ptr<lucene::util::bkd::bkd_reader> r) {
     const auto *max = reinterpret_cast<const uint8_t *>(&value);
     const auto *min = reinterpret_cast<const uint8_t *>(&value);
 
-    auto v = std::make_unique<TestVisitor<EQ>>(min, max, result.get());
+    auto v = std::make_unique<TestVisitor>(min, max, result.get(), EQ);
     v->setReader(r);
     r->intersect(v.get());
     printf("count: %d\n", result->count());
@@ -976,7 +788,7 @@ void less_equal_predicate(std::shared_ptr<lucene::util::bkd::bkd_reader> r) {
         }
         const auto *max = reinterpret_cast<const uint8_t *>(&value);
 
-        auto v = std::make_unique<TestVisitor<LE>>(min.data(), max, result.get());
+        auto v = std::make_unique<TestVisitor>(min.data(), max, result.get(), LE);
         v->setReader(r);
         r->intersect(v.get());
         printf("\ncount: %d\n", result->count());
@@ -1002,7 +814,7 @@ void less_predicate(std::shared_ptr<lucene::util::bkd::bkd_reader> r) {
     }
     const auto *max = reinterpret_cast<const uint8_t *>(&value);
 
-    auto v = std::make_unique<TestVisitor<L>>(min.data(), max, result.get());
+    auto v = std::make_unique<TestVisitor>(min.data(), max, result.get(), L);
     v->setReader(r);
     r->intersect(v.get());
     printf("count: %d\n", result->count());
@@ -1024,7 +836,7 @@ void greater_equal_predicate(std::shared_ptr<lucene::util::bkd::bkd_reader> r) {
     }
     const auto *min = reinterpret_cast<const uint8_t *>(&value);
 
-    auto v = std::make_unique<TestVisitor<GE>>(min, max.data(), result.get());
+    auto v = std::make_unique<TestVisitor>(min, max.data(), result.get(), GE);
     v->setReader(r);
     r->intersect(v.get());
     printf("count: %d\n", result->count());
@@ -1046,7 +858,7 @@ void greater_predicate(std::shared_ptr<lucene::util::bkd::bkd_reader> r) {
     }
     const auto *min = reinterpret_cast<const uint8_t *>(&value);
 
-    auto v = std::make_unique<TestVisitor<G>>(min, max.data(), result.get());
+    auto v = std::make_unique<TestVisitor>(min, max.data(), result.get(), G);
     v->setReader(r);
     r->intersect(v.get());
     printf("count: %d\n", result->count());
