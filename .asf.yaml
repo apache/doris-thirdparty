@@ -67,5 +67,10 @@ github:
         contexts:
           - Build (Linux)
           - Build (macOS)
+
+  collaborators:
+    - airborne12
+    - zzzxl1993
+    
 notifications:
   pullrequests_status:  commits@doris.apache.org
