@@ -1,0 +1,118 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: Clucene UT
+
+on:
+  pull_request:
+    branches:
+    - clucene
+    - clucene-2.0
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  run_clucene_ut_linux:
+    name: CLucene UT (Linux)
+    runs-on: ubuntu-22.04
+    steps:
+    - name: "Checkout ${{ github.event.pull_request.number }} ${{ github.event.pull_request.head.sha }}"
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: "Prepare"
+      run: |
+        sudo apt update
+        sudo DEBIAN_FRONTEND=noninteractive apt install --yes \
+          'build-essential' \
+          'automake' \
+          'autoconf' \
+          'libtool-bin' \
+          'pkg-config' \
+          'cmake' \
+          'ninja-build' \
+          'ccache' \
+          'python-is-python3' \
+          'bison' \
+          'byacc' \
+          'flex' \
+          'binutils-dev' \
+          'libiberty-dev' \
+          'curl' \
+          'git' \
+          'zip' \
+          'unzip' \
+          'autopoint' \
+          'openjdk-11-jdk' \
+          'openjdk-11-jdk-headless' \
+          'maven'
+    - name: "Run"
+      run: |
+        set -x
+        mkdir build && cd build
+        cmake ../
+        make cl_test
+        cd bin/
+        ./cl_test
+      # - name: "Setup tmate session to debug"
+      #   if: ${{ failure() }}
+      #   uses: mxschmitt/action-tmate@v3
+      #   timeout-minutes: 30
+
+  run_clucene_ut_macos:
+    name: CLucene UT (MacOS)
+    runs-on: macos-12
+    steps:
+    - name: "Checkout ${{ github.event.pull_request.number }} ${{ github.event.pull_request.head.sha }}"
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: "Prepare"
+      run: |
+        brew install \
+          'automake' \
+          'autoconf' \
+          'libtool' \
+          'pkg-config' \
+          'texinfo' \
+          'coreutils' \
+          'gnu-getopt' \
+          'python@3' \
+          'cmake' \
+          'ninja' \
+          'ccache' \
+          'bison' \
+          'byacc' \
+          'gettext' \
+          'wget' \
+          'pcre' \
+          'openjdk@11' \
+          'maven' \
+          'node' \
+          'llvm@16'
+    - name: "Run"
+      run: |
+        set -x
+        mkdir build && cd build
+        cmake ../
+        make cl_test
+        cd bin/
+        ./cl_test
