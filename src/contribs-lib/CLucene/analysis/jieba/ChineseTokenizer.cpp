@@ -7,12 +7,14 @@ CL_NS_DEF2(analysis, jieba)
 CL_NS_USE(analysis)
 CL_NS_USE(util)
 
-ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m) : Tokenizer(reader), mode(m) {
-    reset(reader);
-    Tokenizer::lowercase = false;
-}
+ChineseTokenizer::ChineseTokenizer(lucene::util::Reader* reader, AnalyzerMode m)
+        : ChineseTokenizer(reader, m, false) {}
 
-ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m, bool lowercase) : Tokenizer(reader), mode(m) {
+ChineseTokenizer::ChineseTokenizer(lucene::util::Reader* reader, AnalyzerMode m, bool lowercase)
+        : Tokenizer(reader), mode(m) {
+    ChineseDict chineseDict;
+    jieba_ = JiebaSingleton::getInstance(&chineseDict);
+
     reset(reader);
     Tokenizer::lowercase = lowercase;
 }
@@ -51,13 +53,13 @@ void ChineseTokenizer::reset(lucene::util::Reader* reader) {
     
     switch (mode) {
         case AnalyzerMode::Search:
-            JiebaSingleton::getInstance().CutForSearch(buffer_, tokens_text, true);
+            jieba_->CutForSearch(buffer_, tokens_text, true);
             break;
         case AnalyzerMode::All:
-            JiebaSingleton::getInstance().CutAll(buffer_, tokens_text);
+            jieba_->CutAll(buffer_, tokens_text);
             break;
         case AnalyzerMode::Default:
-            JiebaSingleton::getInstance().Cut(buffer_, tokens_text, true);
+            jieba_->Cut(buffer_, tokens_text, true);
             break;
     }
 

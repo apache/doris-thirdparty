@@ -27,13 +27,13 @@ struct ChineseDict {
 
 class JiebaSingleton {
 public:
-    static cppjieba::Jieba& getInstance(const ChineseDict* dict = nullptr) {
+    static cppjieba::Jieba* getInstance(const ChineseDict* dict = nullptr) {
         static cppjieba::Jieba instance(dict->dictPath_ + "/" + dict->files_[0],
                                         dict->dictPath_ + "/" + dict->files_[1],
                                         dict->dictPath_ + "/" + dict->files_[2],
                                         dict->dictPath_ + "/" + dict->files_[3],
                                         dict->dictPath_ + "/" + dict->files_[4]);
-        return instance;
+        return &instance;
     }
 
 private:
@@ -52,6 +52,8 @@ private:
 
     std::string buffer_;
     std::vector<std::string_view> tokens_text;
+
+    cppjieba::Jieba* jieba_ = nullptr;
 
 public:
     // Constructor
