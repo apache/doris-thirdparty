@@ -28,8 +28,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_linux:
-    name: Build (Linux)
+  run_clucene_ut_linux:
+    name: CLucene UT (Linux)
     runs-on: ubuntu-22.04
     steps:
     - name: "Checkout ${{ github.event.pull_request.number }} ${{ github.event.pull_request.head.sha }}"
@@ -76,8 +76,8 @@ jobs:
       #   uses: mxschmitt/action-tmate@v3
       #   timeout-minutes: 30
 
-  build_macos:
-    name: Build (MacOS)
+  run_clucene_ut_macos:
+    name: CLucene UT (MacOS)
     runs-on: macos-12
     steps:
     - name: "Checkout ${{ github.event.pull_request.number }} ${{ github.event.pull_request.head.sha }}"
