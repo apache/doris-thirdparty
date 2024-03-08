@@ -39,7 +39,7 @@ class CLUCENE_INLINE_EXPORT PriorityQueue {
 			int32_t j = ((uint32_t)i) >> 1;
 			while (j > 0 && lessThan(node,heap[j])) {
 				heap[i] = heap[j];			  // shift parents down
-				i = j;
+				i = (size_t)j;
 				j = ((uint32_t)j) >> 1;
 			}
 			heap[i] = node;				  // install saved node

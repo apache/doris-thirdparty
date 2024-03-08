@@ -41,7 +41,7 @@ public:
 
 #if defined(__SSE2__) || defined(__aarch64__)
         const auto bytes_sse = sizeof(__m128i);
-        const auto src_end_sse = src_end - (src_end - src) % bytes_sse;
+        const auto src_end_sse = src_end - size_t(src_end - src) % bytes_sse;
 
         const auto v_not_case_lower_bound = _mm_set1_epi8(not_case_lower_bound - 1);
         const auto v_not_case_upper_bound = _mm_set1_epi8(not_case_upper_bound + 1);
@@ -243,7 +243,7 @@ public:
             }
         }
 
-        return n1 - n2;
+        return int(n1 - n2);
     }
 
     static inline int32_t utf8_byte_count(uint8_t c) {
@@ -275,10 +275,11 @@ public:
         int32_t bytes_in_char = 0;
         int32_t surplus_bytes = 0;
         uint32_t codepoint = 0;
-        for (uint8_t c : str) {
+        for (auto cc : str) {
+            char c = (char)cc;
             if (bytes_in_char == 0) {
                 if ((c & 0x80) == 0) {
-                    codepoint = c;
+                    codepoint = (uint32_t)c;
                     continue;
                 } else if ((c & 0xE0) == 0xC0) {
                     codepoint = c & 0x1F;
@@ -313,10 +314,10 @@ public:
         size_t i = 0;
         while (i < utf8_str.size()) {
             wchar_t wc = utf8_str[i];
-            int32_t n = utf8_byte_count(utf8_str[i]);
+            int32_t n = utf8_byte_count((uint8_t)utf8_str[i]);
             if ((n >= 1 && n <= 4) &&
-                (i + n <= utf8_str.size()) &&
-                validate_utf8(std::string_view(utf8_str.data() + i, n)) == 0) {
+                (i + (size_t)n <= utf8_str.size()) &&
+                validate_utf8(std::string_view(utf8_str.data() + i, (size_t)n)) == 0) {
                 if (n == 2) {
                     wc = ((utf8_str[i] & 0x1F) << 6) | (utf8_str[i + 1] & 0x3F);
                 } else if (n == 3) {
@@ -324,7 +325,7 @@ public:
                 } else if (n == 4) {
                     wc = ((utf8_str[i] & 0x07) << 18) | ((utf8_str[i + 1] & 0x3F) << 12) | ((utf8_str[i + 2] & 0x3F) << 6) | (utf8_str[i + 3] & 0x3F);
                 }
-                i += n;
+                i += (size_t)n;
             } else {
                 i += 1;
             }

@@ -12,7 +12,7 @@ class bkd_docid_set{
 public:
     static const int NO_MORE_DOCS = std::numeric_limits<int32_t>::max();
 
-    explicit bkd_docid_set(int32_t size) {
+    explicit bkd_docid_set(size_t size) {
         docids.resize(size);
     }
     int32_t length() const {
@@ -22,7 +22,7 @@ public:
         if (_idx == _length) {
             _docid = NO_MORE_DOCS;
         } else {
-            _docid = docids[_offset + _idx];
+            _docid = docids[size_t(_offset + _idx)];
             _idx++;
         }
         return _docid;
@@ -48,7 +48,7 @@ public:
     explicit bkd_docid_bitmap_set(int32_t size) {}
     ~bkd_docid_bitmap_set() = default;
     void add(std::vector<char>&& r, int pos) {
-        docids[pos] = r;
+        docids[size_t(pos)] = r;
         _offset++;
     }
     void add(std::vector<char>&& r) {
@@ -66,7 +66,7 @@ public:
         if (_idx == _length) {
             _docid = std::vector<char>(0);
         } else {
-            _docid = docids[_offset + _idx];
+            _docid = docids[size_t(_offset + _idx)];
             _idx++;
         }
         return _docid;
