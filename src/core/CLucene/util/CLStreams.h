@@ -196,7 +196,7 @@ public:
         this->init(_value, _length, copyData);
     }
     void init(const void *_value, int32_t _length, bool copyData = true) override {
-        const size_t length = _length;
+        const size_t length = (size_t)_length;
         this->pos = 0;
         if (copyData) {
             T *tmp = (T *) this->value;
