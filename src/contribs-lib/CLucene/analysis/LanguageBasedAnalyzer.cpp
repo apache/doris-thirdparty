@@ -4,6 +4,7 @@
 * Distributable under the terms of either the Apache License (Version 2.0) or
 * the GNU Lesser General Public License, as specified in the COPYING file.
 ------------------------------------------------------------------------------*/
+#include <fstream>
 #include "CLucene/_ApiHeader.h"
 
 #include "CLucene/analysis/Analyzers.h"
@@ -64,7 +65,18 @@ void LanguageBasedAnalyzer::setMode(AnalyzerMode m) {
 
 void LanguageBasedAnalyzer::initDict(const std::string &dictPath) {
     if (_tcscmp(lang, _T("chinese")) == 0) {
-        CL_NS2(analysis, jieba)::ChineseTokenizer::init(dictPath);
+        ChineseDict chineseDict;
+        chineseDict.dictPath_ = dictPath;
+
+        for (const auto& file : chineseDict.files_) {
+            std::string path = dictPath + "/" + file;
+            std::ifstream in(path);
+            if (!in.good()) {
+                _CLTHROWA(CL_ERR_IO, std::string("chinese tokenizer dict file not found: " + path).c_str());
+            }
+        }
+
+        CL_NS2(analysis, jieba)::ChineseTokenizer::init(&chineseDict);
     }
 }
 

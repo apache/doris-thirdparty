@@ -219,15 +219,15 @@ public:
 template <>
 inline size_t Token::termLength<char>(){
     if ( _termTextLen == -1 ) //it was invalidated by growBuffer
-        _termTextLen = strlen((char*)_buffer);
-    return _termTextLen;
+        _termTextLen = (int32_t)strlen((char*)_buffer);
+    return (size_t)_termTextLen;
 };
 
 template <>
 inline size_t Token::termLength<TCHAR>(){
     if ( _termTextLen == -1 ) //it was invalidated by growBuffer
-        _termTextLen = wcslen((TCHAR*)_buffer);
-    return _termTextLen;
+        _termTextLen = (int32_t)wcslen((TCHAR*)_buffer);
+    return (size_t)_termTextLen;
 };
 
 class CLUCENE_EXPORT TokenStream {

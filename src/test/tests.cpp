@@ -16,6 +16,8 @@ unittest tests[] = {
         {"MSBRadixSorter",testMSBRadixSorter},
         {"strconvert", testStrConvert},
         {"searchRange", testSearchRange},
+        {"MultiPhraseQuery", testMultiPhraseQuery},
+        {"IndexCompaction", testIndexCompaction},
 #ifdef TEST_CONTRIB_LIBS
         {"chinese", testchinese},
 #endif

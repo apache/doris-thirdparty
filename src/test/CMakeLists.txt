@@ -85,6 +85,7 @@ SET(test_files ./tests.cpp
         ./search/spans/TestSpanExplanations.h
         ./search/spans/TestSpanExplanationsOfNonMatches.cpp
         ./search/spans/TestSpanExplanationsOfNonMatches.h
+        ./index/TestIndexCompaction.cpp
         ./index/TestIndexModifier.cpp
         ./index/TestIndexWriter.cpp
         ./index/TestIndexModifier.cpp
@@ -102,6 +103,7 @@ SET(test_files ./tests.cpp
         ./util/TestStringBuffer.cpp
         ./util/English.cpp
         ./util/TestStrConvert.cpp
+        ./query/TestMultiPhraseQuery.cpp
         ${test_HEADERS})
 IF (USE_SHARED_OBJECT_FILES)
     GET_SHARED_FILES(clucene_shared_Files)
