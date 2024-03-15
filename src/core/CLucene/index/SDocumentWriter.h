@@ -390,6 +390,8 @@ public:
         /** Tokenizes the fields of a document into Postings */
         void processDocument(CL_NS(analysis)::Analyzer *sanalyzer);
 
+        void resetCurrentFieldData(CL_NS(document)::Document *doc);
+
         /** If there are fields we've seen but did not see again
       *  in the last run, then free them up.  Also reduce
       *  postings hash size. */

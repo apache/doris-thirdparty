@@ -85,6 +85,13 @@ CL_NS_DEF(document)
       return boost;
    }
 
+   void Document::setNeedResetFieldData(bool needResetFieldData) {
+       this->needResetFieldData = needResetFieldData;
+   }
+
+        bool Document::getNeedResetFieldData() const {
+         return needResetFieldData;
+        }
 
 	 Field* Document::getField(const TCHAR* name) const{
     CND_PRECONDITION(name != NULL, "name is NULL");
