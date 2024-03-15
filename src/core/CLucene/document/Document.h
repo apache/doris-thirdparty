@@ -35,6 +35,7 @@ public:
 private:
 	FieldsType* _fields;
 	float_t boost;
+        bool needResetFieldData = false;
 public:
 	/** Constructs a new document with no fields. */
 	Document();
@@ -66,7 +67,11 @@ public:
 	*
 	* @see #setBoost(float_t)
 	*/
-	float_t getBoost() const;
+        float_t getBoost() const;
+
+        void setNeedResetFieldData(bool needResetFieldData);
+
+        bool getNeedResetFieldData() const;
 
 	/**
 	* <p>Adds a field to a document.  Several fields may be added with
