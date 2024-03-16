@@ -351,6 +351,9 @@ int64_t RAMInputStream::getFilePointer() const {
 void RAMInputStream::seek(const int64_t pos) {
     if (currentBuffer == NULL || pos < bufferStart || pos >= bufferStart + BUFFER_SIZE) {
         currentBufferIndex = (int32_t) (pos / BUFFER_SIZE);
+        if (currentBufferIndex == file->numBuffers()) {
+            return;
+        }
         switchCurrentBuffer();
     }
     bufferPosition = (int32_t) (pos % BUFFER_SIZE);
