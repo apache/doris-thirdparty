@@ -317,14 +317,14 @@ public:
     void indexCompaction(std::vector<lucene::store::Directory*>& src_dirs,
                             std::vector<lucene::store::Directory*> dest_dirs,
                             std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec,
-                            std::vector<uint32_t> dest_index_docs, bool maybe_skip = false);
+                            std::vector<uint32_t> dest_index_docs);
 
     // create new fields info
     void mergeFields(bool hasProx);
     // write fields info file
     void writeFields(lucene::store::Directory* d, std::string segment);
     // merge terms and write files
-    void mergeTerms(bool hasProx, bool maybe_skip = false);
+    void mergeTerms(bool hasProx);
     // merge null_bitmap
     void mergeNullBitmap(std::vector<std::vector<uint32_t>> srcBitmapValues, std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList);
 
