@@ -1255,7 +1255,7 @@ void IndexWriter::resetMergeExceptions() {
 void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_dirs,
                                   std::vector<lucene::store::Directory *> dest_dirs,
                                   std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec,
-                                  std::vector<uint32_t> dest_index_docs, bool maybe_skip) {
+                                  std::vector<uint32_t> dest_index_docs) {
     CND_CONDITION(src_dirs.size() > 0, "Source directory not found.");
     CND_CONDITION(dest_dirs.size() > 0, "Destination directory not found.");
     this->_trans_vec = std::move(trans_vec);
@@ -1387,7 +1387,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         }
 
         /// merge terms
-        mergeTerms(hasProx, maybe_skip);
+        mergeTerms(hasProx);
 
         /// merge null_bitmap
         mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
@@ -1613,7 +1613,7 @@ protected:
 
 };
 
-void IndexWriter::mergeTerms(bool hasProx, bool maybe_skip) {
+void IndexWriter::mergeTerms(bool hasProx) {
     auto queue = _CLNEW SegmentMergeQueue(readers.size());
     auto numSrcIndexes = readers.size();
     //std::vector<TermPositions *> postingsList(numSrcIndexes);
@@ -1662,18 +1662,6 @@ void IndexWriter::mergeTerms(bool hasProx, bool maybe_skip) {
         while (top != nullptr && smallestTerm->equals(top->term)) {
             match[matchSize++] = queue->pop();
             top = queue->top();
-        }
-
-        if (maybe_skip && smallestTerm) {
-            auto containsUpperCase = [](const std::wstring_view& ws_term) {
-                return std::any_of(ws_term.begin(), ws_term.end(),
-                                   [](wchar_t ch) { return std::iswupper(ch) != 0; });
-            };
-
-            std::wstring_view ws_term(smallestTerm->text(), smallestTerm->textLength());
-            if (containsUpperCase(ws_term)) {
-                _CLTHROWA(CL_ERR_InvalidState, "need rewrite, skip index compaction");
-            }
         }
 
         std::vector<std::vector<uint32_t>> docDeltaBuffers(numDestIndexes);
