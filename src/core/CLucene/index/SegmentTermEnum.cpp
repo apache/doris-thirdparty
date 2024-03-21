@@ -57,7 +57,14 @@ void SegmentTermEnum::init(int32_t in_format) {
         format = firstInt;
 
         // check that it is a format we can understand
-        if (format < TermInfosWriter::FORMAT) {
+        // if (format < TermInfosWriter::FORMAT) {
+        //     TCHAR err[30];
+        //     _sntprintf(err, 30, _T("Unknown format version: %d"), format);
+        //     _CLTHROWT(CL_ERR_CorruptIndex, err);
+        // }
+
+        // Able to parse versions -3 and -4
+        if (format < -4) {
             TCHAR err[30];
             _sntprintf(err, 30, _T("Unknown format version: %d"), format);
             _CLTHROWT(CL_ERR_CorruptIndex, err);
