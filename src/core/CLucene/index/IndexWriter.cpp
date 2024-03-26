@@ -596,8 +596,6 @@ void IndexWriter::closeInternal(bool waitForMerges) {
     } catch (std::bad_alloc &) {
         hitOOM = true;
         _CLTHROWA(CL_ERR_OutOfMemory, "Out of memory");
-    } catch (CLuceneError &e) {
-        throw e;
     }
     _CLFINALLY(
             {
