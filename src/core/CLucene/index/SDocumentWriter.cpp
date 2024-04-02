@@ -135,7 +135,9 @@ void SDocumentsWriter<T>::ThreadState::resetCurrentFieldData(Document *doc) {
         numFieldData = 1;
         // reset fp for new fields
         fp->fieldCount = 0;
+	// delete values is not make length reset to 0, so resize can not make sure new docFields values
         fp->docFields.deleteValues();
+	fp->docFields.length = 0;
         fp->docFields.resize(1);
         for (int32_t i = 0; i < numDocFields; i++) {
             Field *field = docFields[i];
