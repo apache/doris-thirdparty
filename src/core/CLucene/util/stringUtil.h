@@ -297,10 +297,10 @@ public:
             } else {
                 if ((c & 0xC0) != 0x80) return -1;
                 codepoint = (codepoint << 6) | (c & 0x3F);
-                if (!is_valid_codepoint(codepoint)) {
+                bytes_in_char--;
+                if (bytes_in_char == 0 && !is_valid_codepoint(codepoint)) {
                     return -1;
                 }
-                bytes_in_char--;
                 surplus_bytes++;
             }
         }
