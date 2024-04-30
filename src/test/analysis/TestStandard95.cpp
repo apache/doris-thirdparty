@@ -3,11 +3,13 @@
 
 #include "CLucene/_ApiHeader.h"
 #include "CLucene/analysis/standard95/StandardAnalyzer.h"
+#include "CLucene/analysis/standard95/StandardTokenizer.h"
 #include "test.h"
 
 void testCut(const std::string &str, std::vector<std::string> &tokens) {
   auto standard =
       std::make_unique<lucene::analysis::standard95::StandardAnalyzer>();
+  standard->set_stopwords(&lucene::analysis::standard95::stop_words);
   auto tokenizer =
       static_cast<lucene::analysis::standard95::StandardTokenizer *>(
           standard->tokenStream(L"name", nullptr));
@@ -28,7 +30,7 @@ void testCut(const std::string &str, std::vector<std::string> &tokens) {
 void testCutLines(std::vector<std::string>& datas, std::vector<std::string> &tokens) {
   auto standard =
       std::make_unique<lucene::analysis::standard95::StandardAnalyzer>();
-  standard->useStopWords(false);
+  standard->set_stopwords(nullptr);
   auto tokenizer =
       static_cast<lucene::analysis::standard95::StandardTokenizer *>(
           standard->tokenStream(L"name", nullptr));

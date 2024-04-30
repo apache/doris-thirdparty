@@ -11,6 +11,8 @@
 #include "CLucene/util/VoidList.h"
 #include "CLucene/LuceneThreads.h"
 
+#include <unordered_set>
+
 CL_CLASS_DEF(util,Reader)
 CL_CLASS_DEF(util,IReader)
 
@@ -297,6 +299,11 @@ public:
     virtual void set_lowercase(bool lowercase) {
         _lowercase = lowercase;
     }
+
+    virtual void set_stopwords(std::unordered_set<std::string_view>* stopwords) {
+        _stopwords = stopwords;
+    }
+
 private:
 
     DEFINE_MUTEX(THIS_LOCK)
@@ -313,7 +320,9 @@ protected:
 	*  to save a TokenStream for later re-use by the same
 	*  thread. */
     virtual void setPreviousTokenStream(TokenStream* obj);
+
     bool _lowercase = false;
+    std::unordered_set<std::string_view>* _stopwords = nullptr;
 
 public:
     /**
@@ -350,6 +359,7 @@ protected:
     /** The text source for this Tokenizer. */
     CL_NS(util)::Reader* input;
     bool lowercase = false;
+    std::unordered_set<std::string_view>* stopwords = nullptr;
 
 public:
     /** Construct a tokenizer with null input. */
