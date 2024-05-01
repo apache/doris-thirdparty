@@ -58,7 +58,7 @@ const std::vector<std::string> StandardTokenizerImpl::ZZ_ERROR_MSG = {
     "Error: pushback value was too large"};
 
 StandardTokenizerImpl::StandardTokenizerImpl(lucene::util::Reader* reader)
-    : zzBuffer(ZZ_BUFFERSIZE), zzReader(reader) {}
+    : zzReader(reader), zzBuffer((reader == nullptr) ? 0 : reader->size()) {}
 
 std::string_view StandardTokenizerImpl::getText() {
   return std::string_view(zzBuffer.data() + zzStartRead,
@@ -67,53 +67,20 @@ std::string_view StandardTokenizerImpl::getText() {
 
 bool StandardTokenizerImpl::zzRefill() {
   if (zzStartRead > 0) {
-    zzEndRead += zzFinalHighSurrogate;
-    zzFinalHighSurrogate = 0;
-    std::copy_n(zzBuffer.begin() + zzStartRead, zzEndRead - zzStartRead,
-                zzBuffer.begin());
-
-    zzEndRead -= zzStartRead;
-    zzCurrentPos -= zzStartRead;
-    zzMarkedPos -= zzStartRead;
-    zzStartRead = 0;
-  }
-
-  int32_t requested = zzBuffer.size() - zzEndRead - zzFinalHighSurrogate;
-  if (requested == 0) {
-    return true;
-  }
-
-  int32_t numRead = zzReader->readCopy(zzBuffer.data(), zzEndRead, requested);
-  if (numRead == 0) {
-    _CLTHROWA(CL_ERR_Runtime,
-              "Reader returned 0 characters. See JFlex examples/zero-reader "
-              "for a workaround.");
-  }
-  if (numRead > 0) {
-    zzEndRead += numRead;
-
-    int32_t n =
-        StringUtil::validate_utf8(std::string_view(zzBuffer.data(), zzEndRead));
-    if (n == -1) {
-      yyResetPosition();
       return true;
-    }
+  }
 
-    if (n != 0) {
-      if (numRead == requested) {
-        zzEndRead -= n;
-        zzFinalHighSurrogate = n;
-      } else {
-        int32_t c = zzReader->read();
-        if (c == -1) {
+  int32_t numRead = zzReader->readCopy(zzBuffer.data(), 0, zzBuffer.size());
+  if (numRead > 0) {
+      assert(zzBuffer.size() == numRead);
+      zzEndRead += numRead;
+
+      int32_t n = StringUtil::validate_utf8(std::string_view(zzBuffer.data(), zzBuffer.size()));
+      if (n != 0) {
           return true;
-        } else {
-          _CLTHROWA(CL_ERR_Runtime, "Why did you come here");
-        }
       }
-    }
 
-    return false;
+      return false;
   }
 
   return true;
@@ -126,6 +93,7 @@ void StandardTokenizerImpl::yyclose() {
 
 void StandardTokenizerImpl::yyreset(lucene::util::Reader* reader) {
   zzReader = reader;
+  zzBuffer.resize(reader->size());
   yyResetPosition();
   zzLexicalState = YYINITIAL;
 }
@@ -181,7 +149,7 @@ int32_t StandardTokenizerImpl::getNextToken() {
 
     {
       while (true) {
-        if (zzCurrentPosL < zzEndReadL) {
+        if (zzCurrentPosL < zzEndReadL && (zzCurrentPosL - zzStartRead) < ZZ_BUFFERSIZE) {
           size_t len = 0;
           zzInput = decodeUtf8ToCodepoint(
               std::string_view(zzBufferL.data() + zzCurrentPosL, zzEndReadL),
