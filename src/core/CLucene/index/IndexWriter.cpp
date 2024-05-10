@@ -2048,6 +2048,11 @@ void IndexWriter::flush(bool triggerMerge, bool _flushDocStores) {
 bool IndexWriter::doFlush(bool _flushDocStores) {
     SCOPED_LOCK_MUTEX(THIS_LOCK)
 
+    // if docWriter is nullptr, maybe it's been flushed already
+    if (docWriter == nullptr) {
+        return false;
+    }
+
     // Make sure no threads are actively adding a document
 
     // Returns true if docWriter is currently aborting, in
