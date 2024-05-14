@@ -535,7 +535,10 @@ void IndexWriter::closeInternal(bool waitForMerges) {
     try {
         if (infoStream != NULL)
             message(string("now flush at close"));
-
+        // if docWriter is nullptr, maybe it's been flushed already
+        if (docWriter == nullptr) {
+            return;
+        }
         docWriter->close();
 
         // Only allow a _CLNEW merge to be triggered if we are
