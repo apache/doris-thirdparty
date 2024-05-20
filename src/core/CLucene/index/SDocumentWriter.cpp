@@ -131,7 +131,12 @@ void SDocumentsWriter<T>::ThreadState::resetCurrentFieldData(Document *doc) {
     const Document::FieldsType &docFields = *doc->getFields();
     const int32_t numDocFields = docFields.size();
 
-    if (FieldData* fp = fieldDataArray.values[0]; fp && numDocFields > 0) {
+    if (FieldData* fp = fieldDataArray.values[0]; numDocFields > 0) {
+        // maybe here fp has not been initialized
+        if (!fp) {
+            init(doc, docID+1);
+            fp = fieldDataArray.values[0];
+        }
         numFieldData = 1;
         // reset fp for new fields
         fp->fieldCount = 0;
