@@ -194,6 +194,10 @@ CL_NS_DEF(index)
     _CLTHROWA(CL_ERR_UnsupportedOperation, "This reader does not support this method.");
   }
 
+  int64_t IndexReader::getTermInfosRAMUsed() const {
+      _CLTHROWA(CL_ERR_UnsupportedOperation, "This reader does not support this method.");
+  }
+
   bool IndexReader::isCurrent() {
     _CLTHROWA(CL_ERR_UnsupportedOperation, "This reader does not support this method.");
   }

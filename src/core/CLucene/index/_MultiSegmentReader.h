@@ -123,6 +123,14 @@ public:
   const char* getObjectName() const;
 
   IndexVersion getIndexVersion() override;
+
+  int64_t getTermInfosRAMUsed() const override {
+      int64_t size = 0;
+      for (size_t i = 0; i < subReaders->length; i++) {
+          size += (*subReaders)[i]->getTermInfosRAMUsed();
+      }
+      return size;
+  }
 };
 
 
