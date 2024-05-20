@@ -129,18 +129,23 @@ void TermInfosReader::close() {
         }
 #endif
     }
+    numBytesUsed -= (sizeof(Term) * indexTermsLength + sizeof(TermInfo) * indexTermsLength + sizeof(int64_t) * indexTermsLength);
     //Delete the arrays
-    if (indexTerms) {
+    if (indexTerms != nullptr) {
+        for (int32_t i = 0; i < indexTermsLength; ++i) {
+            numBytesUsed -= indexTerms[i].textLength();
+        }
         delete[] indexTerms;
         indexTerms = NULL;
     }
-    if (indexInfos) {
+    if (indexInfos != nullptr) {
+        numBytesUsed -= sizeof(TermInfo) * indexTermsLength;
         _CLDELETE_ARRAY(indexInfos);
         indexInfos = NULL;
     }
-
     //Delete the arrays
-    if (indexPointers) {
+    if (indexPointers != NULL) {
+        numBytesUsed -= sizeof(int64_t) * indexTermsLength;
         _CLDELETE_ARRAY(indexPointers);
         indexPointers = NULL;
     }
@@ -324,9 +329,6 @@ void TermInfosReader::ensureIndexIsRead() {
     SCOPED_LOCK_MUTEX(THIS_LOCK)
 
     if (indexIsRead) return;
-
-    //https://jira.qianxin-inc.cn/browse/XHBUG-2921
-    //https://jira.qianxin-inc.cn/browse/XHBUG-3053
     if (indexEnum == NULL) _CLTHROWA(CL_ERR_NullPointer, "indexEnum is NULL");
 
     try {
@@ -360,6 +362,16 @@ void TermInfosReader::ensureIndexIsRead() {
                 if (!indexEnum->next()) break;
         }
         indexIsRead = true;
+        numBytesUsed = sizeof(Term) * indexTermsLength + sizeof(TermInfo) * indexTermsLength + sizeof(int64_t) * indexTermsLength;
+        for (int32_t i = 0; i < indexTermsLength; ++i) {
+            numBytesUsed += indexTerms[i].textLength();
+        }
+        if (indexInfos != NULL) {
+            numBytesUsed += sizeof(TermInfo) * indexTermsLength;
+        }
+        if (indexPointers != NULL) {
+            numBytesUsed += sizeof(int64_t) * indexTermsLength;
+        }
     }
     _CLFINALLY(indexEnum->close();
                //Close and delete the IndexInput is. The close is done by the destructor.

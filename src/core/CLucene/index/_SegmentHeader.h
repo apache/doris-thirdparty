@@ -321,6 +321,10 @@ class SegmentReader: public DirectoryIndexReader {
 
   void initialize(SegmentInfo* si, int32_t readBufferSize, bool doOpenStores, bool doingReopen);
 
+  int64_t getTermInfosRAMUsed() const override {
+      return tis->getRAMUsed();
+  }
+
   /**
    * Create a clone from the initial TermVectorsReader and store it in the ThreadLocal.
    * @return TermVectorsReader
