@@ -47,7 +47,9 @@ CL_NS_DEF(index)
 		int32_t indexDivisor;
 		int32_t totalIndexInterval;
 
-		DEFINE_MUTEX(THIS_LOCK)
+        int64_t numBytesUsed;
+
+        DEFINE_MUTEX(THIS_LOCK)
 
 	public:
 		/**
@@ -102,7 +104,11 @@ CL_NS_DEF(index)
 		
 		/** Returns the TermInfo for a Term in the set, or null. */
 		TermInfo* get(const Term* term);
-	private:
+
+        int64_t getRAMUsed() const {
+            return numBytesUsed;
+        }
+    private:
 		/** Reads the term info index file or .tti file. */
 		void ensureIndexIsRead();
 

@@ -380,6 +380,7 @@ public:
    *  current indexDivisor.
    *  @see #setTermInfosIndexDivisor */
   int32_t getTermInfosIndexDivisor();
+  virtual int64_t getTermInfosRAMUsed() const;
 
   /**
    * Check whether this IndexReader is still using the
