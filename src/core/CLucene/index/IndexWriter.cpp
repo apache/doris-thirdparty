@@ -535,7 +535,10 @@ void IndexWriter::closeInternal(bool waitForMerges) {
     try {
         if (infoStream != NULL)
             message(string("now flush at close"));
-
+        // if docWriter is nullptr, maybe it's been flushed already
+        if (docWriter == nullptr) {
+            return;
+        }
         docWriter->close();
 
         // Only allow a _CLNEW merge to be triggered if we are
@@ -2047,6 +2050,11 @@ void IndexWriter::flush(bool triggerMerge, bool _flushDocStores) {
 
 bool IndexWriter::doFlush(bool _flushDocStores) {
     SCOPED_LOCK_MUTEX(THIS_LOCK)
+
+    // if docWriter is nullptr, maybe it's been flushed already
+    if (docWriter == nullptr) {
+        return false;
+    }
 
     // Make sure no threads are actively adding a document
 
