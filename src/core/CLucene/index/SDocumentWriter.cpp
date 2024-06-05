@@ -127,6 +127,31 @@ SDocumentsWriter<T>::ThreadState::~ThreadState() {
 }
 
 template<typename T>
+void SDocumentsWriter<T>::ThreadState::resetCurrentFieldData(Document *doc) {
+    const Document::FieldsType &docFields = *doc->getFields();
+    const int32_t numDocFields = docFields.size();
+
+    if (FieldData* fp = fieldDataArray.values[0]; fp && numDocFields > 0) {
+        numFieldData = 1;
+        // reset fp for new fields
+        fp->fieldCount = 0;
+	// delete values is not make length reset to 0, so resize can not make sure new docFields values
+        fp->docFields.deleteValues();
+	fp->docFields.length = 0;
+        fp->docFields.resize(1);
+        for (int32_t i = 0; i < numDocFields; i++) {
+            Field *field = docFields[i];
+            if (fp->fieldCount == fp->docFields.length) {
+                fp->docFields.resize(fp->docFields.length * 2);
+            }
+
+            fp->docFields.values[fp->fieldCount++] = field;
+        }
+    }
+    return;
+}
+
+template<typename T>
 typename SDocumentsWriter<T>::ThreadState *SDocumentsWriter<T>::getThreadState(Document *doc) {
     if (threadState == nullptr) {
         threadState = _CLNEW ThreadState(this);
@@ -135,6 +160,8 @@ typename SDocumentsWriter<T>::ThreadState *SDocumentsWriter<T>::getThreadState(D
     if (segment.empty()) {
         segment = writer->newSegmentName();
         threadState->init(doc, nextDocID);
+    } else if (doc->getNeedResetFieldData()) {
+        threadState->resetCurrentFieldData(doc);
     }
 
     threadState->docID = nextDocID;
