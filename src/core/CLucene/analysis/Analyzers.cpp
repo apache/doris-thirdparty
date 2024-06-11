@@ -51,11 +51,13 @@ template class LowerCaseTokenizer<TCHAR>;
 template<typename T>
 SimpleTokenizer<T>::SimpleTokenizer(CL_NS(util)::Reader *in) : LowerCaseTokenizer<T>(in) {
     Tokenizer::lowercase = true;
+    Tokenizer::ownReader = false;
 }
 
 template<typename T>
-SimpleTokenizer<T>::SimpleTokenizer(CL_NS(util)::Reader *in, bool lowercase) : LowerCaseTokenizer<T>(in) {
+SimpleTokenizer<T>::SimpleTokenizer(CL_NS(util)::Reader *in, bool lowercase, bool ownReader) : LowerCaseTokenizer<T>(in) {
     Tokenizer::lowercase = lowercase;
+    Tokenizer::ownReader = ownReader;
 }
 
 template<typename T>

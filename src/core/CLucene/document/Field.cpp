@@ -176,7 +176,8 @@ void Field::setValue(ValueArray<uint8_t>* value) {
 }
 
 /** Expert: change the value of this field.  See <a href="#setValue(java.lang.String)">setValue(String)</a>. */
-void Field::setValue(CL_NS(analysis)::TokenStream* value) {
+void Field::setValue(CL_NS(analysis)::TokenStream* value, bool own_stream) {
+    ownStream = own_stream;
 	_resetValue();
     fieldsData = value;
 	valueType = VALUE_TOKENSTREAM;
@@ -340,7 +341,10 @@ void Field::_resetValue() {
 	} else if (valueType & VALUE_BINARY) {
 		ValueArray<uint8_t>* v = static_cast<ValueArray<uint8_t>*>(fieldsData);
 		_CLDELETE(v);
-	}
+	} else if (valueType & VALUE_TOKENSTREAM && ownStream) {
+        auto* v = static_cast<CL_NS(analysis)::TokenStream*>(fieldsData);
+        _CLDELETE(v);
+    }
 	valueType=VALUE_NONE;
 }
 const char* Field::getObjectName() const{

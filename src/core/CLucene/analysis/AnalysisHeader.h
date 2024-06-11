@@ -10,6 +10,7 @@
 #include "CLucene/index/Payload.h"
 #include "CLucene/util/VoidList.h"
 #include "CLucene/LuceneThreads.h"
+#include "CLucene/util/CLStreams.h"
 
 #include <unordered_set>
 
@@ -304,6 +305,10 @@ public:
         _stopwords = stopwords;
     }
 
+    virtual void set_ownReader(bool ownReader) {
+        _ownReader = ownReader;
+    }
+
 private:
 
     DEFINE_MUTEX(THIS_LOCK)
@@ -322,6 +327,7 @@ protected:
     virtual void setPreviousTokenStream(TokenStream* obj);
 
     bool _lowercase = false;
+    bool _ownReader = false;
     std::unordered_set<std::string_view>* _stopwords = nullptr;
 
 public:
@@ -359,19 +365,23 @@ protected:
     /** The text source for this Tokenizer. */
     CL_NS(util)::Reader* input;
     bool lowercase = false;
+    bool ownReader = false;
     std::unordered_set<std::string_view>* stopwords = nullptr;
 
 public:
     /** Construct a tokenizer with null input. */
     Tokenizer():input(nullptr){}
     /** Construct a token stream processing the given input. */
-    explicit Tokenizer(CL_NS(util)::Reader* _input):input(_input){}
+    explicit Tokenizer(CL_NS(util)::Reader* _input, bool _ownReader = false):input(_input), ownReader(_ownReader){}
 
     /** By default, closes the input Reader. */
     virtual void close() {
         if (input != NULL) {
-            // ? delete input;
-            input = NULL;
+            if (ownReader) {
+                _CLDELETE(input);
+            } else {
+                input = NULL;
+            }
         }
     };
 
