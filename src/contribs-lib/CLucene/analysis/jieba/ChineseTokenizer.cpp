@@ -10,11 +10,13 @@ CL_NS_USE(util)
 ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m) : Tokenizer(reader), mode(m) {
     reset(reader);
     Tokenizer::lowercase = false;
+    Tokenizer::ownReader = false;
 }
 
-ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m, bool lowercase) : Tokenizer(reader), mode(m) {
+ChineseTokenizer::ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode m, bool lowercase, bool ownReader) : Tokenizer(reader), mode(m) {
     reset(reader);
     Tokenizer::lowercase = lowercase;
+    Tokenizer::ownReader = ownReader;
 }
 
 void ChineseTokenizer::init(const ChineseDict* chineseDict) {

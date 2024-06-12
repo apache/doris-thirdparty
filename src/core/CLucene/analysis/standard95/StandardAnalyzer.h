@@ -8,6 +8,7 @@ class StandardAnalyzer : public Analyzer {
  public:
   StandardAnalyzer() : Analyzer() { 
     _lowercase = true;
+    _ownReader = false;
     _stopwords = nullptr;
   }
 
@@ -15,7 +16,7 @@ class StandardAnalyzer : public Analyzer {
   
   TokenStream* tokenStream(const TCHAR* fieldName,
                            lucene::util::Reader* reader) override {
-    return _CLNEW StandardTokenizer(reader, _lowercase, _stopwords);
+    return _CLNEW StandardTokenizer(reader, _lowercase, _stopwords, _ownReader);
   }
 
   TokenStream* reusableTokenStream(const TCHAR* fieldName,

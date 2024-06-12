@@ -56,7 +56,7 @@ private:
 public:
     // Constructor
     explicit ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode mode);
-    explicit ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode mode, bool lowercase);
+    explicit ChineseTokenizer(lucene::util::Reader *reader, AnalyzerMode mode, bool lowercase, bool ownReader=false);
     static void init(const ChineseDict* chineseDict);
 
     // Destructor

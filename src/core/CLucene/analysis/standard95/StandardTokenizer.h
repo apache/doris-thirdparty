@@ -23,13 +23,15 @@ class StandardTokenizer : public Tokenizer {
       : Tokenizer(in) {
     scanner_ = std::make_unique<StandardTokenizerImpl>(in);
     Tokenizer::lowercase = true;
+    Tokenizer::lowercase = false;
     Tokenizer::stopwords = nullptr;
   }
-  StandardTokenizer(lucene::util::Reader* in, bool lowercase, std::unordered_set<std::string_view>* stopwords)
+  StandardTokenizer(lucene::util::Reader* in, bool lowercase, std::unordered_set<std::string_view>* stopwords, bool ownReader=false)
           : Tokenizer(in) {
       scanner_ = std::make_unique<StandardTokenizerImpl>(in);
       Tokenizer::lowercase = lowercase;
       Tokenizer::stopwords = stopwords;
+      Tokenizer::ownReader = ownReader;
   }
 
   Token* next(Token* token) override {

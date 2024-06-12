@@ -121,7 +121,7 @@ TokenStream *LanguageBasedAnalyzer::tokenStream(const TCHAR *fieldName, Reader *
     if (_tcscmp(lang, _T("cjk")) == 0) {
         ret = _CLNEW CL_NS2(analysis, cjk)::CJKTokenizer(reader);
     } else if (_tcscmp(lang, _T("chinese")) == 0) {
-        ret = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader, mode, Analyzer::_lowercase);
+        ret = _CLNEW CL_NS2(analysis, jieba)::ChineseTokenizer(reader, mode, Analyzer::_lowercase, Analyzer::_ownReader);
     } else {
         CL_NS(util)::BufferedReader* bufferedReader = reader->__asBufferedReader();
 
