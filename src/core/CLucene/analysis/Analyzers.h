@@ -140,7 +140,7 @@ class CLUCENE_EXPORT SimpleTokenizer:public LowerCaseTokenizer<T> {
 public:
     /** Construct a new SimpleTokenizer. */
     explicit SimpleTokenizer(CL_NS(util)::Reader* in);
-    SimpleTokenizer(CL_NS(util)::Reader* in, bool lowercase);
+    SimpleTokenizer(CL_NS(util)::Reader* in, bool lowercase, bool ownReader = false);
     virtual ~SimpleTokenizer();
 
     Token* next(Token* token) override {
@@ -182,12 +182,13 @@ class CLUCENE_EXPORT SimpleAnalyzer: public Analyzer {
 public:
     SimpleAnalyzer(){
         _lowercase = true;
+        _ownReader = false;
     }
 
     bool isSDocOpt() override { return true; }
 
     TokenStream* tokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader) override{
-        return _CLNEW SimpleTokenizer<T>(reader, _lowercase);
+        return _CLNEW SimpleTokenizer<T>(reader, _lowercase, _ownReader);
     }
     TokenStream* reusableTokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader) override{
         if (tokenizer_ == nullptr) {

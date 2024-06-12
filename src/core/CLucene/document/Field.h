@@ -305,7 +305,7 @@ public:
 	void setValue(CL_NS(util)::ValueArray<uint8_t>* value) ;
 
 	/** Expert: change the value of this field.  See <a href="#setValue(TCHAR*)">setValue(TCHAR*)</a>. */
-	void setValue(CL_NS(analysis)::TokenStream* value);
+	void setValue(CL_NS(analysis)::TokenStream* value, bool own_stream = false);
 
     //void setValue(CL_NS(analysis)::STokenStream* value);
 
@@ -334,6 +334,7 @@ protected:
 	float_t boost;
 
 	IndexVersion indexVersion_ = IndexVersion::kV1;
+    bool ownStream = false;
 };
 CL_NS_END
 #endif
