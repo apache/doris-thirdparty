@@ -45,7 +45,10 @@
 
 #define FINALLY_CLOSE_OUTPUT(x)       \
     try {                             \
-        if (x != nullptr) x->close(); \
+        if (x != nullptr) {           \
+            x->close();               \
+            _CLDELETE(x)              \
+        }                             \
     } catch (...) {                   \
     }
 
