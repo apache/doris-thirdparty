@@ -1,51 +1,54 @@
 #pragma once
 
-#include "CLucene/search/query/DcoIdSetIterator.h"
 #include "CLucene/index/Terms.h"
 
 #include <limits.h>
+#include <cstdint>
 
 CL_NS_USE(index)
 
-class TermIterator : public DocIdSetIterator {
+class TermIterator {
 public:
   TermIterator() = default;
-  TermIterator(TermDocs* termDocs) : termDocs_(termDocs) {
+  TermIterator(TermDocs* termDocs) 
+    : termDocs_(termDocs) {
   }
 
-  virtual ~TermIterator() = default;
-
-  bool isEmpty() {
+  inline bool isEmpty() const {
     return termDocs_ == nullptr;
   }
 
-  int32_t docID() override {
-    uint32_t docId = termDocs_->doc();
+  inline int32_t docID() const {
+    int32_t docId = termDocs_->doc();
     return docId >= INT_MAX ? INT_MAX : docId;
   }
 
-  int32_t nextDoc() override {
+  inline int32_t freq() const {
+    return termDocs_->freq();
+  }
+
+  inline int32_t nextDoc() const {
     if (termDocs_->next()) {
       return termDocs_->doc();
     }
     return INT_MAX;
   }
 
-  int32_t advance(int32_t target) override {
+  inline int32_t advance(int32_t target) const {
     if (termDocs_->skipTo(target)) {
       return termDocs_->doc();
     }
     return INT_MAX;
   }
 
-  int32_t docFreq() const override {
+  inline int32_t docFreq() const {
     return termDocs_->docFreq();
   }
 
-  bool readRange(DocRange* docRange) const override {
+  inline bool readRange(DocRange* docRange) const {
     return termDocs_->readRange(docRange);
   }
   
-private:
+protected:
   TermDocs* termDocs_ = nullptr;
 };
