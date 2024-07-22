@@ -10,11 +10,12 @@
 
     <artifactId>trino-kudu</artifactId>
     <packaging>trino-plugin</packaging>
-    <description>Trino - Kudu Connector</description>
+    <description>Trino - Kudu connector</description>
 
     <properties>
         <air.main.basedir>${project.parent.basedir}</air.main.basedir>
-        <kudu.version>1.15.0</kudu.version>
+        <air.compiler.fail-warnings>true</air.compiler.fail-warnings>
+        <kudu.version>1.17.0</kudu.version>
     </properties>
 
     <dependencies>
@@ -132,9 +133,27 @@
         </dependency>
 
         <dependency>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_annotations</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
             <groupId>io.airlift</groupId>
             <artifactId>log-manager</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>dev.failsafe</groupId>
+            <artifactId>failsafe</artifactId>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
@@ -218,6 +237,13 @@
         </dependency>
 
         <dependency>
+            <groupId>org.rnorth.duct-tape</groupId>
+            <artifactId>duct-tape</artifactId>
+            <version>1.0.8</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
             <scope>test</scope>
@@ -226,12 +252,6 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>toxiproxy</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.testng</groupId>
-            <artifactId>testng</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

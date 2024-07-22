@@ -13,7 +13,6 @@
  */
 package io.trino.plugin.kudu;
 
-import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import io.airlift.configuration.Config;
 import io.airlift.configuration.ConfigDescription;
@@ -35,11 +34,11 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 @DefunctConfig("kudu.client.default-socket-read-timeout")
 public class KuduClientConfig
 {
-    private static final Splitter SPLITTER = Splitter.on(',').trimResults().omitEmptyStrings();
+    private static final Duration DEFAULT_OPERATION_TIMEOUT = new Duration(30, TimeUnit.SECONDS);
 
     private List<String> masterAddresses = ImmutableList.of();
-    private Duration defaultAdminOperationTimeout = new Duration(30, TimeUnit.SECONDS);
-    private Duration defaultOperationTimeout = new Duration(30, TimeUnit.SECONDS);
+    private Duration defaultAdminOperationTimeout = DEFAULT_OPERATION_TIMEOUT;
+    private Duration defaultOperationTimeout = DEFAULT_OPERATION_TIMEOUT;
     private boolean disableStatistics;
     private boolean schemaEmulationEnabled;
     private String schemaEmulationPrefix = "presto::";
@@ -54,15 +53,9 @@ public class KuduClientConfig
     }
 
     @Config("kudu.client.master-addresses")
-    public KuduClientConfig setMasterAddresses(String commaSeparatedList)
+    public KuduClientConfig setMasterAddresses(List<String> commaSeparatedList)
     {
-        this.masterAddresses = SPLITTER.splitToList(commaSeparatedList);
-        return this;
-    }
-
-    public KuduClientConfig setMasterAddresses(String... contactPoints)
-    {
-        this.masterAddresses = ImmutableList.copyOf(contactPoints);
+        this.masterAddresses = commaSeparatedList;
         return this;
     }
 
