@@ -22,6 +22,8 @@
 
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
+include(CheckCSourceRuns)
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/..)
 include(HadoopCommon)
 
@@ -152,14 +154,52 @@ else(REQUIRE_PMDK)
     MESSAGE(STATUS "Build without PMDK support.")
 endif(REQUIRE_PMDK)
 
-# Build hardware CRC32 acceleration, if supported on the platform.
+# Build hardware CRC32 acceleration, if supported on the platform. We must detect the instructions. not all platform support relative instruction.
+
+# CMAKE_REQUIRED_FLAGS effects check_c_source_runs. temporarily detect with native architecture
+SET(TMP_CMAKE_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -march=native")
+
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^i.86$" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64")
-  set(BULK_CRC_ARCH_SOURCE_FIlE "${SRC}/util/bulk_crc32_x86.c")
+# x86, supported by sse4.2
+  check_c_source_runs("
+    #include <nmmintrin.h>
+    int main() {
+        unsigned int crc = 0;
+        unsigned char data[4] = {0x12, 0x34, 0x56, 0x78};
+        crc = _mm_crc32_u32(crc, *((unsigned int*)data));
+        return 0;
+  }" CRC_TEST_RESULT)
+  message(STATUS "SUPPORT OF CRC: ${CRC_TEST_RESULT}")
+  if (CRC_TEST_RESULT)
+    set(BULK_CRC_ARCH_SOURCE_FIlE "${SRC}/util/bulk_crc32_x86.c")
+  else()
+    message("No HW CRC acceleration for ${CMAKE_SYSTEM_PROCESSOR}, falling back to SW")
+  endif()
+
 elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-  set(BULK_CRC_ARCH_SOURCE_FIlE "${SRC}/util/bulk_crc32_aarch64.c")
+# arm64, supported by arm-v8
+  check_c_source_runs("
+    #include <arm_acle.h>
+    int main() {
+        uint32_t crc = 0;
+        uint32_t data = 12345;
+        crc = __crc32cw(crc, data);
+        return 0;
+  }" CRC_TEST_RESULT)
+  message(STATUS "SUPPORT OF CRC: ${CRC_TEST_RESULT}")
+  if (CRC_TEST_RESULT)
+    set(BULK_CRC_ARCH_SOURCE_FIlE "${SRC}/util/bulk_crc32_aarch64.c")
+  else()
+    message("No HW CRC acceleration for ${CMAKE_SYSTEM_PROCESSOR}, falling back to SW")
+  endif()
+
 else()
   message("No HW CRC acceleration for ${CMAKE_SYSTEM_PROCESSOR}, falling back to SW")
 endif()
+# revert the flags
+SET(CMAKE_REQUIRED_FLAGS "${TMP_CMAKE_FLAGS}")
+UNSET(TMP_CMAKE_FLAGS)
 
 # Find the no-suffix version of libcrypto/openssl. See HADOOP-11216 for details.
 set(STORED_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
