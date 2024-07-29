@@ -112,7 +112,7 @@ CL_NS_DEF(search)
 		  }
 		  if (m!=NULL) {
 			  repeatsLen = m->size();
-			  repeats = _CL_NEWARRAY(PhrasePositions*, repeatsLen + 1);
+			  repeats = _CL_NEWARRAY(PhrasePositions*, repeatsLen + 2);
 			  PhrasePositionsMap::iterator itr = m->begin();
 			  size_t pos = 0;
 			  while ( itr!=m->end() ){
