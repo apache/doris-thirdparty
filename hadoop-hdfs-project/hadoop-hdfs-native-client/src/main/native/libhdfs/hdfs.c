@@ -48,6 +48,28 @@
 #define HDFS_FILE_SUPPORTS_DIRECT_READ (1<<0)
 #define HDFS_FILE_SUPPORTS_DIRECT_PREAD (1<<1)
 
+void defaultErrLogMessage(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+}
+
+void defaultVaErrLogMessage(const char* fmt, va_list ap) {
+    vfprintf(stderr, fmt, ap);
+}
+
+struct hdfsLogger defaultLogger = {
+    .errLogMessage = defaultErrLogMessage,
+    .vaErrLogMessage = defaultVaErrLogMessage
+};
+
+struct hdfsLogger *_hdfsLogger = &defaultLogger;
+
+void hdfsSetLogger(struct hdfsLogger *hdfsLogger) {
+    _hdfsLogger = hdfsLogger;
+}
+
 /**
  * Reads bytes using the read(ByteBuffer) API. By using Java
  * DirectByteBuffers we can avoid copying the bytes onto the Java heap.
@@ -727,7 +749,7 @@ static int calcEffectiveURI(struct hdfsBuilder *bld, char ** uri)
         lastColon = strrchr(bld->nn, ':');
         if (lastColon && (strspn(lastColon + 1, "0123456789") ==
                           strlen(lastColon + 1))) {
-            fprintf(stderr, "port %d was given, but URI '%s' already "
+            _hdfsLogger->errLogMessage("port %d was given, but URI '%s' already "
                 "contains a port!\n", bld->port, bld->nn);
             return EINVAL;
         }
@@ -737,7 +759,7 @@ static int calcEffectiveURI(struct hdfsBuilder *bld, char ** uri)
     uriLen = strlen(scheme) + strlen(bld->nn) + strlen(suffix);
     u = malloc((uriLen + 1) * (sizeof(char)));
     if (!u) {
-        fprintf(stderr, "calcEffectiveURI: out of memory");
+        _hdfsLogger->errLogMessage("calcEffectiveURI: out of memory");
         return ENOMEM;
     }
     snprintf(u, uriLen + 1, "%s%s%s", scheme, bld->nn, suffix);
@@ -1290,18 +1312,18 @@ static hdfsFile hdfsOpenFileImpl(hdfsFS fs, const char *path, int flags,
     if (accmode == O_RDONLY || accmode == O_WRONLY) {
 	/* yay */
     } else if (accmode == O_RDWR) {
-      fprintf(stderr, "ERROR: cannot open an hdfs file in O_RDWR mode\n");
+      _hdfsLogger->errLogMessage("ERROR: cannot open an hdfs file in O_RDWR mode\n");
       errno = ENOTSUP;
       return NULL;
     } else {
-      fprintf(stderr, "ERROR: cannot open an hdfs file in mode 0x%x\n",
+      _hdfsLogger->errLogMessage("ERROR: cannot open an hdfs file in mode 0x%x\n",
               accmode);
       errno = EINVAL;
       return NULL;
     }
 
     if ((flags & O_CREAT) && (flags & O_EXCL)) {
-      fprintf(stderr,
+      _hdfsLogger->errLogMessage(
               "WARN: hdfs does not truly support O_CREATE && O_EXCL\n");
     }
 
@@ -1410,7 +1432,7 @@ static hdfsFile hdfsOpenFileImpl(hdfsFS fs, const char *path, int flags,
 
     file = calloc(1, sizeof(struct hdfsFile_internal));
     if (!file) {
-        fprintf(stderr, "hdfsOpenFile(%s): OOM create hdfsFile\n", path);
+        _hdfsLogger->errLogMessage("hdfsOpenFile(%s): OOM create hdfsFile\n", path);
         ret = ENOMEM;
         goto done;
     }
@@ -1496,7 +1518,7 @@ hdfsOpenFileBuilder *hdfsOpenFileBuilderAlloc(hdfsFS fs,
     hdfsOpenFileBuilder *builder;
     builder = calloc(1, sizeof(hdfsOpenFileBuilder));
     if (!builder) {
-        fprintf(stderr, "hdfsOpenFileBuilderAlloc(%s): OOM when creating "
+        _hdfsLogger->errLogMessage("hdfsOpenFileBuilderAlloc(%s): OOM when creating "
                         "hdfsOpenFileBuilder\n", path);
         errno = ENOMEM;
         goto done;
@@ -1682,7 +1704,7 @@ hdfsOpenFileFuture *hdfsOpenFileBuilderBuild(hdfsOpenFileBuilder *builder) {
     hdfsOpenFileFuture *future;
     future = calloc(1, sizeof(hdfsOpenFileFuture));
     if (!future) {
-        fprintf(stderr, "hdfsOpenFileBuilderBuild: OOM when creating "
+        _hdfsLogger->errLogMessage("hdfsOpenFileBuilderBuild: OOM when creating "
                         "hdfsOpenFileFuture\n");
         errno = ENOMEM;
         goto done;
@@ -1777,7 +1799,7 @@ static hdfsFile fileFutureGetWithTimeout(hdfsOpenFileFuture *future,
 
     file = calloc(1, sizeof(struct hdfsFile_internal));
     if (!file) {
-        fprintf(stderr, "hdfsOpenFileFutureGet(%s): OOM when creating "
+        _hdfsLogger->errLogMessage("hdfsOpenFileFutureGet(%s): OOM when creating "
                         "hdfsFile\n", future->path);
         ret = ENOMEM;
         goto done;
@@ -2094,7 +2116,7 @@ static int readPrepare(JNIEnv* env, hdfsFS fs, hdfsFile f,
 
     //Error checking... make sure that this file is 'readable'
     if (f->type != HDFS_STREAM_INPUT) {
-      fprintf(stderr, "Cannot read from a non-InputStream object!\n");
+      _hdfsLogger->errLogMessage("Cannot read from a non-InputStream object!\n");
       errno = EINVAL;
       return -1;
     }
@@ -2272,7 +2294,7 @@ tSize hdfsPread(hdfsFS fs, hdfsFile f, tOffset position,
 
     //Error checking... make sure that this file is 'readable'
     if (f->type != HDFS_STREAM_INPUT) {
-        fprintf(stderr, "Cannot read from a non-InputStream object!\n");
+        _hdfsLogger->errLogMessage("Cannot read from a non-InputStream object!\n");
         errno = EINVAL;
         return -1;
     }
@@ -2335,7 +2357,7 @@ tSize preadDirect(hdfsFS fs, hdfsFile f, tOffset position, void* buffer,
 
     //Error checking... make sure that this file is 'readable'
     if (f->type != HDFS_STREAM_INPUT) {
-        fprintf(stderr, "Cannot read from a non-InputStream object!\n");
+        _hdfsLogger->errLogMessage("Cannot read from a non-InputStream object!\n");
         errno = EINVAL;
         return -1;
     }
@@ -2403,7 +2425,7 @@ int hdfsPreadFully(hdfsFS fs, hdfsFile f, tOffset position,
 
     //Error checking... make sure that this file is 'readable'
     if (f->type != HDFS_STREAM_INPUT) {
-        fprintf(stderr, "Cannot read from a non-InputStream object!\n");
+        _hdfsLogger->errLogMessage("Cannot read from a non-InputStream object!\n");
         errno = EINVAL;
         return -1;
     }
@@ -2457,7 +2479,7 @@ int preadFullyDirect(hdfsFS fs, hdfsFile f, tOffset position, void* buffer,
 
     //Error checking... make sure that this file is 'readable'
     if (f->type != HDFS_STREAM_INPUT) {
-        fprintf(stderr, "Cannot read from a non-InputStream object!\n");
+        _hdfsLogger->errLogMessage("Cannot read from a non-InputStream object!\n");
         errno = EINVAL;
         return -1;
     }
@@ -2514,7 +2536,7 @@ tSize hdfsWrite(hdfsFS fs, hdfsFile f, const void* buffer, tSize length)
 
     //Error checking... make sure that this file is 'writable'
     if (f->type != HDFS_STREAM_OUTPUT) {
-        fprintf(stderr, "Cannot write into a non-OutputStream object!\n");
+        _hdfsLogger->errLogMessage("Cannot write into a non-OutputStream object!\n");
         errno = EINVAL;
         return -1;
     }
@@ -2970,7 +2992,7 @@ char* hdfsGetWorkingDirectory(hdfsFS fs, char* buffer, size_t bufferSize)
     }
     jPath = jVal.l;
     if (!jPath) {
-        fprintf(stderr, "hdfsGetWorkingDirectory: "
+        _hdfsLogger->errLogMessage("hdfsGetWorkingDirectory: "
             "FileSystem#getWorkingDirectory returned NULL");
         ret = -EIO;
         goto done;
@@ -3580,7 +3602,7 @@ static int hadoopReadZeroExtractBuffer(JNIEnv *env,
     }
     mallocBuf = malloc(buffer->length);
     if (!mallocBuf) {
-        fprintf(stderr, "hadoopReadZeroExtractBuffer: failed to allocate %d bytes of memory\n",
+        _hdfsLogger->errLogMessage("hadoopReadZeroExtractBuffer: failed to allocate %d bytes of memory\n",
                 buffer->length);
         ret = ENOMEM;
         goto done;
@@ -3838,7 +3860,7 @@ hdfsGetHosts(hdfsFS fs, const char *path, tOffset start, tOffset length)
         }
         jFileBlockHosts = jVal.l;
         if (!jFileBlockHosts) {
-            fprintf(stderr,
+            _hdfsLogger->errLogMessage(
                 "hdfsGetHosts(path=%s, start=%"PRId64", length=%"PRId64"):"
                 "BlockLocation#getHosts returned NULL", path, start, length);
             ret = EINTERNAL;
