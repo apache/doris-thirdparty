@@ -68,6 +68,20 @@
 #ifdef __cplusplus
 extern  "C" {
 #endif
+
+    /**
+     * hdfs logger
+     */
+    struct hdfsLogger {
+        void (*errLogMessage)(const char* fmt, ...);
+        void (*vaErrLogMessage)(const char* fmt, va_list ap);
+    };
+
+    extern struct hdfsLogger *_hdfsLogger;
+
+    LIBHDFS_EXTERNAL
+    void hdfsSetLogger(struct hdfsLogger *hdfsLogger);
+
     /**
      * Some utility decls used in libhdfs.
      */
