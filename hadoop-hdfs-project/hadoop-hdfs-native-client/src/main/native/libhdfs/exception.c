@@ -167,7 +167,7 @@ int printExceptionAndFreeV(JNIEnv *env, jthrowable exc, int noPrintFlags,
 
     jthr = classNameOfObject(exc, env, &className);
     if (jthr) {
-        fprintf(stderr, "PrintExceptionAndFree: error determining class name "
+        _hdfsLogger->errLogMessage("PrintExceptionAndFree: error determining class name "
             "of exception.\n");
         className = strdup("(unknown)");
         destroyLocalReference(env, jthr);
@@ -193,18 +193,18 @@ int printExceptionAndFreeV(JNIEnv *env, jthrowable exc, int noPrintFlags,
     setTLSExceptionStrings(rootCause, stackTrace);
 
     if (!noPrint) {
-        vfprintf(stderr, fmt, ap);
-        fprintf(stderr, " error:\n");
+        _hdfsLogger->vaErrLogMessage(fmt, ap);
+        _hdfsLogger->errLogMessage(" error:\n");
 
         if (!rootCause) {
-            fprintf(stderr, "(unable to get root cause for %s)\n", className);
+            _hdfsLogger->errLogMessage("(unable to get root cause for %s)\n", className);
         } else {
-            fprintf(stderr, "%s", rootCause);
+            _hdfsLogger->errLogMessage("%s", rootCause);
         }
         if (!stackTrace) {
-            fprintf(stderr, "(unable to get stack trace for %s)\n", className);
+            _hdfsLogger->errLogMessage("(unable to get stack trace for %s)\n", className);
         } else {
-            fprintf(stderr, "%s", stackTrace);
+            _hdfsLogger->errLogMessage("%s", stackTrace);
         }
     }
 
@@ -235,9 +235,9 @@ int printPendingExceptionAndFree(JNIEnv *env, int noPrintFlags,
     exc = (*env)->ExceptionOccurred(env);
     if (!exc) {
         va_start(ap, fmt);
-        vfprintf(stderr, fmt, ap);
+        _hdfsLogger->vaErrLogMessage(fmt, ap);
         va_end(ap);
-        fprintf(stderr, " error: (no exception)");
+        _hdfsLogger->errLogMessage(" error: (no exception)");
         ret = 0;
     } else {
         (*env)->ExceptionClear(env);
