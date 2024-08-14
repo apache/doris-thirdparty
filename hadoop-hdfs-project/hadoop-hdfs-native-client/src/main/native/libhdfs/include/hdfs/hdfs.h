@@ -21,6 +21,7 @@
 
 #include <errno.h> /* for EINTERNAL, etc. */
 #include <fcntl.h> /* for O_RDONLY, O_WRONLY */
+#include <stdarg.h> /* for va_list */
 #include <stdint.h> /* for uint64_t, etc. */
 #include <time.h> /* for time_t */
 
