@@ -194,6 +194,10 @@ INCLUDE_DIRECTORIES( ${_CL_BOOST_INCLUDE_PATH} )
 ADD_SUBDIRECTORY (src/ext)
 include(cmake/FindRoaring.cmake)
 find_package(Roaring REQUIRED)
+
+#zstd
+find_package(Zstd REQUIRED)
+
 #TurboPFOR
 ADD_SUBDIRECTORY (src/ext/for)
 ADD_SUBDIRECTORY (src/shared)

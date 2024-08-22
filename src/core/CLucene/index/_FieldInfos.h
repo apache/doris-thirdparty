@@ -146,7 +146,8 @@ public:
 	void add(const TCHAR** names, const bool isIndexed, const bool storeTermVector = false,
 						const bool storePositionWithTermVector = false,
 						const bool storeOffsetWithTermVector = false, const bool omitNorms = false,
-						const bool hasProx = false, const bool storePayloads = false);
+						const bool hasProx = false, const bool storePayloads = false,
+						IndexVersion indexVersion = IndexVersion::kV1);
 
         // Merges in information from another FieldInfos. 
 	void add(FieldInfos* other);
@@ -167,13 +168,15 @@ public:
 	FieldInfo* add(const TCHAR* name, const bool isIndexed, const bool storeTermVector = false,
 									const bool storePositionWithTermVector = false,
 									const bool storeOffsetWithTermVector = false, const bool omitNorms = false,
-									const bool hasProx = false, const bool storePayloads = false);
+									const bool hasProx = false, const bool storePayloads = false,
+									IndexVersion indexVersion = IndexVersion::kV1);
 
   // was void
 	FieldInfo* addInternal(const TCHAR* name, const bool isIndexed, const bool storeTermVector,
 													const bool storePositionWithTermVector,
 													const bool storeOffsetWithTermVector, const bool omitNorms,
-													const bool hasProx, const bool storePayloads);
+													const bool hasProx, const bool storePayloads,
+													IndexVersion indexVersion = IndexVersion::kV1);
 
 	int32_t fieldNumber(const TCHAR* fieldName)const;
 	

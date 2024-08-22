@@ -7,6 +7,7 @@
 #ifndef _lucene_index_SegmentHeader_
 #define _lucene_index_SegmentHeader_
 
+#include "CLucene/util/PFORUtil.h"
 #include "_SegmentInfos.h"
 #include "CLucene/util/BitSet.h"
 //#include "CLucene/util/VoidMap.h"
@@ -83,7 +84,63 @@ private:
   CL_NS(store)::IndexInput* freqStream_ = nullptr;
 
   bool hasProx_ = false;
-  IndexVersion indexVersion_ = IndexVersion::kV0; 
+  IndexVersion indexVersion_ = IndexVersion::kV0;
+};
+
+class TermPostingsBuffer {
+public:
+  TermPostingsBuffer(CL_NS(store)::IndexInput* proxStream, IndexVersion indexVersion)
+    : poss_(PforUtil::blockSize + 3)
+    , proxStream_(proxStream)
+    , indexVersion_(indexVersion) {
+  }
+
+  ~TermPostingsBuffer() {
+    size_ = 0;
+    cur_pos_ = 0;
+    proxStream_ = nullptr;
+  }
+
+  int32_t getPos() {
+    if (indexVersion_ >= IndexVersion::kV2) {
+      if (cur_pos_ >= size_) {
+          refill();
+      }
+      return poss_[cur_pos_++];
+    } else {
+      return proxStream_->readVInt();
+    }
+  }
+
+  void seek(int64_t skipPointer) {
+    if (indexVersion_ >= IndexVersion::kV2) {
+      size_ = 0;
+      cur_pos_ = 0;
+    }
+    proxStream_->seek(skipPointer);
+  }
+
+  void reset(CL_NS(store)::IndexInput* proxStream) {
+    size_ = 0;
+    cur_pos_ = 0;
+    proxStream_ = proxStream;
+  }
+
+private:
+  void refill() { 
+    cur_pos_ = 0;
+    size_ = PforUtil::decodePos(proxStream_, poss_);
+  }
+
+private:
+  uint32_t size_ = 0;
+
+  uint32_t cur_pos_ = 0;
+  std::vector<uint32_t> poss_;
+
+  CL_NS(store)::IndexInput* proxStream_ = nullptr;
+
+  IndexVersion indexVersion_ = IndexVersion::kV1;
 };
 
 class SegmentTermDocs:public virtual TermDocs {
@@ -232,6 +289,10 @@ private:
   int32_t doc() const{ return SegmentTermDocs::doc(); }
   int32_t freq() const{ return SegmentTermDocs::freq(); }
   bool skipTo(const int32_t target){ return SegmentTermDocs::skipTo(target); }
+
+private:
+  IndexVersion indexVersion_ = IndexVersion::kV0; 
+  TermPostingsBuffer buffer_;
 };
 
 
