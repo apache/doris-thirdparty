@@ -35,6 +35,7 @@
 #define CL_ERR_FieldReader 24
 #define CL_ERR_MaxBytesLength 25
 #define CL_ERR_FileNotFound 26
+#define CL_ERR_EmptyIndexSegment 27
 
 ////////////////////////////////////////////////////////
 //error try/throw/catch definitions
