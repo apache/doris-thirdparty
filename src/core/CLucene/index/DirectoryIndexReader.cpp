@@ -152,7 +152,9 @@ CL_NS_DEF(index)
 
       DirectoryIndexReader* reader;
 
-      if (infos->size() == 1) {          // index is optimized
+      if (infos->size() == 0) {
+        _CLTHROWA(CL_ERR_EmptyIndexSegment, "The number of index segments is 0, indicating incorrect index generation.");
+      } else if (infos->size() == 1) {          // index is optimized
         reader = SegmentReader::get(infos, infos->info(0), readBufferSize_, closeDirectory);
       } else {
         reader = _CLNEW MultiSegmentReader(directory, infos, closeDirectory, readBufferSize_);
