@@ -101,6 +101,7 @@ SET(test_files ./tests.cpp
         ./util/TestBKD.cpp
         ./util/TestMSBRadixSorter.cpp
         ./util/TestStringBuffer.cpp
+        ./util/TestStringReader.cpp
         ./util/English.cpp
         ./util/TestStrConvert.cpp
         ./query/TestMultiPhraseQuery.cpp
