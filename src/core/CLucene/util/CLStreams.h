@@ -207,7 +207,8 @@ public:
                 tmp = (T *) realloc(tmp, sizeof(T) * (length + 1));
                 this->buffer_size = length;
             }
-            memcpy(tmp, _value, length + 1);
+            memcpy(tmp, _value, length);
+            tmp[length] = 0;
             this->value = tmp;
         } else {
             if (ownValue && this->value != NULL) {
