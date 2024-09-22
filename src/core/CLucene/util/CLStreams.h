@@ -195,6 +195,8 @@ public:
         this->buffer_size = 0;
         this->init(_value, _length, copyData);
     }
+
+    // _value should be type T*
     void init(const void *_value, int32_t _length, bool copyData = true) override {
         const size_t length = _length;
         this->pos = 0;
@@ -207,7 +209,10 @@ public:
                 tmp = (T *) realloc(tmp, sizeof(T) * (length + 1));
                 this->buffer_size = length;
             }
-            memcpy(tmp, _value, length + 1);
+            // copy data
+            memcpy(tmp, _value, length * sizeof(T));
+            // add trailing zero
+            tmp[length] = 0;
             this->value = tmp;
         } else {
             if (ownValue && this->value != NULL) {
@@ -224,6 +229,15 @@ public:
             auto *v = (T *) this->value;
             _CLDELETE_LARRAY(v);
             this->value = NULL;
+        }
+    }
+
+    // for test only
+    int testValueAt(const size_t i) {
+        if (i <= this->m_size) {
+            return this->value[i];
+        } else {
+            return -1;
         }
     }
 
