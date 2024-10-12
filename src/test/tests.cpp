@@ -19,6 +19,7 @@ unittest tests[] = {
         {"MultiPhraseQuery", testMultiPhraseQuery},
         {"IndexCompaction", testIndexCompaction},
         {"testStringReader", testStringReader},
+        {"IndexCompress", testIndexCompress},
 #ifdef TEST_CONTRIB_LIBS
         {"chinese", testchinese},
 #endif

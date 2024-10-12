@@ -20,6 +20,11 @@
 #include <cpuid.h>
 #endif
 
+#include "CLucene/CLConfig.h"
+#include "CLucene/index/CodeMode.h"
+
+CL_NS_USE(index)
+
 namespace {
 using DEC_FUNC = size_t (*)(unsigned char *__restrict, size_t, uint32_t *__restrict);
 using ENC_FUNC = size_t (*)(uint32_t *__restrict in, size_t n, unsigned char *__restrict out);
@@ -128,4 +133,52 @@ size_t P4ENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out) {
 
 size_t P4NZENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out) {
     return g_p4nzenc(in, n, out);
+}
+
+void PforUtil::encodePos(IndexOutput* out, std::vector<uint32_t>& buffer) {
+    auto encode = [&out, &buffer](size_t offset, size_t size, CodeMode mode) {
+        out->writeByte((char)mode);
+        out->writeVInt(size);
+        if (mode == CodeMode::kPfor) {
+            std::vector<uint8_t> compress(4 * size + PFOR_BLOCK_SIZE);
+            size_t compressSize = P4NZENC(buffer.data() + offset, size, compress.data());
+            out->writeVInt(compressSize);
+            out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), compressSize);
+        } else if (mode == CodeMode::kDefault) {
+            for (size_t i = 0; i < size; i++) {
+                out->writeVInt(buffer[offset + i]);
+            }
+        }
+    };
+
+    size_t i = 0;
+    size_t totalSize = buffer.size();
+    while (i < totalSize) {
+        size_t remainingElements = totalSize - i;
+        if (remainingElements >= blockSize) {
+            encode(i, blockSize, CodeMode::kPfor);
+            i += blockSize;
+        } else {
+            encode(i, remainingElements, CodeMode::kDefault);
+            break;
+        }
+    }
+
+    buffer.resize(0);
+}
+
+uint32_t PforUtil::decodePos(IndexInput* in, std::vector<uint32_t>& buffer) {
+    CodeMode mode = static_cast<CodeMode>(in->readByte());
+    uint32_t size = in->readVInt();
+    if (mode == CodeMode::kPfor) {
+        uint32_t serializedSize = in->readVInt();
+        std::vector<uint8_t> buf(serializedSize + PFOR_BLOCK_SIZE);
+        in->readBytes(buf.data(), serializedSize);
+        P4NZDEC(buf.data(), size, buffer.data());
+    } else {
+        for (uint32_t i = 0; i < size; i++) {
+            buffer[i] = in->readVInt();
+        }
+    }
+    return size;
 }

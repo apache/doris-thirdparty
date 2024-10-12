@@ -86,6 +86,7 @@ SET(test_files ./tests.cpp
         ./search/spans/TestSpanExplanationsOfNonMatches.cpp
         ./search/spans/TestSpanExplanationsOfNonMatches.h
         ./index/TestIndexCompaction.cpp
+        ./index/TestIndexCompress.cpp
         ./index/TestIndexModifier.cpp
         ./index/TestIndexWriter.cpp
         ./index/TestIndexModifier.cpp

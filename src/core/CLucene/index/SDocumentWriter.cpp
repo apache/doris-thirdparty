@@ -1222,6 +1222,9 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
                 encode(freqOut, docDeltaBuffer, true);
                 if (hasProx_) {
                     encode(freqOut, freqBuffer, false);
+                    if (indexVersion_ >= IndexVersion::kV2) {
+                        PforUtil::encodePos(proxOut, posBuffer);
+                    }
                 }
 
                 skipListWriter->setSkipData(lastDoc, currentFieldStorePayloads, lastPayloadLength);
@@ -1253,7 +1256,11 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
                 for (int32_t j = 0; j < termDocFreq; j++) {
                     const int32_t code = prox.readVInt();
                     assert(0 == (code & 1));
-                    proxOut->writeVInt(code >> 1);
+                    if (indexVersion_ >= IndexVersion::kV2) {
+                        posBuffer.push_back(code >> 1);
+                    } else {
+                        proxOut->writeVInt(code >> 1);
+                    }
                 }
                 freqBuffer.push_back(termDocFreq);
             }
@@ -1310,6 +1317,9 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
             }
             docDeltaBuffer.resize(0);
             freqBuffer.resize(0);
+            if (indexVersion_ >= IndexVersion::kV2) {
+                PforUtil::encodePos(proxOut, posBuffer);
+            }
         }
         
         int64_t skipPointer = skipListWriter->writeSkip(freqOut);

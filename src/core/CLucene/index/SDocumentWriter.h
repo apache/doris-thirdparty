@@ -52,6 +52,7 @@ private:
     std::string segment;// Current segment we are working on
     std::vector<uint32_t> docDeltaBuffer;
     std::vector<uint32_t> freqBuffer;
+    std::vector<uint32_t> posBuffer;
     std::ostream* infoStream{};
     int64_t ramBufferSize;
     // Flush @ this number of docs.  If rarmBufferSize is

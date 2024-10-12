@@ -18,9 +18,22 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
+
+#include "CLucene.h"
+#include "CLucene/store/IndexOutput.h"
+
+CL_NS_USE(store)
 
 size_t P4DEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict out);
 size_t P4NZDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict out);
 size_t P4ENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out);
 size_t P4NZENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out);
 
+class PforUtil {
+public:
+    static constexpr size_t blockSize = 128;
+
+    static void encodePos(IndexOutput* out, std::vector<uint32_t>& buffer);
+    static uint32_t decodePos(IndexInput* out, std::vector<uint32_t>& buffer);
+};
