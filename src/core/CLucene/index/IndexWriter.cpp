@@ -1308,21 +1308,6 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     }
     assert(readers.size() == numIndices);
 
-    // check hasProx
-    bool hasProx = false;
-    {
-        if (!readers.empty()) {
-            IndexReader* reader = readers[0];
-            hasProx = reader->getFieldInfos()->hasProx();
-            for (int32_t i = 1; i < readers.size(); i++) {
-                if (hasProx != readers[i]->getFieldInfos()->hasProx()) {
-                    _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs hasProx inconformity");
-                }
-            }
-        }
-    }
-    // std::cout << "hasProx: " << hasProx << std::endl;
-
     numDestIndexes = dest_dirs.size();
 
     // print dest index files
@@ -1342,6 +1327,20 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     std::vector<lucene::index::IndexWriter *> destIndexWriterList;
     std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList;
     try {
+        // check hasProx
+        bool hasProx = false;
+        {
+            if (!readers.empty()) {
+                IndexReader* reader = readers[0];
+                hasProx = reader->getFieldInfos()->hasProx();
+                for (int32_t i = 1; i < readers.size(); i++) {
+                    if (hasProx != readers[i]->getFieldInfos()->hasProx()) {
+                        _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs hasProx inconformity");
+                    }
+                }
+            }
+        }
+
         /// merge fields
         mergeFields(hasProx);
 
@@ -1395,8 +1394,6 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
 
         /// merge null_bitmap
         mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
-    } catch (CLuceneError &e) {
-        throw e;
     }
     _CLFINALLY(
             for (auto freqOutput
