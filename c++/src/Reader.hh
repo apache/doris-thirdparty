@@ -281,6 +281,8 @@ namespace orc {
 
     std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size) const override;
 
+    std::vector<int> getAllStripesNeeded() const override;
+
     uint64_t nextBatch(ColumnVectorBatch& data, void* arg = nullptr) override;
 
     bool next(ColumnVectorBatch& data) override;
@@ -418,7 +420,7 @@ namespace orc {
       return contents->schema.get();
     }
 
-    InputStream* getStream() const {
+    InputStream* getStream() const override {
       return contents->stream.get();
     }
 

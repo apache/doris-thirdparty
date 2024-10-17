@@ -1221,6 +1221,36 @@ namespace orc {
     }
   }
 
+  std::vector<int> RowReaderImpl::getAllStripesNeeded() const {
+    std::vector<int> allStripesNeeded ;
+
+    auto  numberOfStripes = static_cast<uint64_t>(footer->stripes_size());
+    if (sargsApplier == nullptr || contents->metadata == nullptr) {
+      return std::vector<int>(numberOfStripes, 1);
+    }
+
+    for ( uint64_t currentStripeIndex = 0;currentStripeIndex < numberOfStripes ; currentStripeIndex ++) {
+      bool isStripeNeeded = true;
+      const auto& currentStripeStats =
+              contents->metadata->stripestats(static_cast<int>(currentStripeIndex));
+
+      //Not need add mMetrics,so use 0.
+      isStripeNeeded = sargsApplier->evaluateStripeStatistics(currentStripeStats, 0);
+
+      //Maybe we should consider bloomFilter, but loadStripeIndex() will change some current status.
+//          if (isStripeNeeded) {
+//              // read row group statistics and bloom filters of current stripe
+//              loadStripeIndex();
+//              // select row groups to read in the current stripe
+//              sargsApplier->pickRowGroups(rowsInCurrentStripe, rowIndexes, bloomFilterIndex);
+//              isStripeNeeded = sargsApplier->hasSelectedFrom(currentRowInStripe);
+//          }
+
+      allStripesNeeded.emplace_back(isStripeNeeded);
+    }
+    return allStripesNeeded;
+  }
+
   bool RowReaderImpl::next(ColumnVectorBatch& data) {
     return nextBatch(data, nullptr) != 0;
   }
