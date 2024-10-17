@@ -424,6 +424,10 @@ namespace orc {
       return contents->stream.get();
     }
 
+    void setStream(std::unique_ptr<InputStream> inputStreamUPtr) override{
+      contents->stream =  std::move(inputStreamUPtr);
+    }
+
     uint64_t getMemoryUse(int stripeIx = -1) override;
 
     uint64_t getMemoryUseByFieldId(const std::list<uint64_t>& include, int stripeIx = -1) override;

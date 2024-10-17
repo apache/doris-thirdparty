@@ -635,6 +635,8 @@ namespace orc {
         uint32_t stripeIndex, const std::set<uint32_t>& included) const = 0;
 
     virtual InputStream* getStream() const = 0;
+
+    virtual void setStream(std::unique_ptr<InputStream>) = 0;
   };
 
   /**

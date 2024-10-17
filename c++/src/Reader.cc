@@ -1126,7 +1126,6 @@ namespace orc {
             << ", footerLength=" << currentStripeInfo.footerlength() << ")";
         throw ParseError(msg.str());
       }
-      currentStripeFooter = getStripeFooter(currentStripeInfo, *contents.get());
       rowsInCurrentStripe = currentStripeInfo.numberofrows();
       processingStripe = currentStripe;
 
@@ -1148,13 +1147,23 @@ namespace orc {
           isStripeNeeded =
               sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount);
         }
+        if (!isStripeNeeded) {
+          // advance to next stripe when current stripe has no matching rows
+          currentStripe += 1;
+          currentRowInStripe = 0;
+          continue;
+        }
+      }
 
+      currentStripeFooter = getStripeFooter(currentStripeInfo, *contents.get());
+      if (sargsApplier) {
+        bool isStripeNeeded = true;
         if (isStripeNeeded) {
           // read row group statistics and bloom filters of current stripe
           loadStripeIndex();
           // select row groups to read in the current stripe
           sargsApplier->pickRowGroups(rowsInCurrentStripe, rowIndexes, bloomFilterIndex);
-          isStripeNeeded = sargsApplier->hasSelectedFrom(currentRowInStripe);
+            isStripeNeeded = sargsApplier->hasSelectedFrom(currentRowInStripe);
         }
         if (!isStripeNeeded) {
           // advance to next stripe when current stripe has no matching rows
