@@ -7,6 +7,7 @@
 #ifndef _lucene_index_IndexWriter_
 #define _lucene_index_IndexWriter_
 
+#include "CLucene/index/IndexVersion.h"
 #include "CLucene/util/VoidList.h"
 #include "CLucene/util/Array.h"
 
@@ -320,11 +321,11 @@ public:
                             std::vector<uint32_t> dest_index_docs);
 
     // create new fields info
-    void mergeFields(bool hasProx);
+    void mergeFields(bool hasProx, IndexVersion indexVersion);
     // write fields info file
     void writeFields(lucene::store::Directory* d, std::string segment);
     // merge terms and write files
-    void mergeTerms(bool hasProx);
+    void mergeTerms(bool hasProx, IndexVersion indexVersion);
     // merge null_bitmap
     void mergeNullBitmap(std::vector<std::vector<uint32_t>> srcBitmapValues, std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList);
 

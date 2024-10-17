@@ -17,6 +17,8 @@ CL_NS_DEF(index)
 SegmentTermPositions::SegmentTermPositions(const SegmentReader* _parent):
 	SegmentTermDocs(_parent), proxStream(NULL)// the proxStream will be cloned lazily when nextPosition() is called for the first time
 	,lazySkipPointer(-1), lazySkipProxCount(0)
+    , indexVersion_(_parent->_fieldInfos->getIndexVersion())
+    , buffer_(proxStream, indexVersion_)
 {
     CND_CONDITION(_parent != NULL, "Parent is NULL");
 }
@@ -64,14 +66,15 @@ int32_t SegmentTermPositions::nextPosition() {
 }
 
 int32_t SegmentTermPositions::readDeltaPosition() {
-	int32_t delta = proxStream->readVInt();
+	int32_t delta = buffer_.getPos();
 	if (currentFieldStoresPayloads) {
 		// if the current field stores payloads then
 		// the position delta is shifted one bit to the left.
 		// if the LSB is set, then we have to read the current
 		// payload length
 		if ((delta & 1) != 0) {
-			payloadLength = proxStream->readVInt();
+			// payloadLength = proxStream->readVInt();
+            _CLTHROWA(CL_ERR_UnsupportedOperation, "Processing the payload flow is not supported at the moment");
 		} 
 		delta = (int32_t)((uint32_t)delta >> (uint32_t)1);
 		needToLoadPayload = true;
@@ -122,7 +125,8 @@ void SegmentTermPositions::skipPositions(const int32_t n) {
 
 void SegmentTermPositions::skipPayload() {
 	if (needToLoadPayload && payloadLength > 0) {
-		proxStream->seek(proxStream->getFilePointer() + payloadLength);
+		// proxStream->seek(proxStream->getFilePointer() + payloadLength);
+        _CLTHROWA(CL_ERR_UnsupportedOperation, "Processing the payload flow is not supported at the moment");
 	}
 	needToLoadPayload = false;
 }
@@ -131,6 +135,7 @@ void SegmentTermPositions::lazySkip() {
     if (proxStream == NULL) {
       // clone lazily
       proxStream = parent->proxStream->clone();
+      buffer_.reset(proxStream);
     }
     
     // we might have to skip the current payload
@@ -138,7 +143,7 @@ void SegmentTermPositions::lazySkip() {
     skipPayload();
       
     if (lazySkipPointer != -1) {
-      proxStream->seek(lazySkipPointer);
+      buffer_.seek(lazySkipPointer);
       lazySkipPointer = -1;
     }
      
@@ -166,7 +171,8 @@ uint8_t* SegmentTermPositions::getPayload(uint8_t* data) {
 	} else {
 		retArray = data;
 	}
-	proxStream->readBytes(retArray, payloadLength);
+	// proxStream->readBytes(retArray, payloadLength);
+    _CLTHROWA(CL_ERR_UnsupportedOperation, "Processing the payload flow is not supported at the moment");
 	needToLoadPayload = false;
 	return retArray;
 }

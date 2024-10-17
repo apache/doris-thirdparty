@@ -190,7 +190,7 @@ void TermDocsBuffer::refill() {
     cur_doc_ = 0;
     cur_freq_ = 0;
 
-    if (indexVersion_ == IndexVersion::kV1) {
+    if (indexVersion_ >= IndexVersion::kV1) {
         size_ = refillV1();
     } else {
         size_ = refillV0();
@@ -199,7 +199,7 @@ void TermDocsBuffer::refill() {
 
 void TermDocsBuffer::readRange(DocRange* docRange) {
     int32_t size = 0;
-    if (indexVersion_ == IndexVersion::kV1) {
+    if (indexVersion_ >= IndexVersion::kV1) {
         size = refillV1();
     } else {
         size = refillV0();

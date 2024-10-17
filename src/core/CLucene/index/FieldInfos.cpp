@@ -125,11 +125,12 @@ void FieldInfos::addIndexed(const TCHAR** names, const bool storeTermVectors, co
 
 void FieldInfos::add(const TCHAR** names, const bool isIndexed, const bool storeTermVectors,
                      const bool storePositionWithTermVector, const bool storeOffsetWithTermVector,
-                     const bool omitNorms, const bool hasProx, const bool storePayloads) {
+                     const bool omitNorms, const bool hasProx, const bool storePayloads,
+										 IndexVersion indexVersion) {
         size_t i = 0;      
 	while ( names[i] != NULL ){
 		add(names[i], isIndexed, storeTermVectors, storePositionWithTermVector, 
-			storeOffsetWithTermVector, omitNorms, hasProx, storePayloads);
+			storeOffsetWithTermVector, omitNorms, hasProx, storePayloads, indexVersion);
 		++i;
 	}
 }
@@ -137,11 +138,13 @@ void FieldInfos::add(const TCHAR** names, const bool isIndexed, const bool store
 FieldInfo* FieldInfos::add(const TCHAR* name, const bool isIndexed, const bool storeTermVector,
                            const bool storePositionWithTermVector,
                            const bool storeOffsetWithTermVector, const bool omitNorms,
-                           const bool hasProx, const bool storePayloads) {
+                           const bool hasProx, const bool storePayloads,
+													 IndexVersion indexVersion) {
   FieldInfo* fi = fieldInfo(name);
 	if (fi == NULL) {
 		return addInternal(name, isIndexed, storeTermVector, storePositionWithTermVector,
-												storeOffsetWithTermVector, omitNorms, hasProx, storePayloads);
+												storeOffsetWithTermVector, omitNorms, hasProx, storePayloads,
+												indexVersion);
   } else {
 		if (fi->isIndexed != isIndexed) {
 			fi->isIndexed = true;                      // once indexed, always index
@@ -164,6 +167,9 @@ FieldInfo* FieldInfos::add(const TCHAR* name, const bool isIndexed, const bool s
 		if (fi->storePayloads != storePayloads) {
 			fi->storePayloads = true;
 		}
+		if (fi->indexVersion_ != indexVersion) {
+			fi->indexVersion_ = indexVersion;
+		}
 	}
 	return fi;
 }
@@ -172,10 +178,12 @@ FieldInfo* FieldInfos::addInternal(const TCHAR* name, const bool isIndexed,
                                    const bool storeTermVector,
                                    const bool storePositionWithTermVector,
                                    const bool storeOffsetWithTermVector, const bool omitNorms,
-                                   const bool hasProx, const bool storePayloads) {
+                                   const bool hasProx, const bool storePayloads,
+																	 IndexVersion indexVersion) {
 	FieldInfo* fi = _CLNEW FieldInfo(name, isIndexed, byNumber.size(), storeTermVector,
 																		storePositionWithTermVector, storeOffsetWithTermVector,
 																		omitNorms, hasProx, storePayloads);
+	fi->setIndexVersion(indexVersion);
   byNumber.push_back(fi);
 	byName.put( fi->name, fi);
 	return fi;

@@ -8,6 +8,7 @@
 
 #include "CLucene/analysis/AnalysisHeader.h"
 #include "CLucene/analysis/Analyzers.h"
+#include "CLucene/config/repl_wchar.h"
 #include "CLucene/document/Document.h"
 #include "CLucene/search/Similarity.h"
 #include "CLucene/store/Directory.h"
@@ -1327,22 +1328,27 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     std::vector<lucene::index::IndexWriter *> destIndexWriterList;
     std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList;
     try {
-        // check hasProx
+        // check hasProx, indexVersion
         bool hasProx = false;
+        IndexVersion indexVersion = IndexVersion::kV1;
         {
             if (!readers.empty()) {
                 IndexReader* reader = readers[0];
                 hasProx = reader->getFieldInfos()->hasProx();
+                indexVersion = reader->getFieldInfos()->getIndexVersion();
                 for (int32_t i = 1; i < readers.size(); i++) {
                     if (hasProx != readers[i]->getFieldInfos()->hasProx()) {
                         _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs hasProx inconformity");
+                    }
+                    if (indexVersion != readers[i]->getFieldInfos()->getIndexVersion()) {
+                        _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs indexVersion inconformity");
                     }
                 }
             }
         }
 
         /// merge fields
-        mergeFields(hasProx);
+        mergeFields(hasProx, indexVersion);
 
         /// write fields and create files writers
         for (int j = 0; j < numDestIndexes; j++) {
@@ -1390,7 +1396,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         }
 
         /// merge terms
-        mergeTerms(hasProx);
+        mergeTerms(hasProx, indexVersion);
 
         /// merge null_bitmap
         mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
@@ -1555,7 +1561,7 @@ void IndexWriter::compareIndexes(lucene::store::Directory *other) {
     }
 }
 
-void IndexWriter::mergeFields(bool hasProx) {
+void IndexWriter::mergeFields(bool hasProx, IndexVersion indexVersion) {
     //Create a new FieldInfos
     fieldInfos = _CLNEW FieldInfos();
     //Condition check to see if fieldInfos points to a valid instance
@@ -1570,7 +1576,8 @@ void IndexWriter::mergeFields(bool hasProx) {
         FieldInfo *fi = reader->getFieldInfos()->fieldInfo(j);
         fieldInfos->add(fi->name, fi->isIndexed, fi->storeTermVector,
                         fi->storePositionWithTermVector, fi->storeOffsetWithTermVector,
-                        !reader->hasNorms(fi->name), hasProx, fi->storePayloads);
+                        !reader->hasNorms(fi->name), hasProx, fi->storePayloads,
+                        fi->indexVersion_);
     }
 }
 
@@ -1614,7 +1621,7 @@ protected:
 
 };
 
-void IndexWriter::mergeTerms(bool hasProx) {
+void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
     auto queue = _CLNEW SegmentMergeQueue(readers.size());
     auto numSrcIndexes = readers.size();
     //std::vector<TermPositions *> postingsList(numSrcIndexes);
@@ -1667,6 +1674,7 @@ void IndexWriter::mergeTerms(bool hasProx) {
 
         std::vector<std::vector<uint32_t>> docDeltaBuffers(numDestIndexes);
         std::vector<std::vector<uint32_t>> freqBuffers(numDestIndexes);
+        std::vector<std::vector<uint32_t>> posBuffers(numDestIndexes);
         auto destPostingQueues = _CLNEW postingQueue(matchSize);
         std::vector<DestDoc> destDocs(matchSize);
 
@@ -1758,6 +1766,7 @@ void IndexWriter::mergeTerms(bool hasProx) {
                 auto proxOut = proxOutputList[destIdx];
                 auto& docDeltaBuffer = docDeltaBuffers[destIdx];
                 auto& freqBuffer = freqBuffers[destIdx];
+                auto& posBuffer = posBuffers[destIdx];
                 auto skipWriter = skipListWriterList[destIdx];
                 auto& df = dfs[destIdx];
                 auto& lastDoc = lastDocs[destIdx];
@@ -1776,6 +1785,9 @@ void IndexWriter::mergeTerms(bool hasProx) {
                     encode(freqOut, docDeltaBuffer, true);
                     if (hasProx) {
                         encode(freqOut, freqBuffer, false);
+                        if (indexVersion >= IndexVersion::kV2) {
+                            PforUtil::encodePos(proxOut, posBuffer);
+                        }
                     }
 
                     skipWriter->setSkipData(lastDoc, false, -1);
@@ -1791,7 +1803,11 @@ void IndexWriter::mergeTerms(bool hasProx) {
                     for (int32_t i = 0; i < descPositions.size(); i++) {
                         int32_t position = descPositions[i];
                         int32_t delta = position - lastPosition;
-                        proxOut->writeVInt(delta);
+                        if (indexVersion >= IndexVersion::kV2) {
+                            posBuffer.push_back(delta);
+                        } else {
+                            proxOut->writeVInt(delta);
+                        }
                         lastPosition = position;
                     }
                     freqBuffer.push_back(destFreq);
@@ -1828,6 +1844,7 @@ void IndexWriter::mergeTerms(bool hasProx) {
             {
                 auto& docDeltaBuffer = docDeltaBuffers[i];
                 auto& freqBuffer = freqBuffers[i];
+                auto& posBuffer = posBuffers[i];
 
                 freqOutput->writeByte((char)CodeMode::kDefault);
                 freqOutput->writeVInt(docDeltaBuffer.size());
@@ -1851,6 +1868,9 @@ void IndexWriter::mergeTerms(bool hasProx) {
                 }
                 docDeltaBuffer.resize(0);
                 freqBuffer.resize(0);
+                if (indexVersion >= IndexVersion::kV2) {
+                    PforUtil::encodePos(proxOutput, posBuffer);
+                }
             }
             
             int64_t skipPointer = skipListWriter->writeSkip(freqOutput);
