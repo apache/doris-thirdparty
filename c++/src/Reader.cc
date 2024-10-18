@@ -306,7 +306,8 @@ namespace orc {
     column_selector.updateSelected(selectedColumns, opts);
 
     // prepare SargsApplier if SearchArgument is available
-    if (opts.getSearchArgument() && footer->rowindexstride() > 0) {
+    sargsApplier = std::move(contents->sargsApplier);
+    if (sargsApplier == nullptr && opts.getSearchArgument() && footer->rowindexstride() > 0) {
       sargs = opts.getSearchArgument();
       sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), footer->rowindexstride(),
                                           getWriterVersionImpl(_contents.get()),
@@ -917,6 +918,37 @@ namespace orc {
     return std::make_unique<RowReaderImpl>(contents, opts, filter, stringDictFilter);
   }
 
+  std::vector<int> ReaderImpl::getNeedReadStripes(const RowReaderOptions& opts) {
+    if (opts.getSearchArgument() && !isMetadataLoaded) {
+      // load stripe statistics for PPD
+      readMetadata();
+    }
+
+    std::vector<int> allStripesNeeded(numberOfStripes,1);
+
+    if (opts.getSearchArgument() && footer->rowindexstride() > 0) {
+      auto sargs = opts.getSearchArgument();
+      sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), footer->rowindexstride(),
+                                          getWriterVersionImpl(contents.get()),
+                                          contents->readerMetrics));
+
+      if (sargsApplier == nullptr || contents->metadata == nullptr) {
+        return allStripesNeeded;
+      }
+
+      for ( uint64_t currentStripeIndex = 0;currentStripeIndex < numberOfStripes ; currentStripeIndex ++) {
+        const auto& currentStripeStats =
+              contents->metadata->stripestats(static_cast<int>(currentStripeIndex));
+        //Not need add mMetrics,so use 0.
+        allStripesNeeded[currentStripeIndex] = sargsApplier->evaluateStripeStatistics(currentStripeStats, 0);;
+      }
+      contents->sargsApplier = std::move(sargsApplier);
+    }
+    return allStripesNeeded;
+  }
+
+
+
   uint64_t maxStreamsForType(const proto::Type& type) {
     switch (static_cast<int64_t>(type.kind())) {
       case proto::Type_Kind_STRUCT:
@@ -1126,29 +1158,38 @@ namespace orc {
             << ", footerLength=" << currentStripeInfo.footerlength() << ")";
         throw ParseError(msg.str());
       }
+
+      if (sargsApplier) {
+        bool isStripeNeeded = true;
+        if (contents->metadata) {
+          const auto &currentStripeStats =
+                  contents->metadata->stripestats(static_cast<int>(currentStripe));
+          // skip this stripe after stats fail to satisfy sargs
+          uint64_t stripeRowGroupCount =
+                  (rowsInCurrentStripe + footer->rowindexstride() - 1) / footer->rowindexstride();
+          isStripeNeeded =
+                  sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount);
+        }
+        if (!isStripeNeeded) {
+          // advance to next stripe when current stripe has no matching rows
+          currentStripe += 1;
+          currentRowInStripe = 0;
+          continue;
+        }
+      }
       currentStripeFooter = getStripeFooter(currentStripeInfo, *contents.get());
       rowsInCurrentStripe = currentStripeInfo.numberofrows();
       processingStripe = currentStripe;
 
       std::unique_ptr<StripeInformation> currentStripeInformation(new StripeInformationImpl(
-          currentStripeInfo.offset(), currentStripeInfo.indexlength(),
-          currentStripeInfo.datalength(), currentStripeInfo.footerlength(),
-          currentStripeInfo.numberofrows(), contents->stream.get(), *contents->pool,
-          contents->compression, contents->blockSize, contents->readerMetrics));
+            currentStripeInfo.offset(), currentStripeInfo.indexlength(),
+            currentStripeInfo.datalength(), currentStripeInfo.footerlength(),
+            currentStripeInfo.numberofrows(), contents->stream.get(), *contents->pool,
+            contents->compression, contents->blockSize, contents->readerMetrics));
       contents->stream->beforeReadStripe(std::move(currentStripeInformation), selectedColumns);
 
       if (sargsApplier) {
         bool isStripeNeeded = true;
-        if (contents->metadata) {
-          const auto& currentStripeStats =
-              contents->metadata->stripestats(static_cast<int>(currentStripe));
-          // skip this stripe after stats fail to satisfy sargs
-          uint64_t stripeRowGroupCount =
-              (rowsInCurrentStripe + footer->rowindexstride() - 1) / footer->rowindexstride();
-          isStripeNeeded =
-              sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount);
-        }
-
         if (isStripeNeeded) {
           // read row group statistics and bloom filters of current stripe
           loadStripeIndex();
