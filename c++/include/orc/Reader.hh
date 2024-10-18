@@ -637,6 +637,8 @@ namespace orc {
     virtual InputStream* getStream() const = 0;
 
     virtual void setStream(std::unique_ptr<InputStream>) = 0;
+
+    virtual std::vector<int> getNeedReadStripes(const RowReaderOptions& opts) = 0;
   };
 
   /**
@@ -704,8 +706,6 @@ namespace orc {
      * Get number of rows in this range.
      */
     virtual uint64_t getNumberOfRows() const = 0;
-
-    virtual std::vector<int> getAllStripesNeeded() const = 0;
   };
 }  // namespace orc
 

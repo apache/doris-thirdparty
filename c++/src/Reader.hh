@@ -100,6 +100,7 @@ namespace orc {
     bool isDecimalAsLong;
     std::unique_ptr<proto::Metadata> metadata;
     ReaderMetrics* readerMetrics;
+    std::unique_ptr<SargsApplier> sargsApplier;
   };
 
   proto::StripeFooter getStripeFooter(const proto::StripeInformation& info,
@@ -281,8 +282,6 @@ namespace orc {
 
     std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size) const override;
 
-    std::vector<int> getAllStripesNeeded() const override;
-
     uint64_t nextBatch(ColumnVectorBatch& data, void* arg = nullptr) override;
 
     bool next(ColumnVectorBatch& data) override;
@@ -316,6 +315,8 @@ namespace orc {
     // footer
     proto::Footer* footer;
     uint64_t numberOfStripes;
+    std::unique_ptr<SargsApplier> sargsApplier;
+    std::vector<int> getNeedReadStripes(const RowReaderOptions& opts) override;
     uint64_t getMemoryUse(int stripeIx, std::vector<bool>& selectedColumns);
 
     // internal methods

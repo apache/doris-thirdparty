@@ -306,7 +306,8 @@ namespace orc {
     column_selector.updateSelected(selectedColumns, opts);
 
     // prepare SargsApplier if SearchArgument is available
-    if (opts.getSearchArgument() && footer->rowindexstride() > 0) {
+    sargsApplier = std::move(contents->sargsApplier);
+    if (sargsApplier == nullptr && opts.getSearchArgument() && footer->rowindexstride() > 0) {
       sargs = opts.getSearchArgument();
       sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), footer->rowindexstride(),
                                           getWriterVersionImpl(_contents.get()),
@@ -917,6 +918,37 @@ namespace orc {
     return std::make_unique<RowReaderImpl>(contents, opts, filter, stringDictFilter);
   }
 
+  std::vector<int> ReaderImpl::getNeedReadStripes(const RowReaderOptions& opts) {
+    if (opts.getSearchArgument() && !isMetadataLoaded) {
+      // load stripe statistics for PPD
+      readMetadata();
+    }
+
+    std::vector<int> allStripesNeeded(numberOfStripes,1);
+
+    if (opts.getSearchArgument() && footer->rowindexstride() > 0) {
+      auto sargs = opts.getSearchArgument();
+      sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), footer->rowindexstride(),
+                                          getWriterVersionImpl(contents.get()),
+                                          contents->readerMetrics));
+
+      if (sargsApplier == nullptr || contents->metadata == nullptr) {
+        return allStripesNeeded;
+      }
+
+      for ( uint64_t currentStripeIndex = 0;currentStripeIndex < numberOfStripes ; currentStripeIndex ++) {
+        const auto& currentStripeStats =
+              contents->metadata->stripestats(static_cast<int>(currentStripeIndex));
+        //Not need add mMetrics,so use 0.
+        allStripesNeeded[currentStripeIndex] = sargsApplier->evaluateStripeStatistics(currentStripeStats, 0);;
+      }
+      contents->sargsApplier = std::move(sargsApplier);
+    }
+    return allStripesNeeded;
+  }
+
+
+
   uint64_t maxStreamsForType(const proto::Type& type) {
     switch (static_cast<int64_t>(type.kind())) {
       case proto::Type_Kind_STRUCT:
@@ -1228,36 +1260,6 @@ namespace orc {
       // All remaining stripes are skipped.
       markEndOfFile();
     }
-  }
-
-  std::vector<int> RowReaderImpl::getAllStripesNeeded() const {
-    std::vector<int> allStripesNeeded ;
-
-    auto  numberOfStripes = static_cast<uint64_t>(footer->stripes_size());
-    if (sargsApplier == nullptr || contents->metadata == nullptr) {
-      return std::vector<int>(numberOfStripes, 1);
-    }
-
-    for ( uint64_t currentStripeIndex = 0;currentStripeIndex < numberOfStripes ; currentStripeIndex ++) {
-      bool isStripeNeeded = true;
-      const auto& currentStripeStats =
-              contents->metadata->stripestats(static_cast<int>(currentStripeIndex));
-
-      //Not need add mMetrics,so use 0.
-      isStripeNeeded = sargsApplier->evaluateStripeStatistics(currentStripeStats, 0);
-
-      //Maybe we should consider bloomFilter, but loadStripeIndex() will change some current status.
-//          if (isStripeNeeded) {
-//              // read row group statistics and bloom filters of current stripe
-//              loadStripeIndex();
-//              // select row groups to read in the current stripe
-//              sargsApplier->pickRowGroups(rowsInCurrentStripe, rowIndexes, bloomFilterIndex);
-//              isStripeNeeded = sargsApplier->hasSelectedFrom(currentRowInStripe);
-//          }
-
-      allStripesNeeded.emplace_back(isStripeNeeded);
-    }
-    return allStripesNeeded;
   }
 
   bool RowReaderImpl::next(ColumnVectorBatch& data) {
