@@ -7,6 +7,7 @@
 #ifndef _lucene_index_IndexWriter_
 #define _lucene_index_IndexWriter_
 
+#include "CLucene/clucene-config.h"
 #include "CLucene/index/IndexVersion.h"
 #include "CLucene/util/VoidList.h"
 #include "CLucene/util/Array.h"
@@ -39,6 +40,8 @@ class IndexDeletionPolicy;
 class Term;
 class FieldInfos;
 class TermInfosWriter;
+template <typename T>
+class STermInfosWriter;
 class DefaultSkipListWriter;
 class TermInfo;
 
@@ -291,7 +294,7 @@ class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
   // IndexOutput to the new Prox File
   std::vector<CL_NS(store)::IndexOutput*> proxOutputList;
   std::vector<int64_t> proxPointers;
-  std::vector<TermInfosWriter*> termInfosWriterList;
+  std::vector<STermInfosWriter<TCHAR>*> termInfosWriterList;
   int32_t skipInterval;
   int32_t maxSkipLevels;
   std::vector<DefaultSkipListWriter*> skipListWriterList;

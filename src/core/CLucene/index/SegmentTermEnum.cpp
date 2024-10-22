@@ -13,6 +13,9 @@
 #include "_TermInfo.h"
 #include "_TermInfosWriter.h"
 
+#include <iostream>
+#include <vector>
+
 CL_NS_USE(store)
 CL_NS_DEF(index)
 
@@ -38,6 +41,8 @@ SegmentTermEnum::SegmentTermEnum(IndexInput* i, FieldInfos* fis, const bool isi)
 
     //Set isClone to false as the instance is not clone of another instance
     isClone = false;
+
+    isDictCompress_ = isFlagSet(fieldInfos->getFlags(), FlagBits::DICT_COMPRESS);
 }
 
 void SegmentTermEnum::init(int32_t in_format) {
@@ -142,6 +147,8 @@ SegmentTermEnum::SegmentTermEnum(const SegmentTermEnum& clone) : fieldInfos(clon
 
     //Copy the contents of buffer of clone to the buffer of this instance
     if (clone.buffer != NULL) memcpy(buffer, clone.buffer, bufferLength * sizeof(TCHAR));
+
+    isDictCompress_ = isFlagSet(fieldInfos->getFlags(), FlagBits::DICT_COMPRESS);
 }
 
 SegmentTermEnum::~SegmentTermEnum() {
@@ -191,17 +198,28 @@ const char* SegmentTermEnum::getClassName() {
 }
 
 bool SegmentTermEnum::next() {
-    //Func - Moves the current of the set to the next in the set
-    //Pre  - true
-    //Post - If the end has been reached NULL is returned otherwise the term has
-    //       become the next Term in the enumeration
-
     //Increase position by and and check if the end has been reached
     if (position++ >= size - 1) {
         //delete term
         _CLDECDELETE(_term);
         return false;
     }
+
+    if (isDictCompress_ && !isIndex) {
+        if (byteArrayDataInput_.eof()) {
+            byteArrayDataInput_.readCompressedFrom(input);
+        }
+        return _next(&byteArrayDataInput_);
+    } else {
+        return _next(input);
+    }
+}
+
+bool SegmentTermEnum::_next(CL_NS(store)::IndexInput* in) {
+    //Func - Moves the current of the set to the next in the set
+    //Pre  - true
+    //Post - If the end has been reached NULL is returned otherwise the term has
+    //       become the next Term in the enumeration
 
     //delete the previous enumerated term
     Term* tmp = NULL;
@@ -214,32 +232,32 @@ bool SegmentTermEnum::next() {
     //prev becomes the current enumerated term
     prev = _term;
     //term becomes the next term read from inputStream input
-    _term = readTerm(tmp);
+    _term = readTerm(in, tmp);
 
     //Read docFreq, the number of documents which contain the term.
-    termInfo->docFreq = input->readVInt();
+    termInfo->docFreq = in->readVInt();
     //Read freqPointer, a pointer into the TermFreqs file (.frq)
-    termInfo->freqPointer += input->readVLong();
+    termInfo->freqPointer += in->readVLong();
 
     //Read proxPointer, a pointer into the TermPosition file (.prx).
-    termInfo->proxPointer += input->readVLong();
+    termInfo->proxPointer += in->readVLong();
 
     if (format == -1) {
         //  just read skipOffset in order to increment  file pointer;
         // value is never used since skipTo is switched off
         if (!isIndex) {
             if (termInfo->docFreq > formatM1SkipInterval) {
-                termInfo->skipOffset = input->readVInt();
+                termInfo->skipOffset = in->readVInt();
             }
         }
     } else {
-        if (termInfo->docFreq >= skipInterval) termInfo->skipOffset = input->readVInt();
+        if (termInfo->docFreq >= skipInterval) termInfo->skipOffset = in->readVInt();
     }
 
     //Check if the enumeration is an index
     if (isIndex)
         //read index pointer
-        indexPointer += input->readVLong();
+        indexPointer += in->readVLong();
 
     return true;
 }
@@ -288,6 +306,10 @@ void SegmentTermEnum::seek(const int64_t pointer, const int32_t p, Term* t, Term
 
     //Reset the IndexInput input to pointer
     input->seek(pointer);
+    if (isDictCompress_ && !isIndex) {
+        byteArrayDataInput_.readCompressedFrom(input);
+    }
+
     //Assign the new position
     position = p;
 
@@ -358,15 +380,15 @@ SegmentTermEnum* SegmentTermEnum::clone() const {
     return _CLNEW SegmentTermEnum(*this);
 }
 
-Term* SegmentTermEnum::readTerm(Term* reuse) {
+Term* SegmentTermEnum::readTerm(CL_NS(store)::IndexInput* in, Term* reuse) {
     //Func - Reads the next term in the enumeration
     //Pre  - true
     //Post - The next Term in the enumeration has been read and returned
 
     //Read the start position from the inputStream input
-    int32_t start = input->readVInt();
+    int32_t start = in->readVInt();
     //Read the length of term in the inputStream input
-    int32_t length = input->readVInt();
+    int32_t length = in->readVInt();
 
     //Calculated the total lenght of bytes that buffer must be to contain the current
     //chars in buffer and the new ones yet to be read
@@ -376,12 +398,12 @@ Term* SegmentTermEnum::readTerm(Term* reuse) {
         growBuffer(totalLength, false); //dont copy the buffer over.
 
     //Read a length number of characters into the buffer from position start in the inputStream input
-    input->readChars(buffer, start, length);
+    in->readChars(buffer, start, length);
     //Null terminate the string
     buffer[totalLength] = 0;
 
     //Return a new Term
-    int32_t field = input->readVInt();
+    int32_t field = in->readVInt();
     const TCHAR* fieldname = fieldInfos->fieldName(field);
     if (reuse == NULL) reuse = _CLNEW Term;
 

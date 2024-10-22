@@ -46,6 +46,8 @@ SET(test_files ./tests.cpp
         ./store/TestStore.cpp
         ./store/MockRAMDirectory.cpp
         ./store/TestRAMDirectory.cpp
+        ./store/TestByteArrayDataInput.cpp
+        ./store/TestGrowableByteArrayDataOutput.cpp
         ./search/MockScorer.h
         ./search/MockHitCollector.h
         ./search/TestBoolean.cpp
@@ -87,6 +89,7 @@ SET(test_files ./tests.cpp
         ./search/spans/TestSpanExplanationsOfNonMatches.h
         ./index/TestIndexCompaction.cpp
         ./index/TestIndexCompress.cpp
+        ./index/TestIndexCompressV3.cpp
         ./index/TestIndexModifier.cpp
         ./index/TestIndexWriter.cpp
         ./index/TestIndexModifier.cpp

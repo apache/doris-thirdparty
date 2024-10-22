@@ -36,6 +36,7 @@ class FieldInfo :LUCENE_BASE{
 	bool omitNorms; // omit norms associated with indexed fields
 	bool hasProx = false;
 	IndexVersion indexVersion_ = IndexVersion::kV1;
+	uint32_t flags_ = 0;
 
 	bool storePayloads; // whether this field stores payloads together with term positions
 
@@ -59,7 +60,9 @@ class FieldInfo :LUCENE_BASE{
 		const bool storePositionWithTermVector,
 		const bool omitNorms,
 		const bool hasProx,
-		const bool storePayloads);
+		const bool storePayloads,
+		IndexVersion indexVersion,
+		uint32_t flags);
 
     //Func - Destructor
 	//Pre  - true
@@ -74,6 +77,9 @@ class FieldInfo :LUCENE_BASE{
 public:
 	void setIndexVersion(IndexVersion indexVersion) { indexVersion_ = indexVersion; }
 	IndexVersion getIndexVersion() { return indexVersion_; }
+
+	void setFlags(uint32_t flags) { flags_ = flags; }
+	uint32_t getFlags() { return flags_; }
 };
 
 /** Access to the Field Info file that describes document fields and whether or
@@ -134,6 +140,7 @@ public:
 
 	bool hasProx();
 	IndexVersion getIndexVersion();
+	uint32_t getFlags();
 
 	/**
 	* Assumes the fields are not storing term vectors.
@@ -147,7 +154,7 @@ public:
 						const bool storePositionWithTermVector = false,
 						const bool storeOffsetWithTermVector = false, const bool omitNorms = false,
 						const bool hasProx = false, const bool storePayloads = false,
-						IndexVersion indexVersion = IndexVersion::kV1);
+						IndexVersion indexVersion = IndexVersion::kV1, uint32_t flags_ = 0);
 
         // Merges in information from another FieldInfos. 
 	void add(FieldInfos* other);
@@ -169,14 +176,14 @@ public:
 									const bool storePositionWithTermVector = false,
 									const bool storeOffsetWithTermVector = false, const bool omitNorms = false,
 									const bool hasProx = false, const bool storePayloads = false,
-									IndexVersion indexVersion = IndexVersion::kV1);
+									IndexVersion indexVersion = IndexVersion::kV1, uint32_t flags_ = 0);
 
   // was void
 	FieldInfo* addInternal(const TCHAR* name, const bool isIndexed, const bool storeTermVector,
 													const bool storePositionWithTermVector,
 													const bool storeOffsetWithTermVector, const bool omitNorms,
 													const bool hasProx, const bool storePayloads,
-													IndexVersion indexVersion = IndexVersion::kV1);
+													IndexVersion indexVersion = IndexVersion::kV1, uint32_t flags_ = 0);
 
 	int32_t fieldNumber(const TCHAR* fieldName)const;
 	

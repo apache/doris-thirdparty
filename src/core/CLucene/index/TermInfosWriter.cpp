@@ -67,6 +67,8 @@ void STermInfosWriter<T>::initialise(Directory *directory, const char *segment, 
 
     //Set other to NULL by Default
     other = NULL;
+
+    isDictCompress_ = isFlagSet(fieldInfos->getFlags(), FlagBits::DICT_COMPRESS);
 }
 
 template <typename T>
@@ -83,6 +85,19 @@ void STermInfosWriter<T>::add(STerm<T> *term, TermInfo *ti) {
     strnCopy(termTextBuffer.values, term->text(), length);
 
     add(fieldInfos->fieldNumber(term->field()), termTextBuffer.values, length, ti);
+}
+
+template <typename T>
+void STermInfosWriter<T>::add(const TCHAR* field, const T* text, size_t length, TermInfo* ti) {
+    if (termTextBuffer.values == nullptr || termTextBuffer.length < length) {
+        termTextBuffer.resize((int32_t)(length * 1.25));
+    }
+    if constexpr (std::is_same_v<T, char>) {
+        strnCopy(termTextBuffer.values, text, length);
+    } else {
+        _tcsncpy(termTextBuffer.values, text, length);
+    }
+    add(fieldInfos->fieldNumber(field), termTextBuffer.values, length, ti);
 }
 
 template <typename T>
@@ -122,19 +137,33 @@ void STermInfosWriter<T>::add(int32_t fieldNumber, const T *termText, int32_t te
     CND_PRECONDITION(ti->proxPointer >= lastTi->proxPointer, ("proxPointer out of order (" + Misc::toString(ti->proxPointer) + " < " + Misc::toString(lastTi->proxPointer) + ")").c_str());
 
     if (!isIndex && size % indexInterval == 0) {
+        if (isDictCompress_) {
+            tisMemoryOutput_.writeCompressedTo(output);
+        }
         //add an index term
         other->add(lastFieldNumber, lastTermText.values, lastTermTextLength, lastTi);// add an index term
     }
 
-    //write term
-    writeTerm(fieldNumber, termText, termTextLength);
-    // write doc freq
-    output->writeVInt(ti->docFreq);
-    //write pointers
-    output->writeVLong(ti->freqPointer - lastTi->freqPointer);
-    output->writeVLong(ti->proxPointer - lastTi->proxPointer);
-    if (ti->docFreq >= skipInterval) {
-        output->writeVInt(ti->skipOffset);
+    // Separate the dictionary from the dictionary index information and apply block compression to the dictionary data.
+    if (isDictCompress_ && !isIndex) {
+        writeTerm(&tisMemoryOutput_, fieldNumber, termText, termTextLength);
+        tisMemoryOutput_.writeVInt(ti->docFreq);
+        tisMemoryOutput_.writeVLong(ti->freqPointer - lastTi->freqPointer);
+        tisMemoryOutput_.writeVLong(ti->proxPointer - lastTi->proxPointer);
+        if (ti->docFreq >= skipInterval) {
+            tisMemoryOutput_.writeVInt(ti->skipOffset);
+        }
+    } else {
+        //write term
+        writeTerm(output, fieldNumber, termText, termTextLength);
+        // write doc freq
+        output->writeVInt(ti->docFreq);
+        //write pointers
+        output->writeVLong(ti->freqPointer - lastTi->freqPointer);
+        output->writeVLong(ti->proxPointer - lastTi->proxPointer);
+        if (ti->docFreq >= skipInterval) {
+            output->writeVInt(ti->skipOffset);
+        }
     }
 
     if (isIndex) {
@@ -144,9 +173,13 @@ void STermInfosWriter<T>::add(int32_t fieldNumber, const T *termText, int32_t te
     if (lastTermText.length < termTextLength || lastTermText.length == 0) {
         lastTermText.resize((int32_t) cl_max(10.0, termTextLength * 1.25));
     }
-    if (termText != nullptr)
-        strnCopy(lastTermText.values, termText, termTextLength);
-    else
+    if (termText != nullptr) {
+        if constexpr (std::is_same_v<T, char>) {
+            strnCopy(lastTermText.values, termText, termTextLength);
+        } else {
+            _tcsncpy(lastTermText.values, termText, termTextLength);
+        }
+    } else
         lastTermText.values[0] = 0;
 
     lastTermTextLength = termTextLength;
@@ -159,6 +192,10 @@ void STermInfosWriter<T>::add(int32_t fieldNumber, const T *termText, int32_t te
 template <typename T>
 void STermInfosWriter<T>::close() {
     if (output) {
+        if (isDictCompress_ && !isIndex) {
+            tisMemoryOutput_.writeCompressedTo(output);
+        }
+
         if (FORMAT == -4) {
             output->writeLong(size);
             if (!isIndex) {
@@ -185,7 +222,7 @@ void STermInfosWriter<T>::close() {
 }
 
 template <typename T>
-void STermInfosWriter<T>::writeTerm(int32_t fieldNumber, const T *termText, int32_t termTextLength) {
+void STermInfosWriter<T>::writeTerm(CL_NS(store)::IndexOutput* out, int32_t fieldNumber, const T *termText, int32_t termTextLength) {
     if constexpr (std::is_same_v<T, char>) {
         std::string_view newTermStr(termText, termTextLength);
         std::wstring newTermWStr = StringUtil::string_to_wstring(newTermStr);
@@ -203,10 +240,10 @@ void STermInfosWriter<T>::writeTerm(int32_t fieldNumber, const T *termText, int3
 
         int32_t length = newTermWStr.length() - start;
 
-        output->writeVInt(start);
-        output->writeVInt(length);
-        output->writeSChars(newTermWStr.data() + start, length);
-        output->writeVInt(fieldNumber);
+        out->writeVInt(start);
+        out->writeVInt(length);
+        out->writeSChars(newTermWStr.data() + start, length);
+        out->writeVInt(fieldNumber);
     } else {
         int32_t start = 0;
         const int32_t limit = termTextLength < lastTermTextLength ? termTextLength : lastTermTextLength;
@@ -218,10 +255,10 @@ void STermInfosWriter<T>::writeTerm(int32_t fieldNumber, const T *termText, int3
 
         int32_t length = termTextLength - start;
 
-        output->writeVInt(start);                    // write shared prefix length
-        output->writeVInt(length);                   // write delta length
-        output->writeSChars(termText + start, length);// write delta chars
-        output->writeVInt(fieldNumber);              // write field num
+        out->writeVInt(start);                    // write shared prefix length
+        out->writeVInt(length);                   // write delta length
+        out->writeSChars(termText + start, length);// write delta chars
+        out->writeVInt(fieldNumber);              // write field num
     }
 }
 

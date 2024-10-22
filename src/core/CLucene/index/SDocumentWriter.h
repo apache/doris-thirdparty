@@ -60,6 +60,7 @@ private:
     int32_t maxBufferedDocs;
     bool hasProx_ = false;
     IndexVersion indexVersion_ = IndexVersion::kV1;
+    uint32_t flags_ = 0;
 
 public:
     class FieldMergeState;

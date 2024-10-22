@@ -7,6 +7,7 @@
 #ifndef _lucene_index_SegmentTermEnum_
 #define _lucene_index_SegmentTermEnum_
 
+#include "CLucene/store/store_v2/ByteArrayDataInput.h"
 
 //#include "Terms.h"
 //#include "FieldInfos.h"
@@ -127,6 +128,7 @@ private:
 	/**
 	 * Reads the next term in the enumeration
 	 */
+	Term* readTerm(CL_NS(store)::IndexInput* in, Term* reuse);
 	Term* readTerm(Term* reuse);
    /** 
 	 * Instantiate a buffer of length length+1
@@ -134,6 +136,12 @@ private:
 	 */
 	void growBuffer(const uint32_t length, bool force_copy);
 
+	bool _next(CL_NS(store)::IndexInput* in);
+
+private:
+	bool isDictCompress_ = false;
+	std::vector<uint8_t> decompress_buffer;
+	store_v2::ByteArrayDataInput byteArrayDataInput_;
 };
 CL_NS_END
 #endif

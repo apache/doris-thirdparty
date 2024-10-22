@@ -10,6 +10,7 @@
 #include "CLucene/util/Array.h"
 #include "CLucene/util/Equators.h"
 #include "CLucene/index/IndexVersion.h"
+#include "CLucene/index/FieldConfig.h"
 
 /*
 Fieldable reading:
@@ -315,6 +316,24 @@ public:
 	void setIndexVersion(IndexVersion indexVersion) { indexVersion_ = indexVersion; }
 	IndexVersion getIndexVersion() { return indexVersion_; }
 
+	void updateFlag(FlagBits flag) {
+		if (indexVersion_ < IndexVersion::kV3) {
+			return;
+		}
+		flags_ |= static_cast<uint32_t>(flag);
+	}
+
+	void setFlags(uint32_t flags) {
+		if (indexVersion_ < IndexVersion::kV3) {
+			return;
+		}
+		flags_ = flags;
+	}
+
+	uint32_t getFlags() {
+		return flags_;
+	}
+
 protected:
 	/**
 	* Set configs using XOR. This resets all the settings
@@ -334,7 +353,8 @@ protected:
 	float_t boost;
 
 	IndexVersion indexVersion_ = IndexVersion::kV1;
-    bool ownStream = false;
+	uint32_t flags_ = 0;
+  bool ownStream = false;
 };
 CL_NS_END
 #endif
