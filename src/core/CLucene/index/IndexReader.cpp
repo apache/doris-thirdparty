@@ -251,7 +251,7 @@ CL_NS_DEF(index)
     return SegmentInfos::getCurrentSegmentGeneration(directory) != -1;
   }
 
-  TermDocs* IndexReader::termDocs(Term* term) {
+  TermDocs* IndexReader::termDocs(Term* term, bool load_stats) {
   //Func - Returns an enumeration of all the documents which contain
   //       term. For each document, the document number, the frequency of
   //       the term in that document is also provided, for use in search scoring.
@@ -269,13 +269,13 @@ CL_NS_DEF(index)
       ensureOpen();
       //Reference an instantiated TermDocs instance
       TermDocs* _termDocs = termDocs();
-      //Seek all documents containing term
-      _termDocs->seek(term);
+      //Seek all document·s containing term
+      _termDocs->seek(term, load_stats);
       //return the enumaration
       return _termDocs;
   }
 
-  TermPositions* IndexReader::termPositions(Term* term){
+  TermPositions* IndexReader::termPositions(Term* term, bool load_stats){
   //Func - Returns an enumeration of all the documents which contain  term. For each
   //       document, in addition to the document number and frequency of the term in
   //       that document, a list of all of the ordinal positions of the term in the document
@@ -296,7 +296,7 @@ CL_NS_DEF(index)
       //Reference an instantiated termPositions instance
       TermPositions* _termPositions = termPositions();
 	  //Seek all documents containing term
-      _termPositions->seek(term);
+      _termPositions->seek(term, load_stats);
 	  //return the enumeration
       return _termPositions;
   }

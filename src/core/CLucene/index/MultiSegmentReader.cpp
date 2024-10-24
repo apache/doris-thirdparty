@@ -355,6 +355,34 @@ int32_t MultiSegmentReader::docFreq(const Term* t) {
 	return total;
 }
 
+int32_t MultiSegmentReader::docNorm(const TCHAR* field, int32_t n) {
+    if (hasNorms(field)) {
+        int32_t i = readerIndex(n);                           // find segment num
+        return (*subReaders)[i]->docNorm(field,n - starts[i]);
+    }
+    return 0;
+}
+
+std::optional<uint64_t> MultiSegmentReader::sumTotalTermFreq(const TCHAR* field) {
+    if (hasNorms(field)) {
+        int64_t sum = 0;
+        bool hasTotalNorm = false;
+        for (size_t i = 0; i < subReaders->length; i++) {
+            if (!isDeleted(i)) {
+                std::optional<int64_t> totalNorm = (*subReaders)[i]->sumTotalTermFreq(field);
+                if (totalNorm != std::nullopt) {
+                    sum += totalNorm.value();
+                    hasTotalNorm = true;
+                }
+            }
+        }
+        if (hasTotalNorm) {
+            return sum;
+        }
+    }
+    return std::nullopt;
+}
+
 TermDocs* MultiSegmentReader::termDocs() {
     ensureOpen();
 	TermDocs* ret =  _CLNEW MultiTermDocs(subReaders, starts);
@@ -559,6 +587,10 @@ int32_t MultiTermDocs::docFreq() {
 	return docFreq;
 }
 
+int32_t MultiTermDocs::docNorm() {
+    return current->docNorm();
+}
+
 int32_t MultiTermDocs::doc() const {
   CND_PRECONDITION(current!=NULL,"current==NULL, check that next() was called");
   // if not found term, current will return INT_MAX, we could not add base, otherwise it will overflow.
@@ -572,11 +604,16 @@ int32_t MultiTermDocs::freq() const {
 	return current->freq();
 }
 
-void MultiTermDocs::seek(TermEnum* termEnum){
-	seek(termEnum->term(false));
+int32_t MultiTermDocs::norm() const {
+    CND_PRECONDITION(current!=NULL,"current==NULL, check that next() was called");
+    return current->norm();
 }
 
-void MultiTermDocs::seek( Term* tterm) {
+void MultiTermDocs::seek(TermEnum* termEnum, bool load_stats){
+	seek(termEnum->term(false), load_stats);
+}
+
+void MultiTermDocs::seek( Term* tterm, bool load_stats) {
 //Func - Resets the instance for a new search
 //Pre  - tterm != NULL
 //Post - The instance has been reset for a new search
@@ -643,6 +680,28 @@ int32_t MultiTermDocs::read(int32_t* docs, int32_t* freqs, int32_t length) {
 	    return end;
 	  }
 	}
+}
+
+int32_t MultiTermDocs::read(int32_t* docs, int32_t* freqs, int32_t* norms, int32_t length) {
+    while (true) {
+        while (current == NULL) {
+            if (pointer < subReaders->length) {		  // try next segment
+                base = starts[pointer];
+                current = termDocs(pointer++);
+            } else {
+                return 0;
+            }
+        }
+        int32_t end = current->read(docs, freqs, norms, length);
+        if (end == 0) {				  // none left in segment
+            current = NULL;
+        } else {					  // got some
+            int32_t b = base;			  // adjust doc numbers
+            for (int32_t i = 0; i < end; i++)
+                docs[i] += b;
+            return end;
+        }
+    }
 }
 
 bool MultiTermDocs::readRange(DocRange* docRange) {
@@ -727,7 +786,7 @@ TermDocs* MultiTermDocs::termDocs(IndexReader* reader) {
 	return reader->termDocs();
 }
 
-TermDocs* MultiTermDocs::termDocs(const int32_t i) {
+TermDocs* MultiTermDocs::termDocs(const int32_t i, bool local_stats) {
 	if (term == NULL)
 	  return NULL;
 	TermDocs* result = (*readerTermDocs)[i];
@@ -736,7 +795,7 @@ TermDocs* MultiTermDocs::termDocs(const int32_t i) {
 	  readerTermDocs->values[i] = termDocs((*subReaders)[i]);
 	  result = (*readerTermDocs)[i];
 	}
-	result->seek(term);
+	result->seek(term, local_stats);
 
 	return result;
 }

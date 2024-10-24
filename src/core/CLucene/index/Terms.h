@@ -31,12 +31,12 @@ public:
 
 	// Sets this to the data for a term.
 	// The enumeration is reset to the start of the data for this term.
-	virtual void seek(Term* term)=0;
+	virtual void seek(Term* term, bool load_stats = false) = 0;
 
 	/** Sets this to the data for the current term in a {@link TermEnum}.
 	* This may be optimized in some implementations.
 	*/
-	virtual void seek(TermEnum* termEnum)=0;
+	virtual void seek(TermEnum* termEnum,  bool load_stats = false) = 0;
 
 	// Returns the current document number.  <p> This is invalid until {@link
 	//	#next()} is called for the first time.
@@ -45,6 +45,10 @@ public:
 	// Returns the frequency of the term within the current document.  <p> This
 	//	is invalid until {@link #next()} is called for the first time.
 	virtual int32_t freq() const=0;
+
+        // Returns the current document norm.  <p> This is invalid until {@link
+        //	#next()} is called for the first time.
+        virtual int32_t norm() const=0;
 
 	// Moves to the next pair in the enumeration.  <p> Returns true iff there is
 	//	such a next pair in the enumeration.
@@ -58,6 +62,7 @@ public:
 	// <p>Returns the number of entries read.  Zero is only returned when the
 	// stream has been exhausted.
 	virtual int32_t read(int32_t* docs, int32_t* freqs, int32_t length)=0;
+        virtual int32_t read(int32_t* docs, int32_t* freqs, int32_t* norms, int32_t length)=0;
 	virtual bool readRange(DocRange* docRange) = 0;
 
 	// Skips entries to the first beyond the current whose document number is
@@ -85,6 +90,10 @@ public:
 
 	virtual int32_t docFreq() {
 		_CLTHROWA(CL_ERR_UnsupportedOperation, "TermDocs::docFreq does not support this method.");
+	}
+
+        virtual int32_t docNorm() {
+	    return 0;
 	}
 };
 

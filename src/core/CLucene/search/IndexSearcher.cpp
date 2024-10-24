@@ -200,6 +200,21 @@ CL_NS_DEF(search)
       return reader->docFreq(term);
   }
 
+  // doc norm
+  int32_t IndexSearcher::docNorm(const TCHAR* field, int32_t doc) const {
+
+      CND_PRECONDITION(reader != NULL, "reader is NULL");
+
+      return reader->docNorm(field, doc);
+  }
+
+  std::optional<uint64_t> IndexSearcher::sumTotalTermFreq(const TCHAR* field) const {
+
+      CND_PRECONDITION(reader != NULL, "reader is NULL");
+
+      return reader->sumTotalTermFreq(field);
+  }
+
   _CL_DEPRECATED( doc(i, document) ) CL_NS(document)::Document* IndexSearcher::doc(int32_t i){
 	CL_NS(document)::Document* ret = _CLNEW CL_NS(document)::Document;
 	if (!doc(i,ret) )
