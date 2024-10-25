@@ -226,3 +226,6 @@ In chronological order:
 
 * Dirreke <https://github.com/mseminatore>
   * [2024-01-16] Add basic support for the CSKY architecture
+
+* Christopher Daley <https://github.com/cdaley>
+  * [2024-01-24] Optimize GEMV forwarding on ARM64 systems
