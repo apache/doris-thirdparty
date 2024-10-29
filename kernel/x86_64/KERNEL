@@ -493,3 +493,4 @@ CSUMKERNEL = zsum_sse.S
 ZSUMKERNEL = zsum_sse2.S
 
 SOMATCOPY_RT = omatcopy_rt.c
+SOMATCOPY_CT = omatcopy_ct.c
