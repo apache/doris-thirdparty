@@ -190,6 +190,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
   message(STATUS "SUPPORT OF CRC: ${CRC_TEST_RESULT}")
   if (CRC_TEST_RESULT)
     set(BULK_CRC_ARCH_SOURCE_FIlE "${SRC}/util/bulk_crc32_aarch64.c")
+    add_compile_options(-march=armv8-a+crc) # native sometimes not include crc
   else()
     message("No HW CRC acceleration for ${CMAKE_SYSTEM_PROCESSOR}, falling back to SW")
   endif()
