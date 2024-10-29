@@ -540,19 +540,36 @@ namespace orc {
     // reset all previous row indexes
     rowIndexes.clear();
     bloomFilterIndex.clear();
-
-    // obtain row indexes for selected columns
+    static const uint64_t MAX_READ_STRIPE_INDEX_SIZE_FOR_BUFFER = 1024 * 1024;
+    const char* stripeIndexBuffer = nullptr;
     uint64_t offset = currentStripeInfo.offset();
+    uint64_t startOffset = offset;
+    uint64_t stripeIndexSize = currentStripeInfo.indexlength();
+    std::unique_ptr<SeekableFileInputStream> stripeIndexInputStream = nullptr;
+    if (stripeIndexSize < MAX_READ_STRIPE_INDEX_SIZE_FOR_BUFFER) {
+      stripeIndexInputStream = std::unique_ptr<SeekableFileInputStream>(new SeekableFileInputStream(
+        contents->stream.get(), startOffset, stripeIndexSize, *contents->pool, stripeIndexSize));
+      int size = 0;
+      const void* buffer = nullptr;
+      if (!stripeIndexInputStream->Next(&buffer, &size) || static_cast<uint64_t>(size) != stripeIndexSize) {
+        throw ParseError("Failed to read the stripe index");
+      }
+      stripeIndexBuffer = static_cast<const char*>(buffer);
+    }
+    // obtain row indexes for selected columns
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
       const proto::Stream& pbStream = currentStripeFooter.streams(i);
       uint64_t colId = pbStream.column();
       if (selectedColumns[colId] && pbStream.has_kind() &&
           (pbStream.kind() == proto::Stream_Kind_ROW_INDEX ||
            pbStream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
+        std::unique_ptr<SeekableInputStream> inputStream = stripeIndexBuffer ? std::unique_ptr<SeekableInputStream>(
+          new SeekableArrayInputStream(stripeIndexBuffer + offset - startOffset, pbStream.length()))
+          : std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(contents->stream.get(), offset,
+            pbStream.length(), *contents->pool));
         std::unique_ptr<SeekableInputStream> inStream = createDecompressor(
             getCompression(),
-            std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
-                contents->stream.get(), offset, pbStream.length(), *contents->pool)),
+            std::move(inputStream),
             getCompressionSize(), *contents->pool, contents->readerMetrics);
 
         if (pbStream.kind() == proto::Stream_Kind_ROW_INDEX) {
@@ -1761,6 +1778,6 @@ namespace orc {
   };
 
   void InputStream::beforeReadStripe(std::unique_ptr<StripeInformation> currentStripeInformation,
-                                     std::vector<bool> selectedColumns) {}
+                                     std::vector<bool>& selectedColumns) {}
 
 }  // namespace orc

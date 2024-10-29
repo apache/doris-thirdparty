@@ -64,7 +64,7 @@ namespace orc {
     virtual const std::string& getName() const = 0;
 
     virtual void beforeReadStripe(std::unique_ptr<StripeInformation> currentStripeInformation,
-                                  std::vector<bool> selectedColumns);
+                                  std::vector<bool>& selectedColumns);
   };
 
   /**
