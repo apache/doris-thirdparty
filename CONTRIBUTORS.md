@@ -229,3 +229,13 @@ In chronological order:
 
 * Christopher Daley <https://github.com/cdaley>
   * [2024-01-24] Optimize GEMV forwarding on ARM64 systems
+
+* Aniket P. Garade <https://github.com/garadeaniket> 
+  *  [2024-10-30] Optimized scal Level-1 BLAS routines with ARM SVE
+
+* Sushil Pratap Singh <https://github.com/SushilPratap04>
+  *  [2024-10-30] Optimized swap Level-1 BLAS routines with ARM SVE
+
+* Juliya James <https://github.com/Juliya32>
+   *  [2024-10-30] Optimized rot Level-1 BLAS routines with ARM SVE
+
