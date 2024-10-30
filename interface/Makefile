@@ -44,12 +44,12 @@ SBLAS3OBJS    = \
 		sgemm.$(SUFFIX) ssymm.$(SUFFIX) strmm.$(SUFFIX) \
 		strsm.$(SUFFIX) ssyrk.$(SUFFIX) ssyr2k.$(SUFFIX) \
 		somatcopy.$(SUFFIX) simatcopy.$(SUFFIX)\
-		sgeadd.$(SUFFIX) sgemmt.$(SUFFIX)
+		sgeadd.$(SUFFIX) sgemmt.$(SUFFIX) sgemmtr.$(SUFFIX)
 
 ifeq ($(BUILD_BFLOAT16),1)
 SBBLAS1OBJS    = sbdot.$(SUFFIX)
 SBBLAS2OBJS    = sbgemv.$(SUFFIX)
-SBBLAS3OBJS    = sbgemm.$(SUFFIX) sbgemmt.$(SUFFIX)
+SBBLAS3OBJS    = sbgemm.$(SUFFIX) sbgemmt.$(SUFFIX) sbgemmtr.$(SUFFIX)
 SBEXTOBJS      = sbstobf16.$(SUFFIX) sbdtobf16.$(SUFFIX) sbf16tos.$(SUFFIX) dbf16tod.$(SUFFIX)
 endif
 
@@ -76,7 +76,7 @@ DBLAS3OBJS    = \
 		dgemm.$(SUFFIX) dsymm.$(SUFFIX) dtrmm.$(SUFFIX) \
 		dtrsm.$(SUFFIX) dsyrk.$(SUFFIX) dsyr2k.$(SUFFIX) \
 		domatcopy.$(SUFFIX) dimatcopy.$(SUFFIX)\
-		dgeadd.$(SUFFIX) dgemmt.$(SUFFIX)
+		dgeadd.$(SUFFIX) dgemmt.$(SUFFIX) dgemmtr.$(SUFFIX)
 
 CBLAS1OBJS    = \
 		caxpy.$(SUFFIX) caxpyc.$(SUFFIX) cswap.$(SUFFIX) \
@@ -105,7 +105,7 @@ CBLAS3OBJS    = \
 		ctrsm.$(SUFFIX) csyrk.$(SUFFIX) csyr2k.$(SUFFIX) \
 	       	chemm.$(SUFFIX) cherk.$(SUFFIX) cher2k.$(SUFFIX) \
 		comatcopy.$(SUFFIX) cimatcopy.$(SUFFIX)\
-		cgeadd.$(SUFFIX) cgemmt.$(SUFFIX)
+		cgeadd.$(SUFFIX) cgemmt.$(SUFFIX) cgemmtr.$(SUFFIX)
 
 ZBLAS1OBJS    = \
 		zaxpy.$(SUFFIX) zaxpyc.$(SUFFIX) zswap.$(SUFFIX) \
@@ -134,7 +134,7 @@ ZBLAS3OBJS    = \
 		ztrsm.$(SUFFIX) zsyrk.$(SUFFIX) zsyr2k.$(SUFFIX) \
 	       	zhemm.$(SUFFIX) zherk.$(SUFFIX) zher2k.$(SUFFIX) \
 		zomatcopy.$(SUFFIX) zimatcopy.$(SUFFIX)\
-		zgeadd.$(SUFFIX) zgemmt.$(SUFFIX)
+		zgeadd.$(SUFFIX) zgemmt.$(SUFFIX) zgemmtr.$(SUFFIX)
 
 ifeq ($(SUPPORT_GEMM3M), 1)
 
@@ -282,12 +282,12 @@ CSBLAS2OBJS   = \
 CSBLAS3OBJS   = \
 	cblas_sgemm.$(SUFFIX) cblas_ssymm.$(SUFFIX) cblas_strmm.$(SUFFIX) cblas_strsm.$(SUFFIX) \
 	cblas_ssyrk.$(SUFFIX) cblas_ssyr2k.$(SUFFIX) cblas_somatcopy.$(SUFFIX)  cblas_simatcopy.$(SUFFIX)\
-	cblas_sgeadd.$(SUFFIX) cblas_sgemmt.$(SUFFIX) cblas_sgemm_batch.$(SUFFIX)
+	cblas_sgeadd.$(SUFFIX) cblas_sgemmt.$(SUFFIX) cblas_sgemmtr.$(SUFFIX) cblas_sgemm_batch.$(SUFFIX)
 
 ifeq ($(BUILD_BFLOAT16),1)
 CSBBLAS1OBJS = cblas_sbdot.$(SUFFIX)
 CSBBLAS2OBJS = cblas_sbgemv.$(SUFFIX)
-CSBBLAS3OBJS = cblas_sbgemm.$(SUFFIX) cblas_sbgemmt.$(SUFFIX) cblas_sbgemm_batch.$(SUFFIX)
+CSBBLAS3OBJS = cblas_sbgemm.$(SUFFIX) cblas_sbgemmt.$(SUFFIX) cblas_sbgemmtr.$(SUFFIX) cblas_sbgemm_batch.$(SUFFIX)
 CSBEXTOBJS   = cblas_sbstobf16.$(SUFFIX) cblas_sbdtobf16.$(SUFFIX) cblas_sbf16tos.$(SUFFIX) cblas_dbf16tod.$(SUFFIX)
 endif
 
@@ -308,7 +308,7 @@ CDBLAS2OBJS   = \
 CDBLAS3OBJS   += \
 	cblas_dgemm.$(SUFFIX) cblas_dsymm.$(SUFFIX) cblas_dtrmm.$(SUFFIX) cblas_dtrsm.$(SUFFIX) \
 	cblas_dsyrk.$(SUFFIX) cblas_dsyr2k.$(SUFFIX) cblas_domatcopy.$(SUFFIX)  cblas_dimatcopy.$(SUFFIX) \
-        cblas_dgeadd.$(SUFFIX) cblas_dgemmt.$(SUFFIX) cblas_dgemm_batch.$(SUFFIX)
+        cblas_dgeadd.$(SUFFIX) cblas_dgemmt.$(SUFFIX) cblas_dgemmtr.$(SUFFIX) cblas_dgemm_batch.$(SUFFIX)
 
 CCBLAS1OBJS   = \
 	cblas_icamax.$(SUFFIX) cblas_icamin.$(SUFFIX) cblas_scasum.$(SUFFIX)  cblas_caxpy.$(SUFFIX) \
@@ -333,7 +333,7 @@ CCBLAS3OBJS   = \
 	cblas_csyrk.$(SUFFIX) cblas_csyr2k.$(SUFFIX) \
 	cblas_chemm.$(SUFFIX) cblas_cherk.$(SUFFIX) cblas_cher2k.$(SUFFIX) \
 	cblas_comatcopy.$(SUFFIX) cblas_cimatcopy.$(SUFFIX)\
-	cblas_cgeadd.$(SUFFIX) cblas_cgemmt.$(SUFFIX) cblas_cgemm_batch.$(SUFFIX)
+	cblas_cgeadd.$(SUFFIX) cblas_cgemmt.$(SUFFIX) cblas_cgemmtr.$(SUFFIX) cblas_cgemm_batch.$(SUFFIX)
 	
 CXERBLAOBJ = \
 	cblas_xerbla.$(SUFFIX)
@@ -364,7 +364,7 @@ CZBLAS3OBJS   = \
 	cblas_zsyrk.$(SUFFIX) cblas_zsyr2k.$(SUFFIX) \
 	cblas_zhemm.$(SUFFIX) cblas_zherk.$(SUFFIX) cblas_zher2k.$(SUFFIX)\
 	cblas_zomatcopy.$(SUFFIX) cblas_zimatcopy.$(SUFFIX) \
-	cblas_zgeadd.$(SUFFIX) cblas_zgemmt.$(SUFFIX) cblas_zgemm_batch.$(SUFFIX)
+	cblas_zgeadd.$(SUFFIX) cblas_zgemmt.$(SUFFIX) cblas_zgemmtr.$(SUFFIX) cblas_zgemm_batch.$(SUFFIX)
 
 
 ifeq ($(SUPPORT_GEMM3M), 1)
@@ -1305,6 +1305,8 @@ sbgemm.$(SUFFIX) sbgemm.$(PSUFFIX) : gemm.c ../param.h
 	$(CC) -c $(CFLAGS) $< -o $(@F)
 sbgemmt.$(SUFFIX) sbgemmt.$(PSUFFIX) : sbgemmt.c ../param.h
 	$(CC) -c $(CFLAGS) $< -o $(@F)
+sbgemmtr.$(SUFFIX) sbgemmtr.$(PSUFFIX) : sbgemmt.c ../param.h
+	$(CC) -c $(CFLAGS) $< -o $(@F)
 endif
 
 sgemm.$(SUFFIX) sgemm.$(PSUFFIX) : gemm.c ../param.h
@@ -1340,7 +1342,19 @@ cgemmt.$(SUFFIX) cgemmt.$(PSUFFIX) : gemmt.c ../param.h
 zgemmt.$(SUFFIX) zgemmt.$(PSUFFIX) : gemmt.c ../param.h
 	$(CC) -c $(CFLAGS) $< -o $(@F)
 
-xgemmt.$(SUFFIX) xgemmt.$(PSUFFIX) : gemmt.c ../param.h
+sgemmtr.$(SUFFIX) sgemmtr.$(PSUFFIX) : gemmt.c ../param.h
+	$(CC) -c $(CFLAGS) $< -o $(@F)
+
+dgemmtr.$(SUFFIX) dgemmtr.$(PSUFFIX) : gemmt.c ../param.h
+	$(CC) -c $(CFLAGS) $< -o $(@F)
+
+qgemmtr.$(SUFFIX) qgemmtr.$(PSUFFIX) : gemmt.c ../param.h
+	$(CC) -c $(CFLAGS) $< -o $(@F)
+
+cgemmtr.$(SUFFIX) cgemmtr.$(PSUFFIX) : gemmt.c ../param.h
+	$(CC) -c $(CFLAGS) $< -o $(@F)
+
+zgemmtr.$(SUFFIX) zgemmtr.$(PSUFFIX) : gemmt.c ../param.h
 	$(CC) -c $(CFLAGS) $< -o $(@F)
 
 ssymm.$(SUFFIX) ssymm.$(PSUFFIX) : symm.c
@@ -1966,8 +1980,13 @@ cblas_zgemm.$(SUFFIX) cblas_zgemm.$(PSUFFIX) : gemm.c ../param.h
 cblas_sgemmt.$(SUFFIX) cblas_sgemmt.$(PSUFFIX) : gemmt.c ../param.h
 	$(CC) -DCBLAS -c $(CFLAGS) $< -o $(@F)
 
+cblas_sgemmtr.$(SUFFIX) cblas_sgemmtr.$(PSUFFIX) : gemmt.c ../param.h
+	$(CC) -DCBLAS -c $(CFLAGS) $< -o $(@F)
+
 ifeq ($(BUILD_BFLOAT16),1)
 cblas_sbgemmt.$(SUFFIX) cblas_sbgemmt.$(PSUFFIX) : sbgemmt.c ../param.h
+	$(CC) -DCBLAS -c $(CFLAGS) $< -o $(@F)
+cblas_sbgemmtr.$(SUFFIX) cblas_sbgemmtr.$(PSUFFIX) : sbgemmt.c ../param.h
 	$(CC) -DCBLAS -c $(CFLAGS) $< -o $(@F)
 endif
 
@@ -1978,6 +1997,15 @@ cblas_cgemmt.$(SUFFIX) cblas_cgemmt.$(PSUFFIX) : gemmt.c ../param.h
 	$(CC) -DCBLAS -c $(CFLAGS) $< -o $(@F)
 
 cblas_zgemmt.$(SUFFIX) cblas_zgemmt.$(PSUFFIX) : gemmt.c ../param.h
+	$(CC) -DCBLAS -c $(CFLAGS) $< -o $(@F)
+
+cblas_dgemmtr.$(SUFFIX) cblas_dgemmtr.$(PSUFFIX) : gemmt.c ../param.h
+	$(CC) -DCBLAS -c $(CFLAGS) $< -o $(@F)
+
+cblas_cgemmtr.$(SUFFIX) cblas_cgemmtr.$(PSUFFIX) : gemmt.c ../param.h
+	$(CC) -DCBLAS -c $(CFLAGS) $< -o $(@F)
+
+cblas_zgemmtr.$(SUFFIX) cblas_zgemmtr.$(PSUFFIX) : gemmt.c ../param.h
 	$(CC) -DCBLAS -c $(CFLAGS) $< -o $(@F)
 
 cblas_ssymm.$(SUFFIX) cblas_ssymm.$(PSUFFIX) : symm.c
