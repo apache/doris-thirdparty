@@ -102,6 +102,10 @@ endif()
 
 message(WARNING "CMake support is experimental. It does not yet support all build options and may not produce the same Makefiles that OpenBLAS ships with.")
 
+if (USE_OPENMP)
+  find_package(OpenMP REQUIRED)
+endif ()
+
 include("${PROJECT_SOURCE_DIR}/cmake/utils.cmake")
 include("${PROJECT_SOURCE_DIR}/cmake/system.cmake")
 
@@ -255,6 +259,15 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "AIX|Android|Linux|FreeBSD|OpenBSD|NetBSD|Drago
   endif()
   if(BUILD_SHARED_LIBS)
     target_link_libraries(${OpenBLAS_LIBNAME}_shared m)
+  endif()
+endif()
+
+if (USE_OPENMP)
+  if(BUILD_STATIC_LIBS)
+    target_link_libraries(${OpenBLAS_LIBNAME}_static OpenMP::OpenMP_C)
+  endif()
+  if(BUILD_SHARED_LIBS)
+    target_link_libraries(${OpenBLAS_LIBNAME}_shared OpenMP::OpenMP_C)
   endif()
 endif()
 
