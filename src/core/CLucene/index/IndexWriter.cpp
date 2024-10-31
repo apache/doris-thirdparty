@@ -1815,6 +1815,17 @@ void IndexWriter::mergeTerms(bool hasProx) {
         }
 
         for (int i = 0; i < numDestIndexes; ++i) {
+            if (dfs[i] == 0) {
+                if (infoStream != nullptr) {
+                    std::string name = lucene_wcstoutf8string(smallestTerm->text(), smallestTerm->textLength());
+                    std::string field = lucene_wcstoutf8string(smallestTerm->field(), wcslen(smallestTerm->field()));
+                    std::stringstream ss;
+                    ss << "term: " << name << ", field: " << field << ", doc frequency is zero[" << dfs[i] << "], skip it." << "\n";
+                    message(ss.str());
+                }
+                // if doc frequency is 0, it means the term is deleted. So we should not write it.
+                continue;
+            }
             DefaultSkipListWriter *skipListWriter = skipListWriterList[i];
             CL_NS(store)::IndexOutput *freqOutput = freqOutputList[i];
             CL_NS(store)::IndexOutput *proxOutput = proxOutputList[i];
