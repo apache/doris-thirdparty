@@ -3553,6 +3553,13 @@ is a big desktop or server with abundant cache rather than a phone or embedded d
 #define SWITCH_RATIO            16
 #define GEMM_PREFERED_SIZE      8
 #endif
+#undef SBGEMM_ALIGN_K
+#define SBGEMM_ALIGN_K 4
+
+#undef SBGEMM_DEFAULT_UNROLL_M
+#undef SBGEMM_DEFAULT_UNROLL_N
+#define SBGEMM_DEFAULT_UNROLL_M 8
+#define SBGEMM_DEFAULT_UNROLL_N 4
 
 #define SGEMM_DEFAULT_UNROLL_M  16
 #define SGEMM_DEFAULT_UNROLL_N  8
