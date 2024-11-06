@@ -326,16 +326,15 @@ static int inner_advanced_thread(blas_arg_t *args, BLASLONG *range_m, BLASLONG *
     min_i = m - is;
     if (min_i >= GEMM_P * 2) {
       min_i = GEMM_P;
-    } else
-      if (min_i > GEMM_P) {
+    } else if (min_i > GEMM_P) {
 	min_i = (((min_i + 1) / 2 + GEMM_UNROLL_M - 1)/GEMM_UNROLL_M) * GEMM_UNROLL_M;
-      }
+    }
 
-      ICOPY_OPERATION(k, min_i, a, lda, 0, is, sa);
+    ICOPY_OPERATION(k, min_i, a, lda, 0, is, sa);
 
-      current = mypos;
+    current = mypos;
 
-      do {
+    do {
 
 	div_n = (range_n[current + 1]  - range_n[current] + DIVIDE_RATE - 1) / DIVIDE_RATE;
 
@@ -365,7 +364,7 @@ static int inner_advanced_thread(blas_arg_t *args, BLASLONG *range_m, BLASLONG *
 	current ++;
 	if (current >= args -> nthreads) current = 0;
 
-      } while (current != mypos);
+    } while (current != mypos);
   }
 
   for (i = 0; i < args -> nthreads; i++) {
