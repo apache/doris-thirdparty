@@ -83,6 +83,8 @@ public:
     */
 	virtual TermPositions* __asTermPositions()=0;
 
+	virtual void setIoContext(const void*) {}
+
 	virtual int32_t docFreq() {
 		_CLTHROWA(CL_ERR_UnsupportedOperation, "TermDocs::docFreq does not support this method.");
 	}

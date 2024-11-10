@@ -93,6 +93,12 @@ int32_t MultiLevelSkipListReader::skipTo(const int32_t target) {
 	return numSkipped[0] - skipInterval[0] - 1;
 }
 
+void MultiLevelSkipListReader::setIoContext(const void* io_ctx) {
+	if (skipStream[0]) {
+		skipStream[0]->setIoContext(io_ctx);
+	}
+}
+
 bool MultiLevelSkipListReader::loadNextSkip(const int32_t level) {
 	// we have to skip, the target document is greater than the current
 	// skip list entry

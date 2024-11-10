@@ -171,7 +171,8 @@ private:
 protected:
   bool currentFieldStoresPayloads;
   bool hasProx = false;
-  IndexVersion indexVersion_ = IndexVersion::kV0; 
+  IndexVersion indexVersion_ = IndexVersion::kV0;
+  const void* io_ctx_ = nullptr;
 
 public:
   ///\param Parent must be a segment reader
@@ -196,6 +197,8 @@ public:
   virtual bool skipTo(const int32_t target);
 
   virtual TermPositions* __asTermPositions();
+
+  void setIoContext(const void* io_ctx) override;
 
   int32_t docFreq() override;
 
@@ -233,6 +236,8 @@ public:
   ///\param Parent must be a segment reader
   SegmentTermPositions(const SegmentReader* Parent);
   virtual ~SegmentTermPositions();
+
+  void setIoContext(const void* io_ctx) override;
 
 private:
   void seek(const TermInfo* ti, Term* term);
@@ -473,9 +478,9 @@ public:
   bool isDeleted(const int32_t n);
 
   ///Returns an unpositioned TermDocs enumerator.
-  TermDocs* termDocs();
+  TermDocs* termDocs(const void* io_ctx = nullptr);
   ///Returns an unpositioned TermPositions enumerator.
-  TermPositions* termPositions();
+  TermPositions* termPositions(const void* io_ctx = nullptr);
 
   ///Returns the number of documents which contain the term t
   int32_t docFreq(const Term* t);

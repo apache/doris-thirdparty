@@ -134,6 +134,9 @@ CL_NS_DEF(store)
 
 		virtual void setIdxFileCache(bool index) {}
 
+		virtual void setIoContext(const void*) {}
+		virtual const void* getIoContext() {}
+
     };
 
    /** Abstract base class for input from a file in a {@link Directory}.  A

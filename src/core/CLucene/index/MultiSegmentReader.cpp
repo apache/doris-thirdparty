@@ -355,15 +355,17 @@ int32_t MultiSegmentReader::docFreq(const Term* t) {
 	return total;
 }
 
-TermDocs* MultiSegmentReader::termDocs() {
+TermDocs* MultiSegmentReader::termDocs(const void* io_ctx) {
     ensureOpen();
 	TermDocs* ret =  _CLNEW MultiTermDocs(subReaders, starts);
+	ret->setIoContext(io_ctx);
 	return ret;
 }
 
-TermPositions* MultiSegmentReader::termPositions() {
+TermPositions* MultiSegmentReader::termPositions(const void* io_ctx) {
     ensureOpen();
 	TermPositions* ret = static_cast<TermPositions*>(_CLNEW MultiTermPositions(subReaders, starts));
+	ret->setIoContext(io_ctx);
 	return ret;
 }
 
@@ -559,6 +561,10 @@ int32_t MultiTermDocs::docFreq() {
 	return docFreq;
 }
 
+void MultiTermDocs::setIoContext(const void* io_ctx) {
+	io_ctx_ = io_ctx;
+}
+
 int32_t MultiTermDocs::doc() const {
   CND_PRECONDITION(current!=NULL,"current==NULL, check that next() was called");
   // if not found term, current will return INT_MAX, we could not add base, otherwise it will overflow.
@@ -724,7 +730,7 @@ void MultiTermDocs::close() {
 }
 
 TermDocs* MultiTermDocs::termDocs(IndexReader* reader) {
-	return reader->termDocs();
+	return reader->termDocs(io_ctx_);
 }
 
 TermDocs* MultiTermDocs::termDocs(const int32_t i) {
@@ -920,7 +926,7 @@ TermDocs* MultiTermPositions::termDocs(IndexReader* reader) {
 // rather merely producing a SegmentTermDocs via the reader's termDocs
 // method.
 
-	TermPositions* tp = reader->termPositions();
+	TermPositions* tp = reader->termPositions(io_ctx_);
 	TermDocs* ret = tp->__asTermDocs();
 
 	CND_CONDITION(ret != NULL,

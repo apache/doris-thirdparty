@@ -100,8 +100,8 @@ public:
 
 	//Returns the document frequency of the current term in the set
 	int32_t docFreq(const Term* t=NULL);
-	TermDocs* termDocs();
-	TermPositions* termPositions();
+	TermDocs* termDocs(const void* io_ctx = nullptr);
+	TermPositions* termPositions(const void* io_ctx = nullptr);
 
 	/**
 	* @see IndexReader#getFieldNames(IndexReader.FieldOption fldOption)

@@ -123,6 +123,8 @@ public:
 
 	int32_t getFormat() { return format; }
 
+	void setIoContext(const void* io_ctx);
+
 private:
 	/**
 	 * Reads the next term in the enumeration
