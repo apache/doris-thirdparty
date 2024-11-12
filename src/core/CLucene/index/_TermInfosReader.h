@@ -49,6 +49,8 @@ CL_NS_DEF(index)
 
         int64_t numBytesUsed;
 
+		const void* io_ctx_ = nullptr;
+
         DEFINE_MUTEX(THIS_LOCK)
 
 	public:
@@ -108,6 +110,9 @@ CL_NS_DEF(index)
         int64_t getRAMUsed() const {
             return numBytesUsed;
         }
+
+		void setIoContext(const void* io_ctx = nullptr);
+
     private:
 		/** Reads the term info index file or .tti file. */
 		void ensureIndexIsRead();

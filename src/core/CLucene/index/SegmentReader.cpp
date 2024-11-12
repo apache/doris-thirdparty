@@ -506,22 +506,26 @@ bool SegmentReader::isDeleted(const int32_t n) {
     return ret;
 }
 
-TermDocs *SegmentReader::termDocs() {
+TermDocs *SegmentReader::termDocs(const void* io_ctx) {
     //Func - Returns an unpositioned TermDocs enumerator.
     //Pre  - true
     //Post - An unpositioned TermDocs enumerator has been returned
 
     ensureOpen();
-    return _CLNEW SegmentTermDocs(this);
+    auto* ret = _CLNEW SegmentTermDocs(this);
+    ret->setIoContext(io_ctx);
+    return ret;
 }
 
-TermPositions *SegmentReader::termPositions() {
+TermPositions *SegmentReader::termPositions(const void* io_ctx) {
     //Func - Returns an unpositioned TermPositions enumerator.
     //Pre  - true
     //Post - An unpositioned TermPositions enumerator has been returned
 
     ensureOpen();
-    return _CLNEW SegmentTermPositions(this);
+    auto* ret = _CLNEW SegmentTermPositions(this);
+    ret->setIoContext(io_ctx);
+    return ret;
 }
 
 int32_t SegmentReader::docFreq(const Term *t) {

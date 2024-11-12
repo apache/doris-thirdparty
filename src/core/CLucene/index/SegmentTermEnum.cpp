@@ -420,4 +420,10 @@ void SegmentTermEnum::growBuffer(const uint32_t length, bool force_copy) {
     }
 }
 
+void SegmentTermEnum::setIoContext(const void* io_ctx) {
+    if (input) {
+        input->setIoContext(io_ctx);
+    }
+}
+
 CL_NS_END

@@ -271,15 +271,17 @@ int32_t MultiReader::docFreq(const Term* t) {
 	return total;
 }
 
-TermDocs* MultiReader::termDocs() {
+TermDocs* MultiReader::termDocs(const void* io_ctx) {
     ensureOpen();
 	TermDocs* ret =  _CLNEW MultiTermDocs(subReaders, starts);
+  ret->setIoContext(io_ctx);
 	return ret;
 }
 
-TermPositions* MultiReader::termPositions() {
+TermPositions* MultiReader::termPositions(const void* io_ctx) {
     ensureOpen();
 	TermPositions* ret = (TermPositions*)_CLNEW MultiTermPositions(subReaders, starts);
+  ret->setIoContext(io_ctx);
 	return ret;
 }
 

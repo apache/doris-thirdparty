@@ -36,6 +36,16 @@ TermPositions *SegmentTermDocs::__asTermPositions() {
     return NULL;
 }
 
+void SegmentTermDocs::setIoContext(const void* io_ctx) {
+    if (parent && parent->tis) {
+        parent->tis->setIoContext(io_ctx);
+    }
+    if (freqStream) {
+        freqStream->setIoContext(io_ctx);
+    }
+    io_ctx_ = io_ctx;
+}
+
 int32_t SegmentTermDocs::docFreq() {
     return df;
 }
@@ -159,8 +169,10 @@ bool SegmentTermDocs::skipTo(const int32_t target) {
     assert(count <= df);
 
     if (df >= skipInterval) {// optimized case
-        if (skipListReader == NULL)
+        if (skipListReader == NULL) {
             skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval);// lazily clone
+            skipListReader->setIoContext(io_ctx_);
+        }
 
         if (!haveSkipped) {// lazily initialize skip stream
             skipListReader->init(skipPointer, freqBasePointer, proxBasePointer, df, hasProx, currentFieldStoresPayloads);

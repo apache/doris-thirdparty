@@ -104,8 +104,8 @@ public:
 
 	//Returns the document frequency of the current term in the set
 	int32_t docFreq(const Term* t=NULL);
-	TermDocs* termDocs();
-	TermPositions* termPositions();
+	TermDocs* termDocs(const void* io_ctx = nullptr);
+	TermPositions* termPositions(const void* io_ctx = nullptr);
 
   void getFieldNames (FieldOption fldOption, StringArrayWithDeletor& retarray);
 	static void getFieldNames(FieldOption fldOption, StringArrayWithDeletor& retarray, CL_NS(util)::ArrayBase<IndexReader*>* subReaders);
@@ -173,6 +173,11 @@ public:
   virtual TermPositions* __asTermPositions();
 
   int32_t docFreq() override;
+
+  void setIoContext(const void* io_ctx) override;
+
+protected:
+  const void* io_ctx_ = nullptr;
 };
 
 

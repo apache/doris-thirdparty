@@ -27,6 +27,10 @@ SegmentTermPositions::~SegmentTermPositions() {
     close();
 }
 
+void SegmentTermPositions::setIoContext(const void* io_ctx) {
+    SegmentTermDocs::setIoContext(io_ctx);
+}
+
 TermDocs* SegmentTermPositions::__asTermDocs(){
     return (TermDocs*) this;
 }
@@ -135,6 +139,7 @@ void SegmentTermPositions::lazySkip() {
     if (proxStream == NULL) {
       // clone lazily
       proxStream = parent->proxStream->clone();
+      proxStream->setIoContext(io_ctx_);
       buffer_.reset(proxStream);
     }
     

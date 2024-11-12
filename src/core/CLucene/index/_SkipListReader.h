@@ -69,6 +69,8 @@ public:
 	*/
 	int32_t skipTo(const int32_t target);
 
+	void setIoContext(const void* io_ctx);
+
 private:
 	bool loadNextSkip(const int32_t level);
 

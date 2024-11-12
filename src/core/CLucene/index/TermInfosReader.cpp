@@ -234,6 +234,9 @@ TermInfo* TermInfosReader::get(const Term* term) {
 
     // optimize sequential access: first try scanning cached enum w/o seeking
     SegmentTermEnum* enumerator = getEnum();
+    if (enumerator) {
+        enumerator->setIoContext(io_ctx_);
+    }
 
     // optimize sequential access: first try scanning cached enumerator w/o seeking
     if (
@@ -263,6 +266,10 @@ TermInfo* TermInfosReader::get(const Term* term) {
     seekEnum(getIndexOffset(term));
     //Return the TermInfo for term
     return scanEnum(term);
+}
+
+void TermInfosReader::setIoContext(const void* io_ctx) {
+    io_ctx_ = io_ctx;
 }
 
 int64_t TermInfosReader::getPosition(const Term* term) {
