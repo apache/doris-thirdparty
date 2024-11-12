@@ -58,6 +58,7 @@ TermInfosReader::TermInfosReader(Directory* dir, const char* seg, FieldInfos* fi
 
         // tii
         auto tiiStream = directory->openInput(tiiFile.c_str(), readBufferSize);
+        tiiStream->setIndexFile(true);
         indexEnum = _CLNEW SegmentTermEnum(tiiStream, fieldInfos, true);
         indexEnum->init(-1);
         CND_CONDITION(indexEnum != NULL, "No memory could be allocated for index enumerator");

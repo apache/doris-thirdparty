@@ -137,6 +137,8 @@ CL_NS_DEF(store)
 		virtual void setIoContext(const void*) {}
 		virtual const void* getIoContext() {}
 
+		virtual void setIndexFile(bool isIndexFile) {}
+
     };
 
    /** Abstract base class for input from a file in a {@link Directory}.  A
