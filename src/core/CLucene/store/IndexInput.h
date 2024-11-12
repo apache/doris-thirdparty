@@ -135,7 +135,7 @@ CL_NS_DEF(store)
 		virtual void setIdxFileCache(bool index) {}
 
 		virtual void setIoContext(const void*) {}
-		virtual const void* getIoContext() {}
+		virtual const void* getIoContext() { return nullptr; }
 
     };
 
