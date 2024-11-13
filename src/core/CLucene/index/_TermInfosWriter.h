@@ -7,6 +7,7 @@
 #ifndef _lucene_index_TermInfosWriter_
 #define _lucene_index_TermInfosWriter_
 
+#include "CLucene/store/IndexOutput.h"
 #include "CLucene/util/Array.h"
 
 CL_CLASS_DEF(store, Directory)

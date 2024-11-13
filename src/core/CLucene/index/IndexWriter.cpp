@@ -9,9 +9,13 @@
 #include "CLucene/analysis/AnalysisHeader.h"
 #include "CLucene/analysis/Analyzers.h"
 #include "CLucene/config/repl_wchar.h"
+#include "CLucene/debug/error.h"
+#include "CLucene/debug/mem.h"
 #include "CLucene/document/Document.h"
+#include "CLucene/index/_TermInfosWriter.h"
 #include "CLucene/search/Similarity.h"
 #include "CLucene/store/Directory.h"
+#include "CLucene/store/IndexOutput.h"
 #include "CLucene/util/Misc.h"
 #include "CLucene/util/PFORUtil.h"
 #include "IndexReader.h"
@@ -43,6 +47,7 @@
 #include <iostream>
 #include <roaring/roaring.hh>
 #include <sstream>
+#include <utility>
 
 #define FINALLY_CLOSE_OUTPUT(x)       \
     try {                             \
@@ -115,16 +120,14 @@ void IndexWriter::deinit(bool releaseWriteLock) throw() {
 IndexWriter::~IndexWriter() {
     deinit();
 
-    _trans_vec.clear();
     readers.clear();
-    if (fieldInfos != nullptr) {
-        _CLDELETE(fieldInfos);
-    }
     freqOutputList.clear();
     proxOutputList.clear();
     termInfosWriterList.clear();
     skipListWriterList.clear();
-    docDeltaBuffer.clear();
+    destIndexWriterList.clear();
+    nullBitmapIndexOutputList.clear();
+    newSegmentInfos.clear();
 }
 
 void IndexWriter::ensureOpen() {
@@ -1257,206 +1260,164 @@ void IndexWriter::resetMergeExceptions() {
     mergeGen++;
 }
 
-void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_dirs,
-                                  std::vector<lucene::store::Directory *> dest_dirs,
-                                  std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec,
-                                  std::vector<uint32_t> dest_index_docs) {
-    CND_CONDITION(src_dirs.size() > 0, "Source directory not found.");
-    CND_CONDITION(dest_dirs.size() > 0, "Destination directory not found.");
-    this->_trans_vec = std::move(trans_vec);
-
-    // create segment readers
-    int numIndices = src_dirs.size();
-
-    //Set of IndexReaders
-    if (infoStream != nullptr) {
-        message(string("src index dir size: ") + Misc::toString(numIndices));
-    }
-
-    // first level vector index is src_index_id
-    // second level vector index is src_doc_id
-    std::vector<std::vector<uint32_t>> srcNullBitmapValues(numIndices);
-    IndexInput* null_bitmap_in = nullptr;
-    for (int32_t i = 0; i < numIndices; i++) {
-        // One index dir may have more than one segment, so we change the code to open all segments by using IndexReader::open
-        // To keep the number of readers consistent with the number of src dirs.
-        // Using IndexWriter::segmentInfos will be incorrect when there are more than one segment in one index dir
-        IndexReader* reader = lucene::index::IndexReader::open(src_dirs[i], MERGE_READ_BUFFER_SIZE, false);
-        readers.push_back(reader);
-        if (infoStream != nullptr) {
-            message(src_dirs[i]->toString());
-        }
-
-        // read null_bitmap and store values in srcBitmapValues
+void IndexWriter::createReaders(const std::vector<lucene::store::Directory*>& srcDirs, std::vector<std::vector<uint32_t>>& srcNullBitmapValues) {
+    std::unique_ptr<IndexInput, ResourceDeleter<IndexInput>> nullBitmapInput(nullptr, ResourceDeleter<IndexInput>());
+    IndexReader* pIndexReader = nullptr;
+    IndexInput* pNullBitmapInput = nullptr;
+    for (int32_t i = 0; i < numSrcIndices; i++) {
         try {
-            if (src_dirs[i]->fileExists(NULL_BITMAP_FILE_NAME)) {
-                // get null_bitmap index input
-                null_bitmap_in = src_dirs[i]->openInput(NULL_BITMAP_FILE_NAME);
-                size_t null_bitmap_size = null_bitmap_in->length();
+            pIndexReader = lucene::index::IndexReader::open(srcDirs[i], MERGE_READ_BUFFER_SIZE, false);
+            auto reader = std::shared_ptr<IndexReader>(pIndexReader, ResourceDeleter<IndexReader>());
+            readers.push_back(reader);
+            if (infoStream != nullptr) {
+                message(srcDirs[i]->toString());
+            }
+
+            if (srcDirs[i]->fileExists(NULL_BITMAP_FILE_NAME)) {
+                pNullBitmapInput = srcDirs[i]->openInput(NULL_BITMAP_FILE_NAME);
+                nullBitmapInput.reset(pNullBitmapInput);
+                size_t nullBitmapSize = nullBitmapInput->length();
                 std::string buf;
-                buf.resize(null_bitmap_size);
-                null_bitmap_in->readBytes(reinterpret_cast<uint8_t*>(const_cast<char*>(buf.data())), null_bitmap_size);
+                buf.resize(nullBitmapSize);
+                nullBitmapInput->readBytes(reinterpret_cast<uint8_t*>(const_cast<char*>(buf.data())), nullBitmapSize);
                 auto null_bitmap = roaring::Roaring::read(buf.data(), false);
                 null_bitmap.runOptimize();
                 for (unsigned int v : null_bitmap) {
                     srcNullBitmapValues[i].emplace_back(v);
                 }
-                FINALLY_CLOSE_OUTPUT(null_bitmap_in);
             }
-        } catch (CLuceneError &e) {
-            FINALLY_CLOSE_OUTPUT(null_bitmap_in);
+        } catch(CLuceneError &e){
+            FINALLY_CLOSE_OUTPUT(pIndexReader)
+            FINALLY_CLOSE_OUTPUT(pNullBitmapInput)
+            throw e;
         }
     }
-    assert(readers.size() == numIndices);
+    assert(readers.size() == numSrcIndices);
+    if (readers.size() != numSrcIndices) {
+        _CLTHROWA(CL_ERR_IllegalState, "Create readers failed, readers size and numSrcIndices are not equal.");
+    }
+}
 
-    numDestIndexes = dest_dirs.size();
+void IndexWriter::createWriters(const std::vector<lucene::store::Directory*>& destDirs, const std::vector<uint32_t>& destIndexDocs, bool hasProx, IndexVersion indexVersion) {
+    std::string docStoreSegment;
+    docStoreSegment.clear();
+    std::unique_ptr<SegmentInfo> segmentInfo = nullptr;
+    IndexOutput* pFreqOut = nullptr;
+    IndexOutput* pProxOut = nullptr;
+    IndexOutput* pNullBitmapOut = nullptr;
+    for (int j = 0; j < numDestIndices; j++) {
+        try {
+            auto destDir = destDirs[j];
+            auto tmpIndexWriter = std::make_unique<IndexWriter>(destDir, analyzer, true, true);
+            auto indexWriter = std::shared_ptr<IndexWriter>(tmpIndexWriter.release(), ResourceDeleter<IndexWriter>());
+            destIndexWriterList.push_back(indexWriter);
+
+            std::string segment = indexWriter->newSegmentName();
+            segmentInfo = std::make_unique<SegmentInfo>(segment.c_str(), (int)destIndexDocs[j], destDir, false, true, 0, docStoreSegment.c_str(), false);
+            newSegmentInfos.push_back(segmentInfo.release());
+
+            writeFields(destDir, segment);
+
+            pFreqOut = destDir->createOutput((Misc::segmentname(segment.c_str(), ".frq").c_str()));
+            auto freqOut = std::shared_ptr<IndexOutput>(pFreqOut, ResourceDeleter<IndexOutput>());
+            freqPointers.push_back(0);
+            freqOutputList.push_back(freqOut);
+
+            std::shared_ptr<IndexOutput> proxOut = nullptr;
+            if (hasProx) {
+                pProxOut = destDir->createOutput(Misc::segmentname(segment.c_str(), ".prx").c_str());
+                proxOut = std::shared_ptr<IndexOutput>(pProxOut, ResourceDeleter<IndexOutput>());
+                proxPointers.push_back(0);
+            }
+            proxOutputList.push_back(proxOut);
+
+            auto tmpTermInfosWriter = std::make_unique<TermInfosWriter>(destDir, segment.c_str(), fieldInfos.get(), termIndexInterval);
+            auto termInfosWriter = std::shared_ptr<TermInfosWriter>(tmpTermInfosWriter.release(), ResourceDeleter<TermInfosWriter>());
+            termInfosWriterList.push_back(termInfosWriter);
+
+            skipInterval = termInfosWriter->skipInterval;
+            maxSkipLevels = termInfosWriter->maxSkipLevels;
+            auto skipListWriter = std::make_shared<DefaultSkipListWriter>(skipInterval, maxSkipLevels, (int)destIndexDocs[j], freqOutputList[j].get(), proxOut ? proxOutputList[j].get() : nullptr);
+            skipListWriterList.push_back(skipListWriter);
+
+            pNullBitmapOut = destDir->createOutput(NULL_BITMAP_FILE_NAME);
+            auto nullBitmapOut = std::shared_ptr<IndexOutput>(pNullBitmapOut, ResourceDeleter<IndexOutput>());
+            nullBitmapIndexOutputList.push_back(nullBitmapOut);
+        } catch (CLuceneError &e) {
+            FINALLY_CLOSE_OUTPUT(pFreqOut)
+            FINALLY_CLOSE_OUTPUT(pProxOut)
+            FINALLY_CLOSE_OUTPUT(pNullBitmapOut)
+            throw e;
+        }
+    }
+}
+
+void IndexWriter::updateSegmentInfos() {
+    // update segment infos of dest index_writer in memory
+    for (int i = 0; i < numDestIndices; i++) {
+        auto index_writer = destIndexWriterList[i];
+        index_writer->getSegmentInfos()->setElementAt(newSegmentInfos[i], 0);
+    }
+}
+
+void IndexWriter::checkFileConsistency(bool& hasProx, IndexVersion& indexVersion) {
+    if (!readers.empty()) {
+        auto reader = readers[0];
+        hasProx = reader->getFieldInfos()->hasProx();
+        indexVersion = reader->getFieldInfos()->getIndexVersion();
+        for (int32_t i = 1; i < readers.size(); i++) {
+            if (hasProx != readers[i]->getFieldInfos()->hasProx()) {
+                _CLTHROWA(CL_ERR_IllegalArgument, "srcDirs hasProx inconsistency");
+            }
+            if (indexVersion != readers[i]->getFieldInfos()->getIndexVersion()) {
+                _CLTHROWA(CL_ERR_IllegalArgument, "srcDirs indexVersion inconsistency");
+            }
+        }
+    }
+}
+
+void IndexWriter::indexCompaction(const std::vector<lucene::store::Directory*>& srcDirs,
+                                  const std::vector<lucene::store::Directory*>& destDirs,
+                                  std::shared_ptr<const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>> transVecPtr,
+                                  const std::vector<uint32_t>& destIndexDocs) {
+    assert(!srcDirs.empty());
+    assert(!destDirs.empty());
+
+    this->transVec = std::move(transVecPtr);
+
+    numSrcIndices = srcDirs.size();
+    numDestIndices = destDirs.size();
+
+    if (numSrcIndices == 0 || numDestIndices == 0 || transVec->empty()) {
+        _CLTHROWA(CL_ERR_IllegalArgument, "srcDirs, destDirs or transVec is empty.");
+    }
+
+    if (infoStream != nullptr) {
+        message(string("src index dir size: ") + Misc::toString(numSrcIndices));
+    }
+
+    // first level vector index is src_index_id
+    // second level vector index is src_doc_id
+    std::vector<std::vector<uint32_t>> srcNullBitmapValues(numSrcIndices);
+
+    createReaders(srcDirs, srcNullBitmapValues);
 
     // print dest index files
-    if (infoStream != NULL) {
-        message(string("dest index size: ") + Misc::toString(numDestIndexes));
-        for (auto dest: dest_dirs) {
+    if (infoStream != nullptr) {
+        message(string("dest index size: ") + Misc::toString(numDestIndices));
+        for (auto dest : destDirs) {
             message(dest->toString());
         }
     }
 
-    // init new segment infos
-    std::vector<SegmentInfo *> newSegmentInfos;
-    SegmentInfo *newSegment = nullptr;
-    std::string docStoreSegment;
-    docStoreSegment.clear();
-
-    std::vector<lucene::index::IndexWriter *> destIndexWriterList;
-    std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList;
-    try {
-        // check hasProx, indexVersion
-        bool hasProx = false;
-        IndexVersion indexVersion = IndexVersion::kV1;
-        {
-            if (!readers.empty()) {
-                IndexReader* reader = readers[0];
-                hasProx = reader->getFieldInfos()->hasProx();
-                indexVersion = reader->getFieldInfos()->getIndexVersion();
-                for (int32_t i = 1; i < readers.size(); i++) {
-                    if (hasProx != readers[i]->getFieldInfos()->hasProx()) {
-                        _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs hasProx inconformity");
-                    }
-                    if (indexVersion != readers[i]->getFieldInfos()->getIndexVersion()) {
-                        _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs indexVersion inconformity");
-                    }
-                }
-            }
-        }
-
-        /// merge fields
-        mergeFields(hasProx, indexVersion);
-
-        /// write fields and create files writers
-        for (int j = 0; j < numDestIndexes; j++) {
-            auto dest_dir = dest_dirs[j];
-            /// create dest index writers
-            auto index_writer = _CLNEW IndexWriter(dest_dir, analyzer, true, true);
-            destIndexWriterList.push_back(index_writer);
-
-            std::string segment = index_writer->newSegmentName();
-            // create segment info
-            newSegment = _CLNEW SegmentInfo(segment.c_str(),
-                                            (int) dest_index_docs[j],
-                                            dest_dir, false, true,
-                                            0, docStoreSegment.c_str(),
-                                            false);
-            newSegmentInfos.push_back(newSegment);
-
-            /// write fields
-            writeFields(dest_dir, segment);
-
-            /// create file writers
-            // Open an IndexOutput to the new Frequency File
-            IndexOutput *freqOut = dest_dir->createOutput((Misc::segmentname(segment.c_str(), ".frq").c_str()));
-            freqPointers.push_back(0);
-            freqOutputList.push_back(freqOut);
-            // Open an IndexOutput to the new Prox File
-            IndexOutput *proxOut = nullptr;
-            if (hasProx) {
-                proxOut = dest_dir->createOutput(Misc::segmentname(segment.c_str(), ".prx").c_str());
-                proxPointers.push_back(0);
-            }
-            proxOutputList.push_back(proxOut);
-            // Instantiate a new termInfosWriter which will write in directory
-            // for the segment name segment using the new merged fieldInfos
-            TermInfosWriter *termInfosWriter = _CLNEW TermInfosWriter(dest_dir, segment.c_str(), fieldInfos, termIndexInterval);
-            termInfosWriterList.push_back(termInfosWriter);
-            // skipList writer
-            skipInterval = termInfosWriter->skipInterval;
-            maxSkipLevels = termInfosWriter->maxSkipLevels;
-            skipListWriterList.push_back(_CLNEW DefaultSkipListWriter(skipInterval, maxSkipLevels, (int) dest_index_docs[j], freqOutputList[j], proxOutputList[j]));
-
-            // create null_bitmap index output
-            auto* null_bitmap_out = dest_dir->createOutput(NULL_BITMAP_FILE_NAME);
-            nullBitmapIndexOutputList.push_back(null_bitmap_out);
-        }
-
-        /// merge terms
-        mergeTerms(hasProx, indexVersion);
-
-        /// merge null_bitmap
-        mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
-    }
-    _CLFINALLY(
-            for (auto freqOutput
-                 : freqOutputList) {
-                if (freqOutput != NULL) {
-                    freqOutput->close();
-                    _CLDELETE(freqOutput);
-                }
-            } freqOutputList.clear();
-            for (auto proxOutput
-                 : proxOutputList) {
-                if (proxOutput != NULL) {
-                    proxOutput->close();
-                    _CLDELETE(proxOutput);
-                }
-            } proxOutputList.clear();
-            for (auto termInfosWriter
-                 : termInfosWriterList) {
-                if (termInfosWriter != NULL) {
-                    termInfosWriter->close();
-                    _CLDELETE(termInfosWriter);
-                }
-            } termInfosWriterList.clear();
-            for (auto skipListWriter
-                 : skipListWriterList) {
-                if (skipListWriter != NULL) {
-                    _CLDELETE(skipListWriter);
-                }
-            } skipListWriterList.clear();
-            for (auto r
-                 : readers) {
-                if (r != NULL) {
-                    r->close();
-                    _CLDELETE(r);
-                }
-            } readers.clear(););
-            for (auto* null_bitmap_out
-                 : nullBitmapIndexOutputList) {
-                if (null_bitmap_out != nullptr) {
-                    null_bitmap_out->close();
-                    _CLDELETE(null_bitmap_out);
-                }
-            } nullBitmapIndexOutputList.clear();
-
-    // update segment infos of dest index_writer in memory
-    // close dest index writer
-    for (int i = 0; i < numDestIndexes; i++) {
-        auto index_writer = destIndexWriterList[i];
-        index_writer->getSegmentInfos()->setElementAt(newSegmentInfos[i], 0);
-        // close
-        index_writer->close();
-        _CLDELETE(index_writer);
-    }
-    destIndexWriterList.clear();
-
-    // delete segment infos
-    newSegmentInfos.clear();
+    bool hasProx = false;
+    IndexVersion indexVersion = IndexVersion::kV1;
+    checkFileConsistency(hasProx, indexVersion);
+    mergeFields(hasProx, indexVersion);
+    createWriters(destDirs, destIndexDocs, hasProx, indexVersion);
+    mergeTerms(hasProx, indexVersion);
+    mergeNullBitmap(srcNullBitmapValues);
+    updateSegmentInfos();
 }
 
 void IndexWriter::compareIndexes(lucene::store::Directory *other) {
@@ -1563,14 +1524,15 @@ void IndexWriter::compareIndexes(lucene::store::Directory *other) {
 
 void IndexWriter::mergeFields(bool hasProx, IndexVersion indexVersion) {
     //Create a new FieldInfos
-    fieldInfos = _CLNEW FieldInfos();
+    fieldInfos = std::make_shared<FieldInfos>();
     //Condition check to see if fieldInfos points to a valid instance
-    CND_CONDITION(fieldInfos != NULL, "Memory allocation for fieldInfos failed");
+    assert(fieldInfos.get() != nullptr);
 
     //Condition check to see if reader points to a valid instanceL
-    CND_CONDITION(readers.size() == 0, "No IndexReader found");
+    assert(!readers.empty());
+
     // fields of all readers are the same, so we pick the first one.
-    IndexReader *reader = readers[0];
+    std::shared_ptr<IndexReader> reader = readers[0];
 
     for (size_t j = 0; j < reader->getFieldInfos()->size(); j++) {
         FieldInfo *fi = reader->getFieldInfos()->fieldInfo(j);
@@ -1581,346 +1543,365 @@ void IndexWriter::mergeFields(bool hasProx, IndexVersion indexVersion) {
     }
 }
 
-void IndexWriter::writeFields(lucene::store::Directory *d, std::string segment) {
+void IndexWriter::writeFields(lucene::store::Directory *d, const std::string& segment) {
     //Write the new FieldInfos file to the directory
     fieldInfos->write(d, Misc::segmentname(segment.c_str(), ".fnm").c_str());
 }
 
-struct DestDoc {
-    uint32_t srcIdx{};
-    uint32_t destIdx{};
-    uint32_t destDocId{};
-    uint32_t destFreq{};
-    std::vector<uint32_t> destPositions{};
-
-    DestDoc() = default;;
-    DestDoc(uint32_t srcIdx, uint32_t destIdx, uint32_t destDocId) : srcIdx(srcIdx), destIdx(destIdx), destDocId(destDocId) {}
-};
-
-class postingQueue : public CL_NS(util)::PriorityQueue<DestDoc*,CL_NS(util)::Deletor::Object<DestDoc> >{
-public:
-    explicit postingQueue(int32_t count)
-    {
-        initialize(count, false);
-    }
-    ~postingQueue() override{
-        close();
-    }
-
-    void close() {
-        clear();
-    }
-protected:
-    bool lessThan(DestDoc* a, DestDoc* b) override {
-        if (a->destIdx == b->destIdx) {
-            return a->destDocId < b->destDocId;
-        } else {
-            return a->destIdx < b->destIdx;
-        }
-    }
-
-};
-
 void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
-    auto queue = _CLNEW SegmentMergeQueue(readers.size());
-    auto numSrcIndexes = readers.size();
-    //std::vector<TermPositions *> postingsList(numSrcIndexes);
+    std::vector<std::shared_ptr<SegmentMergeInfo>> initialContainer;
+    initialContainer.reserve(numSrcIndices);
 
+    std::priority_queue<std::shared_ptr<SegmentMergeInfo>,
+            std::vector<std::shared_ptr<SegmentMergeInfo>>,
+            CompareSegmentMergeInfo> queue(CompareSegmentMergeInfo(),
+                                           std::move(initialContainer));
 
     int32_t base = 0;
-    IndexReader *reader = nullptr;
-    SegmentMergeInfo *smi = nullptr;
+    std::shared_ptr<IndexReader> reader = nullptr;
 
-    for (int i = 0; i < numSrcIndexes; ++i) {
-        reader = readers[i];
+    initializeMergeQueue(queue, base, reader);
 
-        TermEnum *termEnum = reader->terms();
-        smi = _CLNEW SegmentMergeInfo(base, termEnum, reader, i);
+    std::vector<std::shared_ptr<SegmentMergeInfo>> match(numSrcIndices);
 
-        base += reader->numDocs();
-        if (smi->next()) {
-            queue->put(smi);
-        } else {
-            smi->close();
-            _CLDELETE(smi);
-        }
-    }
-    auto **match = _CL_NEWARRAY(SegmentMergeInfo *, readers.size());
-
-    while (queue->size() > 0) {
+    while (queue.size() > 0) {
         int32_t matchSize = 0;
+        match[matchSize++] = queue.top();
+        queue.pop();
+        auto* smallestTerm = match[0]->term;
+        auto top = queue.top();
 
-        match[matchSize++] = queue->pop();
-        Term *smallestTerm = match[0]->term;
-        SegmentMergeInfo *top = queue->top();
-        if (infoStream != nullptr) {
-            std::string name = lucene_wcstoutf8string(smallestTerm->text(), smallestTerm->textLength());
-            std::string field = lucene_wcstoutf8string(smallestTerm->field(), wcslen(smallestTerm->field()));
-            message("smallestTerm name: " + name);
-            message("smallestTerm field: " + field);
+        logTermInfo(smallestTerm, top);
 
-            if (top != nullptr) {
-                Term* topTerm = top->term;
-                std::string name1 = lucene_wcstoutf8string(topTerm->text(), topTerm->textLength());
-                std::string field1 = lucene_wcstoutf8string(topTerm->field(), wcslen(topTerm->field()));
-                message("topTerm name: " + name1);
-                message("topTerm field: " + field1);
-            }
-        }
-        while (top != nullptr && smallestTerm->equals(top->term)) {
-            match[matchSize++] = queue->pop();
-            top = queue->top();
-        }
+        matchSize = findMatchingTerms(queue, match, matchSize, smallestTerm);
 
-        std::vector<std::vector<uint32_t>> docDeltaBuffers(numDestIndexes);
-        std::vector<std::vector<uint32_t>> freqBuffers(numDestIndexes);
-        std::vector<std::vector<uint32_t>> posBuffers(numDestIndexes);
-        auto destPostingQueues = _CLNEW postingQueue(matchSize);
+        std::vector<std::vector<uint32_t>> docDeltaBuffers(numDestIndices);
+        std::vector<std::vector<uint32_t>> freqBuffers(numDestIndices);
+        std::vector<std::vector<uint32_t>> posBuffers(numDestIndices);
+        auto destPostingQueues = std::make_shared<PostingQueue>(matchSize);
         std::vector<DestDoc> destDocs(matchSize);
 
-        auto processPostings = [&](TermPositions* postings, DestDoc* destDoc, int srcIdx) {
-            while (postings->next()) {
-                int srcDoc = postings->doc();
-                std::pair<int32_t, uint32_t> p = _trans_vec[smi->readerIndex][srcDoc];
-                destDoc->destIdx = p.first;
-                destDoc->destDocId = p.second;
-                destDoc->srcIdx = srcIdx;
-                // <UINT32_MAX, UINT32_MAX> indicates current row not exist in Doris dest segment.
-                // So we ignore this doc here.
-                if (destDoc->destIdx == UINT32_MAX || destDoc->destDocId == UINT32_MAX) {
-                    if (infoStream != nullptr) {
-                        std::stringstream ss;
-                        ss << "skip UINT32_MAX, srcIdx: " << smi->readerIndex << ", srcDoc: " << srcDoc
-                           << ", destIdx: " << destDoc->destIdx << ", destDocId: " << destDoc->destDocId;
-                        message(ss.str());
-                    }
-                    continue;
-                }
+        processPostingsForMatchingTerms(hasProx, destPostingQueues, indexVersion, match,
+                                        matchSize, destDocs);
 
-                if (hasProx) {
-                    int32_t freq = postings->freq();
-                    destDoc->destFreq = freq;
-                    destDoc->destPositions.resize(freq);
+        std::vector<int32_t> dfs(numDestIndices, 0);
+        std::vector<int32_t> lastDocs(numDestIndices, 0);
 
-                    for (int32_t j = 0; j < freq; j++) {
-                        int32_t position = postings->nextPosition();
-                        destDoc->destPositions[j] = position;
-                    }
-                }
+        processDestPostingQueues(hasProx, indexVersion, destPostingQueues, docDeltaBuffers,
+                                 freqBuffers, posBuffers, dfs, lastDocs, match);
 
-                destPostingQueues->put(destDoc);
-                break;
-            }
-        };
+        logDfsInfo(dfs);
 
-        for (int i = 0; i < matchSize; ++i) {
-            smi = match[i];
-            auto* postings = smi->getPositions();
-            postings->seek(smi->termEnum);
-            processPostings(postings, &destDocs[i], i);
-        }
+        writeMergedTerms(hasProx, indexVersion, dfs, docDeltaBuffers, freqBuffers, posBuffers, smallestTerm);
 
-        auto encode = [](IndexOutput* out, std::vector<uint32_t>& buffer, bool isDoc) {
-            std::vector<uint8_t> compress(4 * buffer.size() + PFOR_BLOCK_SIZE);
-            size_t size = 0;
-            if (isDoc) {
-                size = P4ENC(buffer.data(), buffer.size(), compress.data());
-            } else {
-                size = P4NZENC(buffer.data(), buffer.size(), compress.data());
-            }
-            out->writeVInt(size);
-            out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
-            buffer.resize(0);
-        };
-
-        std::vector<int32_t> dfs(numDestIndexes, 0);
-        std::vector<int32_t> lastDocs(numDestIndexes, 0);
-        while (destPostingQueues->size()) {
-            if (destPostingQueues->top() != nullptr) {
-                auto destDoc = destPostingQueues->pop();
-                auto destIdx = destDoc->destIdx;
-                auto destDocId = destDoc->destDocId;
-                auto destFreq = destDoc->destFreq;
-                auto& descPositions = destDoc->destPositions;
-                if (infoStream != nullptr) {
-                    for (int i = 0; i < _trans_vec.size(); ++i) {
-                        // find pair < destIdx, destDocId > in _trans_vec[i] to get the index of the pair
-                        auto it = std::find_if(_trans_vec[i].begin(), _trans_vec[i].end(),
-                                               [destIdx, destDocId](const std::pair<uint32_t, uint32_t>& pair) {
-                                                   return pair.first == destIdx && pair.second == destDocId;
-                                               });
-
-                        // Check if the pair was found
-                        if (it != _trans_vec[i].end()) {
-                            // Calculate the index of the pair
-                            size_t index = std::distance(_trans_vec[i].begin(), it);
-                            std::stringstream ss;
-                            ss << "Found pair at srcIdxId:" << i << ", srcDocId: " << index << ", destIdxId: " << destIdx
-                               << ", destDocId: " << destDocId << ", destFreq: " << destDoc->destFreq;
-                            message(ss.str());
-                        }
-                    }
-                }
-
-                auto freqOut = freqOutputList[destIdx];
-                auto proxOut = proxOutputList[destIdx];
-                auto& docDeltaBuffer = docDeltaBuffers[destIdx];
-                auto& freqBuffer = freqBuffers[destIdx];
-                auto& posBuffer = posBuffers[destIdx];
-                auto skipWriter = skipListWriterList[destIdx];
-                auto& df = dfs[destIdx];
-                auto& lastDoc = lastDocs[destIdx];
-
-                if (df == 0) {
-                    freqPointers[destIdx] = freqOut->getFilePointer();
-                    if (hasProx) {
-                        proxPointers[destIdx] = proxOut->getFilePointer();
-                    }
-                    skipWriter->resetSkip();
-                }
-
-                if ((++df % skipInterval) == 0) {
-                    freqOut->writeByte((char)CodeMode::kPfor);
-                    freqOut->writeVInt(docDeltaBuffer.size());
-                    encode(freqOut, docDeltaBuffer, true);
-                    if (hasProx) {
-                        encode(freqOut, freqBuffer, false);
-                        if (indexVersion >= IndexVersion::kV2) {
-                            PforUtil::encodePos(proxOut, posBuffer);
-                        }
-                    }
-
-                    skipWriter->setSkipData(lastDoc, false, -1);
-                    skipWriter->bufferSkip(df);
-                }
-
-                assert(destDocId > lastDoc || df == 1);
-                lastDoc = destDocId;
-
-                docDeltaBuffer.push_back(destDocId);
-                if (hasProx) {
-                    int32_t lastPosition = 0;
-                    for (int32_t i = 0; i < descPositions.size(); i++) {
-                        int32_t position = descPositions[i];
-                        int32_t delta = position - lastPosition;
-                        if (indexVersion >= IndexVersion::kV2) {
-                            posBuffer.push_back(delta);
-                        } else {
-                            proxOut->writeVInt(delta);
-                        }
-                        lastPosition = position;
-                    }
-                    freqBuffer.push_back(destFreq);
-                }
-
-                smi = match[destDoc->srcIdx];
-                processPostings(smi->getPositions(), destDoc, destDoc->srcIdx);
-            }
-        }
-        if (destPostingQueues != nullptr) {
-            destPostingQueues->close();
-            _CLDELETE(destPostingQueues);
-        }
-        
-        if (infoStream != nullptr) {
-            std::stringstream ss;
-            for (const auto& df : dfs) {
-                ss<< "df: " << df << "\n";
-            }
-            message(ss.str());
-        }
-
-        for (int i = 0; i < numDestIndexes; ++i) {
-            if (dfs[i] == 0) {
-                if (infoStream != nullptr) {
-                    std::string name = lucene_wcstoutf8string(smallestTerm->text(), smallestTerm->textLength());
-                    std::string field = lucene_wcstoutf8string(smallestTerm->field(), wcslen(smallestTerm->field()));
-                    std::stringstream ss;
-                    ss << "term: " << name << ", field: " << field << ", doc frequency is zero[" << dfs[i] << "], skip it." << "\n";
-                    message(ss.str());
-                }
-                // if doc frequency is 0, it means the term is deleted. So we should not write it.
-                continue;
-            }
-            DefaultSkipListWriter *skipListWriter = skipListWriterList[i];
-            CL_NS(store)::IndexOutput *freqOutput = freqOutputList[i];
-            CL_NS(store)::IndexOutput *proxOutput = proxOutputList[i];
-            TermInfosWriter *termInfosWriter = termInfosWriterList[i];
-            int64_t freqPointer = freqPointers[i];
-            int64_t proxPointer = 0;
-            if (hasProx) {
-                proxPointer = proxPointers[i];
-            }
-
-            {
-                auto& docDeltaBuffer = docDeltaBuffers[i];
-                auto& freqBuffer = freqBuffers[i];
-                auto& posBuffer = posBuffers[i];
-
-                freqOutput->writeByte((char)CodeMode::kDefault);
-                freqOutput->writeVInt(docDeltaBuffer.size());
-                uint32_t lastDoc = 0;
-                for (int32_t i = 0; i < docDeltaBuffer.size(); i++) {
-                    uint32_t curDoc = docDeltaBuffer[i];
-                    if (hasProx) {
-                        uint32_t newDocCode = (docDeltaBuffer[i] - lastDoc) << 1;
-                        lastDoc = curDoc;
-                        uint32_t freq = freqBuffer[i];
-                        if (1 == freq) {
-                            freqOutput->writeVInt(newDocCode | 1);
-                        } else {
-                            freqOutput->writeVInt(newDocCode);
-                            freqOutput->writeVInt(freq);
-                        }
-                    } else {
-                        freqOutput->writeVInt(curDoc - lastDoc);
-                        lastDoc = curDoc;
-                    }
-                }
-                docDeltaBuffer.resize(0);
-                freqBuffer.resize(0);
-                if (indexVersion >= IndexVersion::kV2) {
-                    PforUtil::encodePos(proxOutput, posBuffer);
-                }
-            }
-            
-            int64_t skipPointer = skipListWriter->writeSkip(freqOutput);
-
-            // write terms
-            TermInfo termInfo;
-            termInfo.set(dfs[i], freqPointer, proxPointer, (int32_t) (skipPointer - freqPointer));
-            // Write a new TermInfo
-            termInfosWriter->add(smallestTerm, &termInfo);
-        }
-
-        while (matchSize > 0) {
-            smi = match[--matchSize];
-
-            // Move to the next term in the enumeration of SegmentMergeInfo smi
-            if (smi->next()) {
-                // There still are some terms so restore smi in the queue
-                queue->put(smi);
-
-            } else {
-                // Done with a segment
-                // No terms anymore so close this SegmentMergeInfo instance
-                smi->close();
-                _CLDELETE(smi);
-            }
-        }
-    }
-
-    _CLDELETE_ARRAY(match);
-    if (queue != NULL) {
-        queue->close();
-        _CLDELETE(queue);
+        cleanupMatchQueue(match, matchSize, queue);
     }
 }
 
-void IndexWriter::mergeNullBitmap(std::vector<std::vector<uint32_t>> srcNullBitmapValues, std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList) {
+void IndexWriter::initializeMergeQueue(
+        std::priority_queue<std::shared_ptr<SegmentMergeInfo>,
+                                  std::vector<std::shared_ptr<SegmentMergeInfo>>,
+                                  CompareSegmentMergeInfo>& queue,
+                                       int32_t& base, std::shared_ptr<IndexReader>& reader) {
+    TermEnum* termEnum = nullptr;
+    for (int i = 0; i < numSrcIndices; ++i) {
+        try {
+            reader = readers[i];
+            termEnum = reader->terms();
+            auto smi = std::make_shared<SegmentMergeInfo>(base, termEnum, reader.get(), i);
+            base += reader->numDocs();
+            if (smi->next()) {
+                queue.push(smi);
+            }
+        } catch (CLuceneError &e) {
+            FINALLY_CLOSE_OUTPUT(termEnum)
+            throw e;
+        }
+    }
+}
+
+void IndexWriter::logTermInfo(Term* smallestTerm, const std::shared_ptr<SegmentMergeInfo>& top) {
+    if (infoStream != nullptr) {
+        std::string name = lucene_wcstoutf8string(smallestTerm->text(), smallestTerm->textLength());
+        std::string field = lucene_wcstoutf8string(smallestTerm->field(), wcslen(smallestTerm->field()));
+        message("smallestTerm name: " + name);
+        message("smallestTerm field: " + field);
+
+        if (top != nullptr) {
+            Term* topTerm = top->term;
+            std::string name1 = lucene_wcstoutf8string(topTerm->text(), topTerm->textLength());
+            std::string field1 = lucene_wcstoutf8string(topTerm->field(), wcslen(topTerm->field()));
+            message("topTerm name: " + name1);
+            message("topTerm field: " + field1);
+        }
+    }
+}
+
+int IndexWriter::findMatchingTerms(
+        std::priority_queue<std::shared_ptr<SegmentMergeInfo>,
+                                  std::vector<std::shared_ptr<SegmentMergeInfo>>,
+                                  CompareSegmentMergeInfo>& queue,
+                                   std::vector<std::shared_ptr<SegmentMergeInfo>>& match,
+                              int matchSize, Term* smallestTerm) {
+    while (!queue.empty()) {
+        auto top = queue.top();
+        if (top == nullptr || !smallestTerm->equals(top->term)) {
+            break;
+        }
+        match[matchSize++] = queue.top();
+        queue.pop();
+    }
+    return matchSize;
+}
+
+void IndexWriter::processPostings(bool hasProx,
+                                  const std::shared_ptr<PostingQueue>& destPostingQueues,
+                                  TermPositions* postings, IndexWriter::DestDoc* destDoc,
+                                  int srcIdx, const std::shared_ptr<SegmentMergeInfo>& smi) {
+    while (postings->next()) {
+        int srcDoc = postings->doc();
+        std::pair<int32_t, uint32_t> p = (*transVec)[smi->readerIndex][srcDoc];
+        destDoc->destIdx = p.first;
+        destDoc->destDocId = p.second;
+        destDoc->srcIdx = srcIdx;
+        if (destDoc->destIdx == UINT32_MAX || destDoc->destDocId == UINT32_MAX) {
+            if (infoStream != nullptr) {
+                std::stringstream ss;
+                ss << "skip UINT32_MAX, srcIdx: " << smi->readerIndex << ", srcDoc: " << srcDoc
+                   << ", destIdx: " << destDoc->destIdx << ", destDocId: " << destDoc->destDocId;
+                message(ss.str());
+            }
+            continue;
+        }
+
+        if (hasProx) {
+            int32_t freq = postings->freq();
+            destDoc->destFreq = freq;
+            destDoc->destPositions.resize(freq);
+
+            for (int32_t j = 0; j < freq; j++) {
+                int32_t position = postings->nextPosition();
+                destDoc->destPositions[j] = position;
+            }
+        }
+
+        destPostingQueues->put(destDoc);
+        break;
+    }
+}
+
+void IndexWriter::processPostingsForMatchingTerms(
+        bool hasProx, const std::shared_ptr<PostingQueue>& destPostingQueues,
+        IndexVersion indexVersion, const std::vector<std::shared_ptr<SegmentMergeInfo>>& match,
+        int matchSize, std::vector<DestDoc>& destDocs) {
+    TermPositions* postings = nullptr;
+    for (int i = 0; i < matchSize; ++i) {
+        try {
+            postings = match[i]->getPositions();
+            postings->seek(match[i]->termEnum);
+            processPostings(hasProx, destPostingQueues, postings, &destDocs[i], i, match[i]);
+        } catch (CLuceneError& e) {
+            FINALLY_CLOSE_OUTPUT(postings)
+            throw e;
+        }
+    }
+}
+
+void IndexWriter::processDestPostingQueues(bool hasProx, IndexVersion indexVersion,
+                                           const std::shared_ptr<PostingQueue>& destPostingQueues,
+                                           std::vector<std::vector<uint32_t>>& docDeltaBuffers,
+                                           std::vector<std::vector<uint32_t>>& freqBuffers,
+                                           std::vector<std::vector<uint32_t>>& posBuffers,
+                                           std::vector<int32_t>& dfs,
+                                           std::vector<int32_t>& lastDocs,
+                                           std::vector<std::shared_ptr<SegmentMergeInfo>>& match) {
+    auto encode = [](const std::shared_ptr<IndexOutput>& out, std::vector<uint32_t>& buffer, bool isDoc) {
+        std::vector<uint8_t> compress(4 * buffer.size() + PFOR_BLOCK_SIZE);
+        size_t size = 0;
+        if (isDoc) {
+            size = P4ENC(buffer.data(), buffer.size(), compress.data());
+        } else {
+            size = P4NZENC(buffer.data(), buffer.size(), compress.data());
+        }
+        out->writeVInt(size);
+        out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
+        buffer.resize(0);
+    };
+
+    while (destPostingQueues->size()) {
+        if (destPostingQueues->top() != nullptr) {
+            auto destDoc = destPostingQueues->pop();
+            auto destIdx = destDoc->destIdx;
+            auto destDocId = destDoc->destDocId;
+            auto destFreq = destDoc->destFreq;
+            auto& descPositions = destDoc->destPositions;
+            if (infoStream != nullptr) {
+                for (int i = 0; i < transVec->size(); ++i) {
+                    auto it = std::find_if((*transVec)[i].begin(), (*transVec)[i].end(),
+                                           [destIdx, destDocId](const std::pair<uint32_t, uint32_t>& pair) {
+                                               return pair.first == destIdx && pair.second == destDocId;
+                                           });
+
+                    if (it != (*transVec)[i].end()) {
+                        size_t index = std::distance((*transVec)[i].begin(), it);
+                        std::stringstream ss;
+                        ss << "Found pair at srcIdxId:" << i << ", srcDocId: " << index << ", destIdxId: " << destIdx
+                           << ", destDocId: " << destDocId << ", destFreq: " << destDoc->destFreq;
+                        message(ss.str());
+                    }
+                }
+            }
+
+            auto freqOut = freqOutputList[destIdx];
+            auto proxOut = proxOutputList[destIdx];
+            auto& docDeltaBuffer = docDeltaBuffers[destIdx];
+            auto& freqBuffer = freqBuffers[destIdx];
+            auto& posBuffer = posBuffers[destIdx];
+            auto skipWriter = skipListWriterList[destIdx];
+            auto& df = dfs[destIdx];
+            auto& lastDoc = lastDocs[destIdx];
+
+            if (df == 0) {
+                freqPointers[destIdx] = freqOut->getFilePointer();
+                if (hasProx) {
+                    proxPointers[destIdx] = proxOut->getFilePointer();
+                }
+                skipWriter->resetSkip();
+            }
+
+            if ((++df % skipInterval) == 0) {
+                freqOut->writeByte((char)CodeMode::kPfor);
+                freqOut->writeVInt(docDeltaBuffer.size());
+                encode(freqOut, docDeltaBuffer, true);
+                if (hasProx) {
+                    encode(freqOut, freqBuffer, false);
+                    if (indexVersion >= IndexVersion::kV2) {
+                        PforUtil::encodePos(proxOut.get(), posBuffer);
+                    }
+                }
+
+                skipWriter->setSkipData(lastDoc, false, -1);
+                skipWriter->bufferSkip(df);
+            }
+
+            assert(destDocId > lastDoc || df == 1);
+            lastDoc = destDocId;
+
+            docDeltaBuffer.push_back(destDocId);
+            if (hasProx) {
+                int32_t lastPosition = 0;
+                for (int32_t i = 0; i < descPositions.size(); i++) {
+                    int32_t position = descPositions[i];
+                    int32_t delta = position - lastPosition;
+                    if (indexVersion >= IndexVersion::kV2) {
+                        posBuffer.push_back(delta);
+                    } else {
+                        proxOut->writeVInt(delta);
+                    }
+                    lastPosition = position;
+                }
+                freqBuffer.push_back(destFreq);
+            }
+
+            processPostings(hasProx, destPostingQueues, match[destDoc->srcIdx]->getPositions(), destDoc, destDoc->srcIdx, match[destDoc->srcIdx]);
+        }
+    }
+}
+
+void IndexWriter::logDfsInfo(const std::vector<int32_t>& dfs) {
+    if (infoStream != nullptr) {
+        std::stringstream ss;
+        for (const auto& df : dfs) {
+            ss << "df: " << df << "\n";
+        }
+        message(ss.str());
+    }
+}
+
+void IndexWriter::writeMergedTerms(bool hasProx, IndexVersion indexVersion,
+                             const std::vector<int32_t>& dfs,
+                             std::vector<std::vector<uint32_t>>& docDeltaBuffers,
+                             std::vector<std::vector<uint32_t>>& freqBuffers,
+                             std::vector<std::vector<uint32_t>>& posBuffers,
+                             Term* smallestTerm) {
+    for (int i = 0; i < numDestIndices; ++i) {
+        if (dfs[i] == 0) {
+            if (infoStream != nullptr) {
+                std::string name = lucene_wcstoutf8string(smallestTerm->text(), smallestTerm->textLength());
+                std::string field = lucene_wcstoutf8string(smallestTerm->field(), wcslen(smallestTerm->field()));
+                std::stringstream ss;
+                ss << "term: " << name << ", field: " << field << ", doc frequency is zero[" << dfs[i] << "], skip it." << "\n";
+                message(ss.str());
+            }
+            continue;
+        }
+        std::shared_ptr<DefaultSkipListWriter> skipListWriter = skipListWriterList[i];
+        std::shared_ptr<CL_NS(store)::IndexOutput> freqOutput = freqOutputList[i];
+        std::shared_ptr<CL_NS(store)::IndexOutput> proxOutput = proxOutputList[i];
+        std::shared_ptr<TermInfosWriter> termInfosWriter = termInfosWriterList[i];
+        int64_t freqPointer = freqPointers[i];
+        int64_t proxPointer = 0;
+        if (hasProx) {
+            proxPointer = proxPointers[i];
+        }
+
+        {
+            auto& docDeltaBuffer = docDeltaBuffers[i];
+            auto& freqBuffer = freqBuffers[i];
+            auto& posBuffer = posBuffers[i];
+
+            freqOutput->writeByte((char)CodeMode::kDefault);
+            freqOutput->writeVInt(docDeltaBuffer.size());
+            uint32_t lastDoc = 0;
+            for (int32_t i = 0; i < docDeltaBuffer.size(); i++) {
+                uint32_t curDoc = docDeltaBuffer[i];
+                if (hasProx) {
+                    uint32_t newDocCode = (docDeltaBuffer[i] - lastDoc) << 1;
+                    lastDoc = curDoc;
+                    uint32_t freq = freqBuffer[i];
+                    if (1 == freq) {
+                        freqOutput->writeVInt(newDocCode | 1);
+                    } else {
+                        freqOutput->writeVInt(newDocCode);
+                        freqOutput->writeVInt(freq);
+                    }
+                } else {
+                    freqOutput->writeVInt(curDoc - lastDoc);
+                    lastDoc = curDoc;
+                }
+            }
+            docDeltaBuffer.resize(0);
+            freqBuffer.resize(0);
+            if (indexVersion >= IndexVersion::kV2) {
+                PforUtil::encodePos(proxOutput.get(), posBuffer);
+            }
+        }
+
+        int64_t skipPointer = skipListWriter->writeSkip(freqOutput.get());
+
+        TermInfo termInfo;
+        termInfo.set(dfs[i], freqPointer, proxPointer, (int32_t) (skipPointer - freqPointer));
+        termInfosWriter->add(smallestTerm, &termInfo);
+    }
+}
+
+void IndexWriter::cleanupMatchQueue(const std::vector<std::shared_ptr<SegmentMergeInfo>>& match,
+                                    int matchSize,
+        std::priority_queue<std::shared_ptr<SegmentMergeInfo>,
+                            std::vector<std::shared_ptr<SegmentMergeInfo>>,
+                            CompareSegmentMergeInfo>& queue) {
+    while (matchSize > 0) {
+        const auto& smi = match[--matchSize];
+        if (smi->next()) {
+            queue.push(smi);
+        }
+    }
+}
+
+void IndexWriter::mergeNullBitmap(std::vector<std::vector<uint32_t>> srcNullBitmapValues) {
     // first level vector index is dest_index_id
     // second level vector index is dest_doc_id
-    std::vector<std::vector<uint32_t>> destNullBitmapValues(numDestIndexes);
+    std::vector<std::vector<uint32_t>> destNullBitmapValues(numDestIndices);
 
     // iterate srcNullBitmapValues to construct destNullBitmapValues
     for (size_t i = 0; i < srcNullBitmapValues.size(); ++i) {
@@ -1930,8 +1911,8 @@ void IndexWriter::mergeNullBitmap(std::vector<std::vector<uint32_t>> srcNullBitm
             continue;
         }
         for (const auto& srcDocId : indexSrcBitmapValues) {
-            auto destIdx = _trans_vec[i][srcDocId].first;
-            auto destDocId = _trans_vec[i][srcDocId].second;
+            auto destIdx = (*transVec)[i][srcDocId].first;
+            auto destDocId = (*transVec)[i][srcDocId].second;
             // <UINT32_MAX, UINT32_MAX> indicates current row not exist in Doris dest segment.
             // So we ignore this doc here.
             if (destIdx == UINT32_MAX || destDocId == UINT32_MAX) {
@@ -1948,7 +1929,7 @@ void IndexWriter::mergeNullBitmap(std::vector<std::vector<uint32_t>> srcNullBitm
             null_bitmap.add(v);
         }
         // write null_bitmap file
-        auto* nullBitmapIndexOutput = nullBitmapIndexOutputList[i];
+        auto nullBitmapIndexOutput = nullBitmapIndexOutputList[i];
         null_bitmap.runOptimize();
         size_t size = null_bitmap.getSizeInBytes(false);
         if (size > 0) {
