@@ -44,7 +44,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define RMB  __asm__ __volatile__ ("dmb  ishld" : : : "memory")
 #endif
 
-#if defined( F_INTERFACE_FLANG) || defined(F_INTERFACE_PGI)
+#if defined( F_INTERFACE_FLANG) || (defined(F_INTERFACE_PGI) && (defined(__NVCOMPILER) && (__NVCOMPILER_MAJOR__ < 23 || (__NVCOMPILER_MAJOR__ == 23 && __NVCOMPILER_MINOR__ < 9))))
 #define RETURN_BY_STACK
 #else
 #define RETURN_BY_COMPLEX

@@ -283,6 +283,10 @@ static __inline unsigned int blas_quickdivide(unsigned int x, unsigned int y){
 #define RETURN_BY_STACK
 #endif
 
+#ifdef F_INTERFACE_CRAYFC
+#define RETURN_BY_PACKED
+#endif
+
 #ifdef F_INTERFACE_FUJITSU
 #define RETURN_BY_STACK
 #endif
