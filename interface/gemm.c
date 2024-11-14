@@ -86,7 +86,7 @@
 #endif
 
 static int (*gemm[])(blas_arg_t *, BLASLONG *, BLASLONG *, IFLOAT *, IFLOAT *, BLASLONG) = {
-#ifndef GEMM3M
+#if !defined(GEMM3M) || defined(GENERIC)
   GEMM_NN, GEMM_TN, GEMM_RN, GEMM_CN,
   GEMM_NT, GEMM_TT, GEMM_RT, GEMM_CT,
   GEMM_NR, GEMM_TR, GEMM_RR, GEMM_CR,
