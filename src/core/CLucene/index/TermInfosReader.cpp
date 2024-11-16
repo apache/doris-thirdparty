@@ -223,7 +223,7 @@ SegmentTermEnum* TermInfosReader::getEnum() {
     return termEnum;
 }
 
-TermInfo* TermInfosReader::get(const Term* term) {
+TermInfo* TermInfosReader::get(const Term* term, const void* io_ctx) {
     //Func - Returns a TermInfo for a term
     //Pre  - term holds a valid reference to term
     //Post - if term can be found its TermInfo has been returned otherwise NULL
@@ -236,7 +236,7 @@ TermInfo* TermInfosReader::get(const Term* term) {
     // optimize sequential access: first try scanning cached enum w/o seeking
     SegmentTermEnum* enumerator = getEnum();
     if (enumerator) {
-        enumerator->setIoContext(io_ctx_);
+        enumerator->setIoContext(io_ctx);
     }
 
     // optimize sequential access: first try scanning cached enumerator w/o seeking
@@ -267,10 +267,6 @@ TermInfo* TermInfosReader::get(const Term* term) {
     seekEnum(getIndexOffset(term));
     //Return the TermInfo for term
     return scanEnum(term);
-}
-
-void TermInfosReader::setIoContext(const void* io_ctx) {
-    io_ctx_ = io_ctx;
 }
 
 int64_t TermInfosReader::getPosition(const Term* term) {

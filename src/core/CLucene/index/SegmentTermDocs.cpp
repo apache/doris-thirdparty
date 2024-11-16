@@ -37,9 +37,6 @@ TermPositions *SegmentTermDocs::__asTermPositions() {
 }
 
 void SegmentTermDocs::setIoContext(const void* io_ctx) {
-    if (parent && parent->tis) {
-        parent->tis->setIoContext(io_ctx);
-    }
     if (freqStream) {
         freqStream->setIoContext(io_ctx);
     }
@@ -51,7 +48,7 @@ int32_t SegmentTermDocs::docFreq() {
 }
 
 void SegmentTermDocs::seek(Term *term) {
-    TermInfo *ti = parent->tis->get(term);
+    TermInfo *ti = parent->tis->get(term, io_ctx_);
     seek(ti, term);
     _CLDELETE(ti);
 }
