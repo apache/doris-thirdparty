@@ -49,8 +49,6 @@ CL_NS_DEF(index)
 
         int64_t numBytesUsed;
 
-		const void* io_ctx_ = nullptr;
-
         DEFINE_MUTEX(THIS_LOCK)
 
 	public:
@@ -105,13 +103,11 @@ CL_NS_DEF(index)
 		SegmentTermEnum* terms(const Term* term=NULL);
 		
 		/** Returns the TermInfo for a Term in the set, or null. */
-		TermInfo* get(const Term* term);
+		TermInfo* get(const Term* term, const void* io_ctx = nullptr);
 
         int64_t getRAMUsed() const {
             return numBytesUsed;
         }
-
-		void setIoContext(const void* io_ctx = nullptr);
 
     private:
 		/** Reads the term info index file or .tti file. */
