@@ -1615,6 +1615,13 @@ NO_AFFINITY = 1
 endif
 endif
 
+ifeq ($(ARCH), POWER)
+ifeq ($(DEBUG), 1)
+CCOMMON_OPT := $(filter-out -O%, $(CCOMMON_OPT)) -O0
+FCOMMON_OPT := $(filter-out -O%, $(FCOMMON_OPT)) -O0
+endif
+endif
+
 ifdef NO_AFFINITY
 ifeq ($(NO_AFFINITY), 0)
 override undefine NO_AFFINITY
