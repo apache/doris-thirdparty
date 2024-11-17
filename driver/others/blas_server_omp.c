@@ -126,6 +126,18 @@ void openblas_set_num_threads(int num_threads) {
 	goto_set_num_threads(num_threads);
 }
 
+#ifdef OS_LINUX
+
+int openblas_setaffinity(int thread_idx, size_t cpusetsize, cpu_set_t* cpu_set) {
+  fprintf(stderr,"OpenBLAS: use OpenMP environment variables for setting cpu affinity\n");
+  return -1;
+}
+int openblas_getaffinity(int thread_idx, size_t cpusetsize, cpu_set_t* cpu_set) {
+  fprintf(stderr,"OpenBLAS: use OpenMP environment variables for querying cpu affinity\n");
+  return -1;
+}
+#endif
+
 int blas_thread_init(void){
 
 #if defined(__FreeBSD__) && defined(__clang__)
