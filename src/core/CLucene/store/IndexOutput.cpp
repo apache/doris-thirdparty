@@ -166,7 +166,7 @@ CL_NS_DEF(store)
       const int32_t end = length;
       for (int32_t i = 0; i < end; ++i) {
           auto code = (uint32_t)s[i];
-          if (code >= 0x01 && code <= 0x7F) {
+          if (code >= 0x00 && code <= 0x7F) {
               writeByte((uint8_t)code);
           } else if (code <= 0x7FF) {
               writeByte((uint8_t)(0xC0 | (code >> 6)));
@@ -197,23 +197,32 @@ CL_NS_DEF(store)
   }
 
   void IndexOutput::writeChars(const TCHAR* s, const int32_t length){
-    if ( length < 0 )
-      _CLTHROWA(CL_ERR_IllegalArgument, "IO Argument Error. Value must be a positive value.");
+      if ( length < 0 )
+          _CLTHROWA(CL_ERR_IllegalArgument, "IO Argument Error. Value must be a positive value.");
 
-    const int32_t end = length;
-    for (int32_t i = 0; i < end; ++i) {
-        const int32_t code = (int32_t)s[i];
-        if (code >= 0x01 && code <= 0x7F)
-					writeByte((uint8_t)code);
-        else if (((code >= 0x80) && (code <= 0x7FF)) || code == 0) {
-					writeByte((uint8_t)(0xC0 | (code >> 6)));
-					writeByte((uint8_t)(0x80 | (code & 0x3F)));
-        } else {
-					writeByte((uint8_t)(0xE0 | (((uint32_t)code) >> 12))); //unsigned shift
-					writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
-					writeByte((uint8_t)(0x80 | (code & 0x3F)));
-        }
-    }
+      const int32_t end = length;
+      for (int32_t i = 0; i < end; ++i) {
+          auto code = (uint32_t)s[i];
+          if (code >= 0x00 && code <= 0x7F) {
+              writeByte((uint8_t)code);
+          } else if (code <= 0x7FF) {
+              writeByte((uint8_t)(0xC0 | (code >> 6)));
+              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+          } else if (code <= 0xFFFF) {
+              writeByte((uint8_t)(0xE0 | (code >> 12)));
+              writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
+              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+          } else if (code <= 0x10FFFF) {
+              writeByte((uint8_t)(0xF0 | (code >> 18)));
+              writeByte((uint8_t)(0x80 | ((code >> 12) & 0x3F)));
+              writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
+              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+          } else {
+              writeByte(0xEF);
+              writeByte(0xBF);
+              writeByte(0xBD);
+          }
+      }
   }
 
 
