@@ -150,7 +150,19 @@ If you are working with third party stores, please check [third party stores in 
 
 See [Timeouts](performance.html#timeouts).
 
-### <a name="networking"></a> Low-level Network Options
+### <a name="networking"></a> Low-level Network/Http Options
+
+The S3A connector uses [Apache HttpClient](https://hc.apache.org/index.html) to connect to
+S3 Stores.
+The client is configured to create a pool of HTTP connections with S3, so that once
+the initial set of connections have been made they can be re-used for followup operations.
+
+Core aspects of pool settings are:
+* The pool size is set by `fs.s3a.connection.maximum` -if a process asks for more connections than this then
+  threads will be blocked until they are available.
+* The time blocked before an exception is raised is set in `fs.s3a.connection.acquisition.timeout`.
+* The time an idle connection will be kept in the pool is set by `fs.s3a.connection.idle.time`.
+* The time limit for even a non-idle connection to be kept open is set in `fs.s3a.connection.ttl`.
 
 ```xml
 
@@ -160,6 +172,69 @@ See [Timeouts](performance.html#timeouts).
   <description>Controls the maximum number of simultaneous connections to S3.
     This must be bigger than the value of fs.s3a.threads.max so as to stop
     threads being blocked waiting for new HTTPS connections.
+  </description>
+</property>
+
+<property>
+  <name>fs.s3a.connection.acquisition.timeout</name>
+  <value>60s</value>
+  <description>
+    Time to wait for an HTTP connection from the pool.
+    Too low: operations fail on a busy process.
+    When high, it isn't obvious that the connection pool is overloaded,
+    simply that jobs are slow.
+  </description>
+</property>
+
+<property>
+  <name>fs.s3a.connection.request.timeout</name>
+  <value>60s</value>
+  <description>
+    Total time for a single request to take from the HTTP verb to the
+    response from the server.
+    0 means "no limit"
+  </description>
+</property>
+
+<property>
+  <name>fs.s3a.connection.part.upload.timeout</name>
+  <value>15m</value>
+  <description>
+    Timeout for uploading all of a small object or a single part
+    of a larger one.
+  </description>
+</property>
+
+<property>
+  <name>fs.s3a.connection.ttl</name>
+  <value>5m</value>
+  <description>
+    Expiration time of an Http connection from the connection pool:
+  </description>
+</property>
+
+<property>
+  <name>fs.s3a.connection.idle.time</name>
+  <value>60s</value>
+  <description>
+    Time for an idle HTTP connection to be kept the HTTP connection
+    pool before being closed.
+    Too low: overhead of creating connections.
+    Too high, risk of stale connections and inability to use the
+    adaptive load balancing of the S3 front end.
+  </description>
+</property>
+
+<property>
+  <name>fs.s3a.connection.expect.continue</name>
+  <value>true</value>
+  <description>
+    Should PUT requests await a 100 CONTINUE responses before uploading
+    data?
+    This should normally be left alone unless a third party store which
+    does not support it is encountered, or file upload over long
+    distance networks time out.
+    (see HADOOP-19317 as an example)
   </description>
 </property>
 
