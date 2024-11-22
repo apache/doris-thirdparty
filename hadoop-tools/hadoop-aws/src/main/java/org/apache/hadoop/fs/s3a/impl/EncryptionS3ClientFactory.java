@@ -219,6 +219,8 @@ public class EncryptionS3ClientFactory extends DefaultS3ClientFactory {
     return KmsKeyring.builder()
         .kmsClient(kmsClientBuilder.build())
         .wrappingKeyId(cseMaterials.getKmsKeyId())
+        // this is required for backward compatibility with older encryption clients
+        .enableLegacyWrappingAlgorithms(true)
         .build();
   }
 

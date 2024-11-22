@@ -63,7 +63,7 @@ import static org.apache.hadoop.fs.s3a.S3ATestUtils.createTestFileSystem;
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.getTestBucketName;
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.getTestPropertyBool;
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.removeBaseAndBucketOverrides;
-import static org.apache.hadoop.fs.s3a.S3ATestUtils.unsetAllEncryptionPropertiesForBucket;
+import static org.apache.hadoop.fs.s3a.S3ATestUtils.unsetAllEncryptionPropertiesForBaseAndBucket;
 import static org.apache.hadoop.test.LambdaTestUtils.intercept;
 
 /**
@@ -282,7 +282,7 @@ public abstract class ITestS3AClientSideEncryption extends AbstractS3ATestBase {
     maybeSkipTest();
     // initialize base s3 client.
     Configuration conf = new Configuration(getConfiguration());
-    unsetAllEncryptionPropertiesForBucket(conf);
+    unsetAllEncryptionPropertiesForBaseAndBucket(conf);
 
     Path file = methodPath();
 
@@ -315,7 +315,6 @@ public abstract class ITestS3AClientSideEncryption extends AbstractS3ATestBase {
   public void testSizeOfEncryptedObjectFromHeaderWithV1Compatibility() throws Exception {
     maybeSkipTest();
     Configuration cseConf = new Configuration(getConfiguration());
-    unsetAllEncryptionPropertiesForBucket(cseConf);
     cseConf.setBoolean(S3_ENCRYPTION_CSE_V1_COMPATIBILITY_ENABLED, true);
     try (S3AFileSystem fs = createTestFileSystem(cseConf)) {
       fs.initialize(getFileSystem().getUri(), cseConf);
@@ -354,7 +353,7 @@ public abstract class ITestS3AClientSideEncryption extends AbstractS3ATestBase {
   public void testSizeOfUnencryptedObjectWithV1Compatibility() throws Exception {
     maybeSkipTest();
     Configuration conf = new Configuration(getConfiguration());
-    unsetAllEncryptionPropertiesForBucket(conf);
+    unsetAllEncryptionPropertiesForBaseAndBucket(conf);
     conf.setBoolean(S3_ENCRYPTION_CSE_V1_COMPATIBILITY_ENABLED, false);
     Path file = methodPath();
     try (S3AFileSystem fs = createTestFileSystem(conf)) {
@@ -386,7 +385,6 @@ public abstract class ITestS3AClientSideEncryption extends AbstractS3ATestBase {
   public void testSizeOfEncryptedObjectWithV1Compatibility() throws Exception {
     maybeSkipTest();
     Configuration cseConf = new Configuration(getConfiguration());
-    unsetAllEncryptionPropertiesForBucket(cseConf);
     cseConf.setBoolean(S3_ENCRYPTION_CSE_V1_COMPATIBILITY_ENABLED, true);
     try (S3AFileSystem fs = createTestFileSystem(cseConf)) {
       fs.initialize(getFileSystem().getUri(), cseConf);

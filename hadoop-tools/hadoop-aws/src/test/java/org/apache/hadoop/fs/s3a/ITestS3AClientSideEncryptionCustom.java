@@ -31,7 +31,6 @@ import org.apache.hadoop.fs.s3a.impl.HeaderProcessing;
 import static org.apache.hadoop.fs.s3a.Constants.S3_ENCRYPTION_CSE_CUSTOM_KEYRING_CLASS_NAME;
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.skipIfEncryptionNotSet;
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.skipIfEncryptionTestsDisabled;
-import static org.apache.hadoop.fs.s3a.S3ATestUtils.unsetAllEncryptionPropertiesForBucket;
 
 /**
  * Tests to verify Custom S3 client side encryption CSE-CUSTOM.
@@ -48,7 +47,6 @@ public class ITestS3AClientSideEncryptionCustom extends ITestS3AClientSideEncryp
   protected Configuration createConfiguration() {
     Configuration conf = super.createConfiguration();
     S3ATestUtils.disableFilesystemCaching(conf);
-    unsetAllEncryptionPropertiesForBucket(conf);
     conf.set(S3_ENCRYPTION_CSE_CUSTOM_KEYRING_CLASS_NAME,
         CustomKeyring.class.getCanonicalName());
     return conf;

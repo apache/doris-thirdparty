@@ -647,7 +647,7 @@ public final class S3ATestUtils {
   }
 
   /**
-   * Removes all encryption-related properties for a specific S3 bucket from given configuration.
+   * Removes all encryption-related properties.
    *
    * <p>This method unsets various encryption settings specific to the test bucket. It removes
    * bucket-specific overrides for multiple encryption-related properties, including both
@@ -656,8 +656,8 @@ public final class S3ATestUtils {
    * @param conf The Configuration object from which to remove the encryption properties.
    *             This object will be modified by this method.
    */
-  public static void unsetAllEncryptionPropertiesForBucket(Configuration conf) {
-    removeBucketOverrides(getTestBucketName(conf),
+  public static void unsetAllEncryptionPropertiesForBaseAndBucket(Configuration conf) {
+    removeBaseAndBucketOverrides(getTestBucketName(conf),
         conf,
         S3_ENCRYPTION_ALGORITHM,
         S3_ENCRYPTION_KEY,
