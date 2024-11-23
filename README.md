@@ -47,9 +47,12 @@ Most options can also be given directly on the command line as parameters to you
 Building OpenBLAS requires the following to be installed:
 
 * GNU Make or CMake
-* A C compiler, e.g. GCC or Clang
+* A C compiler, e.g. GCC or Clang 
 * A Fortran compiler (optional, for LAPACK)
 
+In general, using a recent version of the compiler is strongly recommended.
+If a Fortran compiler is not available, it is possible to compile an older version of the included LAPACK
+that has been machine-translated to C.
 
 ### Normal compile
 
@@ -339,7 +342,10 @@ Please see Changelog.txt.
 * Please use GCC version 4.6 and above to compile Sandy Bridge AVX kernels on Linux/MinGW/BSD.
 * Please use Clang version 3.1 and above to compile the library on Sandy Bridge microarchitecture.
   Clang 3.0 will generate the wrong AVX binary code.
-* Please use GCC version 6 or LLVM version 6 and above to compile Skylake AVX512 kernels.
+* Please use GCC version 6 or LLVM version 6 and above to compile Skylake/CooperLake AVX512 kernels
+* Please use LLVM version 18 and above (version 19 and above on Windows) if you plan to use
+  its new flang compiler for Fortran
+* Please use GCC version 11 and above to compile OpenBLAS on the POWER architecture
 * The number of CPUs/cores should be less than or equal to 256. On Linux `x86_64` (`amd64`),
   there is experimental support for up to 1024 CPUs/cores and 128 numa nodes if you build
   the library with `BIGNUMA=1`.
