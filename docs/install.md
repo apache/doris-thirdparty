@@ -447,8 +447,9 @@ The following tools needs to be installed to build for Windows on Arm (WoA):
 
 -   LLVM for Windows on Arm.
     Find the latest LLVM build for WoA from [LLVM release page](https://releases.llvm.org/) - you want the package whose name ends in "woa64.exe".
-    E.g: LLVM 19 build for WoA64 can be found [here](https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.4/LLVM-19.1.4-woa64.exe)
-    Run the LLVM installer and ensure that LLVM is added to environment PATH. (If you do not want to add it to the PATH, you will need to specify
+    (This may not always be present in the very latest point release, as building and uploading the binaries takes time.)
+    E.g: a LLVM 19 build for WoA64 can be found [here](https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.2/LLVM-19.1.2-woa64.exe).
+    Run the LLVM installer and ensure that LLVM is added to the environment variable PATH. (If you do not want to add it to the PATH, you will need to specify
     both C and Fortran compiler to Make or CMake with their full path later on)
 
 The following steps describe how to build the static library for OpenBLAS with either Make or CMake:
