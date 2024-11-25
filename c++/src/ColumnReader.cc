@@ -1332,11 +1332,9 @@ namespace orc {
     ColumnReader* childReader = child.get();
     if (childReader) {
       if (encoded) {
-        childReader->nextEncoded(*(listBatch.elements.get()), totalChildren, nullptr, readPhase,
-                                 sel_rowid_idx, sel_size);
+        childReader->nextEncoded(*(listBatch.elements.get()), totalChildren, nullptr, readPhase);
       } else {
-        childReader->next(*(listBatch.elements.get()), totalChildren, nullptr, readPhase,
-                          sel_rowid_idx, sel_size);
+        childReader->next(*(listBatch.elements.get()), totalChildren, nullptr, readPhase);
       }
     }
   }
