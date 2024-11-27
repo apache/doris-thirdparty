@@ -340,6 +340,53 @@ namespace orc {
           throw ParseError("Invalid column selected " + colName);
         }
       }
+
+    std::unordered_set<int> filterColIds;
+    if (!filterCols.empty()) {
+      for (const auto& colName : filterCols) {
+        auto iter = nameTypeMap.find(colName);
+        if (iter == nameTypeMap.end()) {
+          throw ParseError("Invalid column selected " + colName);
+        }
+
+        Type* type = iter->second;
+
+        // Process current node and all its parent nodes
+        // Set FILTER_CHILD for leaf nodes and FILTER_PARENT for non-leaf nodes
+        Type* current = type;
+        while (current != nullptr) {
+          if (current->getSubtypeCount() == 0) {
+            current->setReaderCategory(ReaderCategory::FILTER_CHILD);
+          } else {
+            current->setReaderCategory(ReaderCategory::FILTER_PARENT);
+          }
+          filterColIds.emplace(current->getColumnId());
+          current = current->getParent();
+        }
+
+        // Process all child nodes of the current node
+        // For child nodes: set FILTER_PARENT if it's a leaf, FILTER_CHILD if it has children
+        std::function<void(Type*)> processChildren = [&processChildren](Type* node) {
+          if (node == nullptr) return;
+
+          // Iterate through all child nodes
+          for (int i = 0; i < node->getSubtypeCount(); ++i) {
+            Type* child = node->getSubtype(i);
+            if (child->getSubtypeCount() == 0) {
+              // Leaf node (no children)
+              child->setReaderCategory(ReaderCategory::FILTER_PARENT);
+            } else {
+              // Non-leaf node (has children)
+              child->setReaderCategory(ReaderCategory::FILTER_CHILD);
+              // Recursively process its children
+              processChildren(child);
+            }
+          }
+        };
+
+        processChildren(type);
+      }
+
       startReadPhase = ReadPhase::LEADERS;
       readerContext = std::unique_ptr<ReaderContext>(new ReaderContext());
       readerContext->setFilterCallback(std::move(filterColIds), filter);
