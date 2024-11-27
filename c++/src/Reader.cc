@@ -323,26 +323,6 @@ namespace orc {
 
     std::unordered_set<int> filterColIds;
     if (!filterCols.empty()) {
-      for (auto& colName : filterCols) {
-        auto iter = nameTypeMap.find(colName);
-        if (iter != nameTypeMap.end()) {
-          Type* type = iter->second;
-          while (type != nullptr) {
-            if (type->getSubtypeCount() == 0) {
-              type->setReaderCategory(ReaderCategory::FILTER_CHILD);
-            } else {
-              type->setReaderCategory(ReaderCategory::FILTER_PARENT);
-            }
-            filterColIds.emplace(type->getColumnId());
-            type = type->getParent();
-          }
-        } else {
-          throw ParseError("Invalid column selected " + colName);
-        }
-      }
-
-    std::unordered_set<int> filterColIds;
-    if (!filterCols.empty()) {
       for (const auto& colName : filterCols) {
         auto iter = nameTypeMap.find(colName);
         if (iter == nameTypeMap.end()) {
