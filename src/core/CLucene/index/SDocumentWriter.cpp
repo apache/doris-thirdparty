@@ -201,6 +201,7 @@ void SDocumentsWriter<T>::ThreadState::init(Document *doc, int32_t doc_id) {
                                                  field->isStorePositionWithTermVector(), field->isStoreOffsetWithTermVector(),
                                                  field->getOmitNorms(), !field->getOmitTermFreqAndPositions(), false);
         fi->setIndexVersion(field->getIndexVersion());
+        fi->setFlags(field->getFlags());
         if (fi->isIndexed && !fi->omitNorms) {
             // Maybe grow our buffered norms
             if (_parent->norms.length <= fi->number) {
@@ -276,6 +277,7 @@ void SDocumentsWriter<T>::ThreadState::init(Document *doc, int32_t doc_id) {
     }
     _parent->hasProx_ = _parent->fieldInfos->hasProx();
     _parent->indexVersion_ = _parent->fieldInfos->getIndexVersion();
+    _parent->flags_ = _parent->fieldInfos->getFlags();
 }
 
 template<typename T>

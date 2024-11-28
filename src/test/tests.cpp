@@ -20,6 +20,9 @@ unittest tests[] = {
         {"IndexCompaction", testIndexCompaction},
         {"testStringReader", testStringReader},
         {"IndexCompress", testIndexCompress},
+        {"IndexCompressV3", testIndexCompressV3},
+        {"ByteArrayDataInput", testByteArrayDataInputSuite},
+        {"GrowableByteArrayDataOutput", testGrowableByteArrayDataOutputSuite},
 #ifdef TEST_CONTRIB_LIBS
         {"chinese", testchinese},
 #endif

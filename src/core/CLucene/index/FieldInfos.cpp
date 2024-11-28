@@ -4,6 +4,7 @@
 * Distributable under the terms of either the Apache License (Version 2.0) or 
 * the GNU Lesser General Public License, as specified in the COPYING file.
 ------------------------------------------------------------------------------*/
+#include <cstdint>
 #include "CLucene/_ApiHeader.h"
 #include "_FieldInfos.h"
 
@@ -30,14 +31,17 @@ FieldInfo::FieldInfo(const TCHAR *_fieldName,
                      const bool _storePositionWithTermVector,
                      const bool _omitNorms,
 										 const bool _hasProx,
-                     const bool _storePayloads) : name(CLStringIntern::intern(_fieldName )),
+                     const bool _storePayloads,
+										 IndexVersion indexVersion,
+										 uint32_t flags) : name(CLStringIntern::intern(_fieldName )),
                                                   isIndexed(_isIndexed),
                                                   number(_fieldNumber),
                                                   storeTermVector(_storeTermVector),
                                                   storeOffsetWithTermVector(_storeOffsetWithTermVector),
                                                   storePositionWithTermVector(_storePositionWithTermVector),
                                                   omitNorms(_omitNorms), hasProx(_hasProx),
-																									storePayloads(_storePayloads) {
+																									storePayloads(_storePayloads),
+																									indexVersion_(indexVersion), flags_(flags) {
 }
 
 FieldInfo::~FieldInfo(){
@@ -46,7 +50,7 @@ FieldInfo::~FieldInfo(){
 
 FieldInfo* FieldInfo::clone() {
 	return _CLNEW FieldInfo(name, isIndexed, number, storeTermVector, storePositionWithTermVector,
-		storeOffsetWithTermVector, omitNorms, hasProx, storePayloads);
+		storeOffsetWithTermVector, omitNorms, hasProx, storePayloads, indexVersion_, flags_);
 }
 
 FieldInfos::FieldInfos():
@@ -114,6 +118,16 @@ IndexVersion FieldInfos::getIndexVersion() {
 	return IndexVersion::kV0;
 }
 
+uint32_t FieldInfos::getFlags() {
+	size_t numFields = byNumber.size();
+	if (numFields > 0) {
+		// Currently, only single-field configuration retrieval is supported.
+		FieldInfo* fi = fieldInfo(0);
+		return fi->getFlags();
+	}
+	return 0;
+}
+
 void FieldInfos::addIndexed(const TCHAR** names, const bool storeTermVectors, const bool storePositionWithTermVector,
 							const bool storeOffsetWithTermVector) {
 	size_t i = 0;
@@ -126,11 +140,11 @@ void FieldInfos::addIndexed(const TCHAR** names, const bool storeTermVectors, co
 void FieldInfos::add(const TCHAR** names, const bool isIndexed, const bool storeTermVectors,
                      const bool storePositionWithTermVector, const bool storeOffsetWithTermVector,
                      const bool omitNorms, const bool hasProx, const bool storePayloads,
-										 IndexVersion indexVersion) {
+					 					 IndexVersion indexVersion, uint32_t flags) {
         size_t i = 0;      
 	while ( names[i] != NULL ){
 		add(names[i], isIndexed, storeTermVectors, storePositionWithTermVector, 
-			storeOffsetWithTermVector, omitNorms, hasProx, storePayloads, indexVersion);
+			storeOffsetWithTermVector, omitNorms, hasProx, storePayloads, indexVersion, flags);
 		++i;
 	}
 }
@@ -139,7 +153,7 @@ FieldInfo* FieldInfos::add(const TCHAR* name, const bool isIndexed, const bool s
                            const bool storePositionWithTermVector,
                            const bool storeOffsetWithTermVector, const bool omitNorms,
                            const bool hasProx, const bool storePayloads,
-													 IndexVersion indexVersion) {
+						   						 IndexVersion indexVersion, uint32_t flags) {
   FieldInfo* fi = fieldInfo(name);
 	if (fi == NULL) {
 		return addInternal(name, isIndexed, storeTermVector, storePositionWithTermVector,
@@ -170,6 +184,9 @@ FieldInfo* FieldInfos::add(const TCHAR* name, const bool isIndexed, const bool s
 		if (fi->indexVersion_ != indexVersion) {
 			fi->indexVersion_ = indexVersion;
 		}
+		if (fi->flags_ != flags) {
+			fi->flags_ = flags;
+		}
 	}
 	return fi;
 }
@@ -179,11 +196,10 @@ FieldInfo* FieldInfos::addInternal(const TCHAR* name, const bool isIndexed,
                                    const bool storePositionWithTermVector,
                                    const bool storeOffsetWithTermVector, const bool omitNorms,
                                    const bool hasProx, const bool storePayloads,
-																	 IndexVersion indexVersion) {
+								   								 IndexVersion indexVersion, uint32_t flags) {
 	FieldInfo* fi = _CLNEW FieldInfo(name, isIndexed, byNumber.size(), storeTermVector,
 																		storePositionWithTermVector, storeOffsetWithTermVector,
-																		omitNorms, hasProx, storePayloads);
-	fi->setIndexVersion(indexVersion);
+																		omitNorms, hasProx, storePayloads, indexVersion, flags);
   byNumber.push_back(fi);
 	byName.put( fi->name, fi);
 	return fi;
@@ -257,6 +273,9 @@ void FieldInfos::write(IndexOutput* output) const{
 		if (fi->getIndexVersion() > IndexVersion::kV0) {
 			output->writeVInt(static_cast<int32_t>(fi->getIndexVersion()));
 		}
+		if (fi->getIndexVersion() >= IndexVersion::kV3) {
+			output->writeVInt(fi->getFlags());
+		}
 	}
 }
 
@@ -281,6 +300,9 @@ void FieldInfos::read(IndexInput* input) {
 			} else {
 				IndexVersion indexVersion = (IndexVersion)input->readVInt();
 				fi->setIndexVersion(indexVersion);
+				if (indexVersion >= IndexVersion::kV3) {
+					fi->setFlags(input->readVInt());
+				}
 			} 
    		_CLDELETE_CARRAY(name);
 	}

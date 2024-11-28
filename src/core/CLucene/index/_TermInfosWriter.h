@@ -8,6 +8,7 @@
 #define _lucene_index_TermInfosWriter_
 
 #include "CLucene/util/Array.h"
+#include "CLucene/store/store_v2/GrowableByteArrayDataOutput.h"
 
 CL_CLASS_DEF(store, Directory)
 //#include "FieldInfos.h"
@@ -57,13 +58,19 @@ public:
 
     void add(STerm<T> *term, TermInfo *ti);
 
+    void add(const TCHAR* field, const T* text, size_t length, TermInfo *ti);
+
     void add(int32_t fieldNumber, const T *termText, int32_t termTextLength, const TermInfo *ti);
 
     void close();
 
 private:
     void initialise(CL_NS(store)::Directory *directory, const char *segment, int32_t interval, bool IsIndex);
-    void writeTerm(int32_t fieldNumber, const T *termText, int32_t termTextLength);
+    void writeTerm(CL_NS(store)::IndexOutput* out, int32_t fieldNumber, const T *termText, int32_t termTextLength);
+
+private:
+    bool isDictCompress_ = false;
+    store_v2::GrowableByteArrayDataOutput tisMemoryOutput_;
 };
 
 // This stores a monotonically increasing set of <Term, TermInfo> pairs in a

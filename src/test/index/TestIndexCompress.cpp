@@ -30,7 +30,7 @@ static constexpr int32_t doc_count = 10000;
         }                                 \
     }
 
-int32_t getDaySeed() {
+static int32_t getDaySeed() {
     std::time_t now = std::time(nullptr);
     std::tm* localTime = std::localtime(&now);
     localTime->tm_sec = 0;

@@ -8,6 +8,7 @@
 
 #include "CLucene/analysis/AnalysisHeader.h"
 #include "CLucene/analysis/Analyzers.h"
+#include "CLucene/clucene-config.h"
 #include "CLucene/config/repl_wchar.h"
 #include "CLucene/document/Document.h"
 #include "CLucene/search/Similarity.h"
@@ -1331,17 +1332,22 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         // check hasProx, indexVersion
         bool hasProx = false;
         IndexVersion indexVersion = IndexVersion::kV1;
+        uint32_t flags = 0;
         {
             if (!readers.empty()) {
                 IndexReader* reader = readers[0];
                 hasProx = reader->getFieldInfos()->hasProx();
                 indexVersion = reader->getFieldInfos()->getIndexVersion();
+                flags = reader->getFieldInfos()->getFlags();
                 for (int32_t i = 1; i < readers.size(); i++) {
                     if (hasProx != readers[i]->getFieldInfos()->hasProx()) {
                         _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs hasProx inconformity");
                     }
                     if (indexVersion != readers[i]->getFieldInfos()->getIndexVersion()) {
                         _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs indexVersion inconformity");
+                    }
+                    if (flags != readers[i]->getFieldInfos()->getFlags()) {
+                        _CLTHROWA(CL_ERR_IllegalArgument, "src_dirs flags inconformity");
                     }
                 }
             }
@@ -1383,7 +1389,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
             proxOutputList.push_back(proxOut);
             // Instantiate a new termInfosWriter which will write in directory
             // for the segment name segment using the new merged fieldInfos
-            TermInfosWriter *termInfosWriter = _CLNEW TermInfosWriter(dest_dir, segment.c_str(), fieldInfos, termIndexInterval);
+            auto* termInfosWriter = _CLNEW STermInfosWriter<TCHAR>(dest_dir, segment.c_str(), fieldInfos, termIndexInterval);
             termInfosWriterList.push_back(termInfosWriter);
             // skipList writer
             skipInterval = termInfosWriter->skipInterval;
@@ -1577,7 +1583,7 @@ void IndexWriter::mergeFields(bool hasProx, IndexVersion indexVersion) {
         fieldInfos->add(fi->name, fi->isIndexed, fi->storeTermVector,
                         fi->storePositionWithTermVector, fi->storeOffsetWithTermVector,
                         !reader->hasNorms(fi->name), hasProx, fi->storePayloads,
-                        fi->indexVersion_);
+                        fi->indexVersion_, fi->flags_);
     }
 }
 
@@ -1845,7 +1851,7 @@ void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
             DefaultSkipListWriter *skipListWriter = skipListWriterList[i];
             CL_NS(store)::IndexOutput *freqOutput = freqOutputList[i];
             CL_NS(store)::IndexOutput *proxOutput = proxOutputList[i];
-            TermInfosWriter *termInfosWriter = termInfosWriterList[i];
+            STermInfosWriter<TCHAR>* termInfosWriter = termInfosWriterList[i];
             int64_t freqPointer = freqPointers[i];
             int64_t proxPointer = 0;
             if (hasProx) {
@@ -1890,7 +1896,7 @@ void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
             TermInfo termInfo;
             termInfo.set(dfs[i], freqPointer, proxPointer, (int32_t) (skipPointer - freqPointer));
             // Write a new TermInfo
-            termInfosWriter->add(smallestTerm, &termInfo);
+            termInfosWriter->add(smallestTerm->field(), smallestTerm->text(), smallestTerm->textLength(), &termInfo);
         }
 
         while (matchSize > 0) {
