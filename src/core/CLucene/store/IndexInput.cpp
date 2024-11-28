@@ -135,22 +135,22 @@ CL_NS_USE(util)
     for (int32_t i = start; i < end; ++i) {
       b = readByte();
       if ((b & 0x80) == 0) {
+        // 1-byte sequence: 0xxxxxxx
         b = (b & 0x7F);
-      } else if ((b & 0xE0) != 0xE0) {
-        b = (((b & 0x1F) << 6)
-          | (readByte() & 0x3F));
-      } else {
-		  b = ((b & 0x0F) << 12) | ((readByte() & 0x3F) << 6);
-		  b |= (readByte() & 0x3F);
+      } else if ((b & 0xE0) == 0xC0) {
+        // 2-byte sequence: 110xxxxx 10xxxxxx
+        b = (((b & 0x1F) << 6) | (readByte() & 0x3F));
+      } else if ((b & 0xF0) == 0xE0) {
+          // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
+          b = ((b & 0x0F) << 12) | ((readByte() & 0x3F) << 6) | (readByte() & 0x3F);
+      } else if ((b & 0xF8) == 0xF0) {
+          // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+          b = ((b & 0x07) << 18) | ((readByte() & 0x3F) << 12) |
+              ((readByte() & 0x3F) << 6) | (readByte() & 0x3F);
       }
       buffer[i] = b;
 	}
   }
-
-
-
-
-
 
 BufferedIndexInput::BufferedIndexInput(int32_t _bufferSize):
 		buffer(NULL),
