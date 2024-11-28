@@ -171,7 +171,7 @@ static void index_compaction(RAMDirectory* tmp_dir, std::vector<lucene::store::D
 
     std::exception_ptr eptr;
     try {
-        indexwriter->indexCompaction(srcDirs, destDirs, trans_vec, dest_index_docs);
+        indexwriter->indexCompaction(srcDirs, destDirs, std::make_shared<const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>>(trans_vec), dest_index_docs);
     } catch (...) {
         eptr = std::current_exception();
     }

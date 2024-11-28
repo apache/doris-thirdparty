@@ -7,9 +7,13 @@
 #ifndef _lucene_index_IndexWriter_
 #define _lucene_index_IndexWriter_
 
+#include <memory>
+#include <queue>
+#include <utility>
+
 #include "CLucene/index/IndexVersion.h"
-#include "CLucene/util/VoidList.h"
 #include "CLucene/util/Array.h"
+#include "CLucene/util/VoidList.h"
 
 CL_CLASS_DEF(search,Similarity)
 CL_CLASS_DEF(store,Lock)
@@ -19,9 +23,12 @@ CL_CLASS_DEF(store,Directory)
 CL_CLASS_DEF(store,LuceneLock)
 CL_CLASS_DEF(document,Document)
 
-#include "MergePolicy.h"
 #include "CLucene/LuceneThreads.h"
 #include "CLucene/store/IndexOutput.h"
+#include "MergePolicy.h"
+#include "_SegmentMergeInfo.h"
+#include "_SegmentMergeQueue.h"
+#include "_Term.h"
 
 CL_NS_DEF(index)
 class SegmentInfo;
@@ -41,6 +48,33 @@ class FieldInfos;
 class TermInfosWriter;
 class DefaultSkipListWriter;
 class TermInfo;
+
+// define resource deleter to close resource before deleting it
+template <typename T>
+struct ResourceDeleter {
+    void operator()(T* resource) const {
+        if (resource) {
+            resource->close();
+            delete resource;
+        }
+    }
+};
+
+struct CompareSegmentMergeInfo {
+    bool operator()(const std::shared_ptr<SegmentMergeInfo>& stiA, const std::shared_ptr<SegmentMergeInfo>& stiB) const {
+        //Compare the two terms
+        int32_t comparison = stiA->term->compareTo(stiB->term);
+        //Check if they match
+        if (comparison == 0){
+            //If the match check if the base of stiA is smaller than the base of stiB
+            //Note that different bases means that the terms of stiA an stiB ly in different segments
+            return stiA->base < stiB->base;
+        } else {
+            //Terms didn't match so return the difference in positions
+            return comparison < 0;
+        }
+    }
+};
 
 /**
   An <code>IndexWriter</code> creates and maintains an index.
@@ -185,6 +219,42 @@ class TermInfo;
  * keeps track of the last non commit checkpoint.
  */
 class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
+
+    struct DestDoc {
+        uint32_t srcIdx{};
+        uint32_t destIdx{};
+        uint32_t destDocId{};
+        uint32_t destFreq{};
+        std::vector<uint32_t> destPositions{};
+
+        DestDoc() = default;;
+        DestDoc(uint32_t srcIdx, uint32_t destIdx, uint32_t destDocId) : srcIdx(srcIdx), destIdx(destIdx), destDocId(destDocId) {}
+    };
+
+    class PostingQueue
+            : public CL_NS(util)::PriorityQueue<DestDoc*,CL_NS(util)::Deletor::Object<DestDoc> >{
+    public:
+        explicit PostingQueue(int32_t count)
+        {
+            initialize(count, false);
+        }
+        ~PostingQueue() override{
+            close();
+        }
+
+        void close() {
+            clear();
+        }
+    protected:
+        bool lessThan(DestDoc* a, DestDoc* b) override {
+            if (a->destIdx == b->destIdx) {
+                return a->destDocId < b->destDocId;
+            } else {
+                return a->destIdx < b->destIdx;
+            }
+        }
+
+    };
   bool isOpen; //indicates if the writers is open - this way close can be called multiple times
 
   // how to analyze text
@@ -279,23 +349,28 @@ class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
   mutable bool hitOOM;
 
   // index compaction params
-  std::vector<std::vector<std::pair<uint32_t, uint32_t>>> _trans_vec;
-  // dest indexes numbers
-  int32_t numDestIndexes;
-  std::vector<IndexReader*> readers;
-  //Field Infos for the FieldInfo instances of all fields
-  FieldInfos* fieldInfos;
+  std::shared_ptr<const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>> transVec;
+  std::vector<std::shared_ptr<IndexReader>> readers;
   // IndexOutput to the new Frequency File
-  std::vector<CL_NS(store)::IndexOutput*> freqOutputList;
-  std::vector<int64_t> freqPointers;
+  std::vector<std::shared_ptr<CL_NS(store)::IndexOutput>> freqOutputList;
   // IndexOutput to the new Prox File
-  std::vector<CL_NS(store)::IndexOutput*> proxOutputList;
+  std::vector<std::shared_ptr<CL_NS(store)::IndexOutput>> proxOutputList;
+  std::vector<std::shared_ptr<TermInfosWriter>> termInfosWriterList;
+  std::vector<std::shared_ptr<DefaultSkipListWriter>> skipListWriterList;
+  std::vector<std::shared_ptr<lucene::index::IndexWriter>> destIndexWriterList;
+  std::vector<std::shared_ptr<lucene::store::IndexOutput>> nullBitmapIndexOutputList;
+  std::vector<SegmentInfo*> newSegmentInfos;
+  std::vector<int64_t> freqPointers;
   std::vector<int64_t> proxPointers;
-  std::vector<TermInfosWriter*> termInfosWriterList;
+  //Field Infos for the FieldInfo instances of all fields
+  std::shared_ptr<FieldInfos> fieldInfos;
+  // src indexes numbers
+  size_t numSrcIndices ;
+  // dest indexes numbers
+  size_t numDestIndices;
   int32_t skipInterval;
   int32_t maxSkipLevels;
-  std::vector<DefaultSkipListWriter*> skipListWriterList;
-  std::vector<uint32_t> docDeltaBuffer;
+
 
 public:
   DEFINE_MUTEX(THIS_LOCK)
@@ -303,9 +378,9 @@ public:
 
     /**
      * Compact src indices to dest indices, depend on doc id translation vector
-     * @param src_dirs source indices directories to read data
-     * @param dest_dirs destination indices directories to write new indices
-     * @param trans_vec translation vector
+     * @param srcDirs source indices directories to read data
+     * @param destDirs destination indices directories to write new indices
+     * @param transVecPtr translation vector
      * the first level vector:
      *     index indicates index of source index, which is same order of src_dirs
      * the second level vector:
@@ -313,32 +388,68 @@ public:
      *     the pair:
      *         pair.first indicates index of destination index, which is same order of dest_dirs
      *         pair.second indicates doc id of destination index
-     * @param dest_index_docs destination indices doc count list
+     * @param destIndexDocs destination indices doc count list
      */
-    void indexCompaction(std::vector<lucene::store::Directory*>& src_dirs,
-                            std::vector<lucene::store::Directory*> dest_dirs,
-                            std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec,
-                            std::vector<uint32_t> dest_index_docs);
+    void indexCompaction(const std::vector<lucene::store::Directory*>& srcDirs,
+                         const std::vector<lucene::store::Directory*>& destDirs,
+                         std::shared_ptr<const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>>
+                  transVecPtr,
+                         const std::vector<uint32_t>& destIndexDocs);
 
     // create new fields info
     void mergeFields(bool hasProx, IndexVersion indexVersion);
     // write fields info file
-    void writeFields(lucene::store::Directory* d, std::string segment);
+    void writeFields(lucene::store::Directory* d, const std::string& segment);
     // merge terms and write files
     void mergeTerms(bool hasProx, IndexVersion indexVersion);
     // merge null_bitmap
-    void mergeNullBitmap(std::vector<std::vector<uint32_t>> srcBitmapValues, std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList);
+    void mergeNullBitmap(std::vector<std::vector<uint32_t>> srcBitmapValues);
+    void initializeMergeQueue(
+            std::priority_queue<std::shared_ptr<SegmentMergeInfo>,
+                                      std::vector<std::shared_ptr<SegmentMergeInfo>>,
+                                      CompareSegmentMergeInfo>& queue, int32_t& base,
+                              std::shared_ptr<IndexReader>& reader);
+    void logTermInfo(Term* smallestTerm, const std::shared_ptr<SegmentMergeInfo>& top);
+    static int findMatchingTerms(
+            std::priority_queue<std::shared_ptr<SegmentMergeInfo>,
+                                      std::vector<std::shared_ptr<SegmentMergeInfo>>,
+                                      CompareSegmentMergeInfo>& queue,
+                                 std::vector<std::shared_ptr<SegmentMergeInfo>>& match, int matchSize, Term* smallestTerm);
+    void processPostingsForMatchingTerms(
+            bool hasProx, const std::shared_ptr<PostingQueue>& destPostingQueues,
+            IndexVersion indexVersion, const std::vector<std::shared_ptr<SegmentMergeInfo>>& match,
+            int matchSize, std::vector<DestDoc>& destDocs);
+    void processDestPostingQueues(bool hasProx, IndexVersion indexVersion,
+                                  const std::shared_ptr<PostingQueue>& destPostingQueues,
+                                  std::vector<std::vector<uint32_t>>& docDeltaBuffers,
+                                  std::vector<std::vector<uint32_t>>& freqBuffers,
+                                  std::vector<std::vector<uint32_t>>& posBuffers,
+                                  std::vector<int32_t>& dfs, std::vector<int32_t>& lastDocs,
+                                  std::vector<std::shared_ptr<SegmentMergeInfo>>& match);
+    void processPostings(bool hasProx, const std::shared_ptr<PostingQueue>& destPostingQueues, TermPositions* postings, IndexWriter::DestDoc* destDoc, int srcIdx,
+                         const std::shared_ptr<SegmentMergeInfo>& smi);
+    void logDfsInfo(const std::vector<int32_t>& dfs);
+    void writeMergedTerms(bool hasProx, IndexVersion indexVersion, const std::vector<int32_t>& dfs, std::vector<std::vector<uint32_t>>& docDeltaBuffers, std::vector<std::vector<uint32_t>>& freqBuffers, std::vector<std::vector<uint32_t>>& posBuffers, Term* smallestTerm);
+    static void cleanupMatchQueue(const std::vector<std::shared_ptr<SegmentMergeInfo>>& match,
+                                  int matchSize,
+            std::priority_queue<std::shared_ptr<SegmentMergeInfo>,
+                                std::vector<std::shared_ptr<SegmentMergeInfo>>,
+                                CompareSegmentMergeInfo>& queue);
 
     // Compare current index with the other
     void compareIndexes(lucene::store::Directory* other);
 
     // only for tests
-    void setNumDestIndexes(int32_t num_dest_indexes) {
-        numDestIndexes = num_dest_indexes;
+    void setNumDestIndexes(int32_t num_dest_indexes) { numDestIndices = num_dest_indexes;
     }
     // only for tests
-    void setTransVec(std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec) {
-      _trans_vec = std::move(trans_vec);
+    void setTransVec(std::shared_ptr<const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>> trans_vec) {
+        transVec = std::move(trans_vec);
+    }
+
+    // only for tests
+    void setNullBitmapIndexOutputList(std::vector<std::shared_ptr<lucene::store::IndexOutput>> null_bitmap_index_output_list) {
+        nullBitmapIndexOutputList = std::move(null_bitmap_index_output_list);
     }
 
 	// Release the write lock, if needed.
@@ -1259,6 +1370,10 @@ protected:
   virtual SegmentInfo* newestSegment();
 
 private:
+  void createReaders(const std::vector<lucene::store::Directory*>& srcDirs, std::vector<std::vector<uint32_t>>& srcNullBitmapValues);
+  void createWriters(const std::vector<lucene::store::Directory*>& destDirs, const std::vector<uint32_t>& destIndexDocs, bool hasProx, IndexVersion indexVersion);
+  void checkFileConsistency(bool& hasProx, IndexVersion& indexVersion);
+  void updateSegmentInfos();
   void waitForClose();
   void deletePartialSegmentsFile();
 

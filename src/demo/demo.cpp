@@ -248,7 +248,7 @@ int main() {
             dest_index_docs[i] = count * destDirs.size();
         }
 
-        indexwriter->indexCompaction(srcDirs, destDirs, trans_vec, dest_index_docs);
+        indexwriter->indexCompaction(srcDirs, destDirs, std::make_shared<const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>>(trans_vec), dest_index_docs);
         indexwriter->close();
         _CLDELETE(indexwriter);
     };

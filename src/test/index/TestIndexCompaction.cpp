@@ -97,11 +97,11 @@ void TestMergeNullBitmapWriteNullBitmap(CuTest *tc) {
     RAMDirectory dir;
     auto* index_writer = _CLNEW lucene::index::IndexWriter(&dir, &analyzer, true);
     std::vector<std::vector<uint32_t>> srcNullBitmapValues;
-    std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList;
+    std::vector<std::shared_ptr<lucene::store::IndexOutput>> nullBitmapIndexOutputList;
 
     _setupSourceNullBitmapValues(srcNullBitmapValues);
 
-    // setup _trans_vec
+    // setup transVec
     // translation vec
     // <<dest_idx_num, dest_docId>>
     // the first level vector: index indicates src segment.
@@ -113,28 +113,27 @@ void TestMergeNullBitmapWriteNullBitmap(CuTest *tc) {
 
     RAMDirectory dest_dir1;
     RAMDirectory dest_dir2;
-    auto* dest_output_index1 = dest_dir1.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
-    auto* dest_output_index2 = dest_dir2.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
-    nullBitmapIndexOutputList.push_back(dest_output_index1);
-    nullBitmapIndexOutputList.push_back(dest_output_index2);
+    {
+        auto dest_output_index1 = std::shared_ptr<lucene::store::IndexOutput>(dest_dir1.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME), ResourceDeleter<lucene::store::IndexOutput>());
+        auto dest_output_index2 = std::shared_ptr<lucene::store::IndexOutput>(dest_dir2.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME), ResourceDeleter<lucene::store::IndexOutput>());
+        nullBitmapIndexOutputList.push_back(dest_output_index1);
+        nullBitmapIndexOutputList.push_back(dest_output_index2);
 
-    try {
-        index_writer->setNumDestIndexes(2);
-        index_writer->setTransVec(trans_vec);
-        index_writer->mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
-    } catch (const std::exception& ex) {
-        std::cout << "Caught exception: " << ex.what() << std::endl;
-    } catch (...) {
-        std::cout << "merge null bitmap failed" << std::endl;
-        return;
+        try {
+            index_writer->setNumDestIndexes(2);
+            index_writer->setTransVec(std::make_shared<const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>>(trans_vec));
+            index_writer->setNullBitmapIndexOutputList(nullBitmapIndexOutputList);
+            index_writer->mergeNullBitmap(srcNullBitmapValues);
+        } catch (const std::exception& ex) {
+            std::cout << "Caught exception: " << ex.what() << std::endl;
+        } catch (...) {
+            std::cout << "merge null bitmap failed" << std::endl;
+            return;
+        }
+        nullBitmapIndexOutputList.clear();
+        index_writer->close();
+        _CLDELETE(index_writer);
     }
-    dest_output_index1->close();
-    dest_output_index2->close();
-    _CLLDELETE(dest_output_index1);
-    _CLLDELETE(dest_output_index2);
-    nullBitmapIndexOutputList.clear();
-    index_writer->close();
-    _CLDELETE(index_writer);
 
     // check cardinality
     uint64_t source_cardinality = 0;
@@ -160,35 +159,34 @@ void TestMergeNullBitmapEmptySrc(CuTest *tc) {
     auto* index_writer = _CLNEW lucene::index::IndexWriter(&dir, &analyzer, true);
     // empty source bitmap values
     std::vector<std::vector<uint32_t>> srcNullBitmapValues;
-    std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList;
+    std::vector<std::shared_ptr<lucene::store::IndexOutput>> nullBitmapIndexOutputList;
 
     std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec;
     _setupTransVec(trans_vec);
 
     RAMDirectory dest_dir1;
     RAMDirectory dest_dir2;
-    auto* dest_output_index1 = dest_dir1.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
-    auto* dest_output_index2 = dest_dir2.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
-    nullBitmapIndexOutputList.push_back(dest_output_index1);
-    nullBitmapIndexOutputList.push_back(dest_output_index2);
+    {
+        auto dest_output_index1 = std::shared_ptr<lucene::store::IndexOutput>(dest_dir1.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME), ResourceDeleter<lucene::store::IndexOutput>());
+        auto dest_output_index2 = std::shared_ptr<lucene::store::IndexOutput>(dest_dir2.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME), ResourceDeleter<lucene::store::IndexOutput>());
+        nullBitmapIndexOutputList.push_back(dest_output_index1);
+        nullBitmapIndexOutputList.push_back(dest_output_index2);
 
-    try {
-        index_writer->setNumDestIndexes(2);
-        index_writer->setTransVec(trans_vec);
-        index_writer->mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
-    } catch (const std::exception& ex) {
-        std::cout << "Caught exception: " << ex.what() << std::endl;
-    } catch (...) {
-        std::cout << "merge null bitmap failed" << std::endl;
-        return;
+        try {
+            index_writer->setNumDestIndexes(2);
+            index_writer->setTransVec(std::make_shared<const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>>(trans_vec));
+            index_writer->setNullBitmapIndexOutputList(nullBitmapIndexOutputList);
+            index_writer->mergeNullBitmap(srcNullBitmapValues);
+        } catch (const std::exception& ex) {
+            std::cout << "Caught exception: " << ex.what() << std::endl;
+        } catch (...) {
+            std::cout << "merge null bitmap failed" << std::endl;
+            return;
+        }
+        nullBitmapIndexOutputList.clear();
+        index_writer->close();
+        _CLDELETE(index_writer);
     }
-    dest_output_index1->close();
-    dest_output_index2->close();
-    _CLLDELETE(dest_output_index1);
-    _CLLDELETE(dest_output_index2);
-    nullBitmapIndexOutputList.clear();
-    index_writer->close();
-    _CLDELETE(index_writer);
 
     // check cardinality
     uint64_t source_cardinality = 0;
@@ -218,35 +216,34 @@ void TestMergeNullBitmapEmptyIndexSrcBitmapValues(CuTest *tc) {
     srcNullBitmapValues.push_back(std::vector<uint32_t>());
     srcNullBitmapValues.push_back(std::vector<uint32_t>());
 
-    std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList;
+    std::vector<std::shared_ptr<lucene::store::IndexOutput>> nullBitmapIndexOutputList;
 
     std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec;
     _setupTransVec(trans_vec);
 
     RAMDirectory dest_dir1;
     RAMDirectory dest_dir2;
-    auto* dest_output_index1 = dest_dir1.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
-    auto* dest_output_index2 = dest_dir2.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
-    nullBitmapIndexOutputList.push_back(dest_output_index1);
-    nullBitmapIndexOutputList.push_back(dest_output_index2);
+    {
+        auto dest_output_index1 = std::shared_ptr<lucene::store::IndexOutput>(dest_dir1.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME), ResourceDeleter<lucene::store::IndexOutput>());
+        auto dest_output_index2 = std::shared_ptr<lucene::store::IndexOutput>(dest_dir2.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME), ResourceDeleter<lucene::store::IndexOutput>());
+        nullBitmapIndexOutputList.push_back(dest_output_index1);
+        nullBitmapIndexOutputList.push_back(dest_output_index2);
 
-    try {
-        index_writer->setNumDestIndexes(2);
-        index_writer->setTransVec(trans_vec);
-        index_writer->mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
-    } catch (const std::exception& ex) {
-        std::cout << "Caught exception: " << ex.what() << std::endl;
-    } catch (...) {
-        std::cout << "merge null bitmap failed" << std::endl;
-        return;
+        try {
+            index_writer->setNumDestIndexes(2);
+            index_writer->setTransVec(std::make_shared<const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>>(trans_vec));
+            index_writer->setNullBitmapIndexOutputList(nullBitmapIndexOutputList);
+            index_writer->mergeNullBitmap(srcNullBitmapValues);
+        } catch (const std::exception& ex) {
+            std::cout << "Caught exception: " << ex.what() << std::endl;
+        } catch (...) {
+            std::cout << "merge null bitmap failed" << std::endl;
+            return;
+        }
+        nullBitmapIndexOutputList.clear();
+        index_writer->close();
+        _CLDELETE(index_writer);
     }
-    dest_output_index1->close();
-    dest_output_index2->close();
-    _CLLDELETE(dest_output_index1);
-    _CLLDELETE(dest_output_index2);
-    nullBitmapIndexOutputList.clear();
-    index_writer->close();
-    _CLDELETE(index_writer);
 
     // check cardinality
     uint64_t source_cardinality = 0;
@@ -273,7 +270,7 @@ void TestMergeNullBitmapIgnoreDoc(CuTest *tc) {
     std::vector<std::vector<uint32_t>> srcNullBitmapValues;
     _setupSourceNullBitmapValues(srcNullBitmapValues);
 
-    std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList;
+    std::vector<std::shared_ptr<lucene::store::IndexOutput>> nullBitmapIndexOutputList;
 
     // all docs in src index are ignored
     std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec;
@@ -289,28 +286,27 @@ void TestMergeNullBitmapIgnoreDoc(CuTest *tc) {
 
     RAMDirectory dest_dir1;
     RAMDirectory dest_dir2;
-    auto* dest_output_index1 = dest_dir1.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
-    auto* dest_output_index2 = dest_dir2.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
-    nullBitmapIndexOutputList.push_back(dest_output_index1);
-    nullBitmapIndexOutputList.push_back(dest_output_index2);
+    {
+        auto dest_output_index1 = std::shared_ptr<lucene::store::IndexOutput>(dest_dir1.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME), ResourceDeleter<lucene::store::IndexOutput>());
+        auto dest_output_index2 = std::shared_ptr<lucene::store::IndexOutput>(dest_dir2.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME), ResourceDeleter<lucene::store::IndexOutput>());
+        nullBitmapIndexOutputList.push_back(dest_output_index1);
+        nullBitmapIndexOutputList.push_back(dest_output_index2);
 
-    try {
-        index_writer->setNumDestIndexes(2);
-        index_writer->setTransVec(trans_vec);
-        index_writer->mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
-    } catch (const std::exception& ex) {
-        std::cout << "Caught exception: " << ex.what() << std::endl;
-    } catch (...) {
-        std::cout << "merge null bitmap failed" << std::endl;
-        return;
+        try {
+            index_writer->setNumDestIndexes(2);
+            index_writer->setTransVec(std::make_shared<const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>>(trans_vec));
+            index_writer->setNullBitmapIndexOutputList(nullBitmapIndexOutputList);
+            index_writer->mergeNullBitmap(srcNullBitmapValues);
+        } catch (const std::exception& ex) {
+            std::cout << "Caught exception: " << ex.what() << std::endl;
+        } catch (...) {
+            std::cout << "merge null bitmap failed" << std::endl;
+            return;
+        }
+        nullBitmapIndexOutputList.clear();
+        index_writer->close();
+        _CLDELETE(index_writer);
     }
-    dest_output_index1->close();
-    dest_output_index2->close();
-    _CLLDELETE(dest_output_index1);
-    _CLLDELETE(dest_output_index2);
-    nullBitmapIndexOutputList.clear();
-    index_writer->close();
-    _CLDELETE(index_writer);
 
     // check cardinality
     uint64_t source_cardinality = 0;
