@@ -1,5 +1,5 @@
 /***************************************************************************
- * Copyright (c) 2024, The OpenBLAS Project
+ * Copyright (c) 2024-2025, The OpenBLAS Project
  * All rights reserved.
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -31,9 +31,9 @@
 #include "common.h"
 
 #define ALPHA_ONE
-#include "sbgemm_kernel_8x4_neoversev1_impl.c"
+#include "sbgemm_kernel_4x4_neoversev1_impl.c"
 #undef ALPHA_ONE
-#include "sbgemm_kernel_8x4_neoversev1_impl.c"
+#include "sbgemm_kernel_4x4_neoversev1_impl.c"
 
 int CNAME(BLASLONG m, BLASLONG n, BLASLONG k, FLOAT alpha, IFLOAT *A, IFLOAT *B,
           FLOAT *C, BLASLONG ldc) {

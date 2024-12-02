@@ -1,5 +1,5 @@
 /***************************************************************************
- * Copyright (c) 2024, The OpenBLAS Project
+ * Copyright (c) 2024-2025, The OpenBLAS Project
  * All rights reserved.
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -37,8 +37,17 @@ int CNAME(BLASLONG m, BLASLONG n, IFLOAT *a, BLASLONG lda, IFLOAT *b) {
   a_offset = a;
   b_offset = b;
 
-  svbool_t pg16 = svdupq_b16(1, 1, 1, 1, 0, 0, 0, 0);
+  bfloat16_t zero_value_bf16;
+  *((uint16_t *)(&zero_value_bf16)) = 0;
+
+  svbool_t pg16_all = svptrue_b16(); // 16 elements for sve-256 machine.
+  svbool_t pg16_first_8 = svwhilelt_b16(0, 8);
+
   svbfloat16_t v0, v1, v2, v3;
+  svuint64_t t0, t1;
+
+  BLASLONG rest = m & 7;
+  svbool_t pg16_rest = svwhilelt_b16_s32(0, rest);
 
   for (BLASLONG j = 0; j < n / 4; j++) {
     a_offsetx[0] = a_offset;
@@ -47,33 +56,41 @@ int CNAME(BLASLONG m, BLASLONG n, IFLOAT *a, BLASLONG lda, IFLOAT *b) {
     a_offsetx[3] = a_offsetx[2] + lda;
     a_offset += 4 * lda;
 
-    for (BLASLONG i = 0; i < m / 4; i++) {
-      v0 = svld1_bf16(pg16, (bfloat16_t *)a_offsetx[0]);
-      v1 = svld1_bf16(pg16, (bfloat16_t *)a_offsetx[1]);
-      v2 = svld1_bf16(pg16, (bfloat16_t *)a_offsetx[2]);
-      v3 = svld1_bf16(pg16, (bfloat16_t *)a_offsetx[3]);
+    for (BLASLONG i = 0; i < m / 8; i++) {
+      v0 = svld1_bf16(pg16_first_8, (bfloat16_t *)a_offsetx[0]);
+      v1 = svld1_bf16(pg16_first_8, (bfloat16_t *)a_offsetx[1]);
+      v2 = svld1_bf16(pg16_first_8, (bfloat16_t *)a_offsetx[2]);
+      v3 = svld1_bf16(pg16_first_8, (bfloat16_t *)a_offsetx[3]);
 
-      svst1_bf16(pg16, (bfloat16_t *)b_offset, v0);
-      svst1_bf16(pg16, (bfloat16_t *)b_offset + 4, v1);
-      svst1_bf16(pg16, (bfloat16_t *)b_offset + 8, v2);
-      svst1_bf16(pg16, (bfloat16_t *)b_offset + 12, v3);
+      t0 = svzip1_u64(svreinterpret_u64_bf16(v0), svreinterpret_u64_bf16(v1));
+      t1 = svzip1_u64(svreinterpret_u64_bf16(v2), svreinterpret_u64_bf16(v3));
 
-      b_offset += 16;
-      a_offsetx[0] += 4;
-      a_offsetx[1] += 4;
-      a_offsetx[2] += 4;
-      a_offsetx[3] += 4;
+      svst1_bf16(pg16_all, (bfloat16_t *)b_offset, svreinterpret_bf16_u64(t0));
+      svst1_bf16(pg16_all, (bfloat16_t *)b_offset + 16,
+                 svreinterpret_bf16_u64(t1));
+
+      a_offsetx[0] += 8;
+      a_offsetx[1] += 8;
+      a_offsetx[2] += 8;
+      a_offsetx[3] += 8;
+
+      b_offset += 32;
     }
 
-    if (m & 3) {
-      BLASLONG rest = m & 3;
-      for (BLASLONG col = 0; col < 4; col++) {
-        b_offset[4 * col] = a_offsetx[col][0];
-        b_offset[4 * col + 1] = rest == 1 ? 0 : a_offsetx[col][1];
-        b_offset[4 * col + 2] = rest <= 2 ? 0 : a_offsetx[col][2];
-        b_offset[4 * col + 3] = rest <= 3 ? 0 : a_offsetx[col][3];
-      }
-      b_offset += 16;
+    if (rest) { // remainder along k dim
+      v0 = svld1_bf16(pg16_rest, (bfloat16_t *)a_offsetx[0]);
+      v1 = svld1_bf16(pg16_rest, (bfloat16_t *)a_offsetx[1]);
+      v2 = svld1_bf16(pg16_rest, (bfloat16_t *)a_offsetx[2]);
+      v3 = svld1_bf16(pg16_rest, (bfloat16_t *)a_offsetx[3]);
+
+      t0 = svzip1_u64(svreinterpret_u64_bf16(v0), svreinterpret_u64_bf16(v1));
+      t1 = svzip1_u64(svreinterpret_u64_bf16(v2), svreinterpret_u64_bf16(v3));
+
+      svst1_bf16(pg16_all, (bfloat16_t *)b_offset, svreinterpret_bf16_u64(t0));
+      svst1_bf16(pg16_all, (bfloat16_t *)b_offset + 16,
+                 svreinterpret_bf16_u64(t1));
+
+      b_offset += 32;
     }
   }
 
@@ -82,46 +99,50 @@ int CNAME(BLASLONG m, BLASLONG n, IFLOAT *a, BLASLONG lda, IFLOAT *b) {
     a_offsetx[1] = a_offsetx[0] + lda;
     a_offset += 2 * lda;
 
-    for (BLASLONG i = 0; i < m / 4; i++) {
-      v0 = svld1_bf16(pg16, (bfloat16_t *)a_offsetx[0]);
-      v1 = svld1_bf16(pg16, (bfloat16_t *)a_offsetx[1]);
-      svst1_bf16(pg16, (bfloat16_t *)b_offset, v0);
-      svst1_bf16(pg16, (bfloat16_t *)b_offset + 4, v1);
+    for (BLASLONG i = 0; i < m / 8; i++) {
+      v0 = svld1_bf16(pg16_first_8, (bfloat16_t *)a_offsetx[0]);
+      v1 = svld1_bf16(pg16_first_8, (bfloat16_t *)a_offsetx[1]);
 
-      b_offset += 8;
-      a_offsetx[0] += 4;
-      a_offsetx[1] += 4;
+      t0 = svzip1_u64(svreinterpret_u64_bf16(v0), svreinterpret_u64_bf16(v1));
+      svst1_bf16(pg16_all, (bfloat16_t *)b_offset, svreinterpret_bf16_u64(t0));
+
+      b_offset += 16;
+      a_offsetx[0] += 8;
+      a_offsetx[1] += 8;
     }
 
-    if (m & 3) {
-      BLASLONG rest = m & 3;
-      for (BLASLONG col = 0; col < 2; col++) {
-        b_offset[4 * col] = a_offsetx[col][0];
-        b_offset[4 * col + 1] = rest == 1 ? 0 : a_offsetx[col][1];
-        b_offset[4 * col + 2] = rest <= 2 ? 0 : a_offsetx[col][2];
-        b_offset[4 * col + 3] = rest <= 3 ? 0 : a_offsetx[col][3];
-      }
-      b_offset += 8;
+    if (rest) { // remainder along k dim
+      v0 = svld1_bf16(pg16_rest, (bfloat16_t *)a_offsetx[0]);
+      v1 = svld1_bf16(pg16_rest, (bfloat16_t *)a_offsetx[1]);
+
+      t0 = svzip1_u64(svreinterpret_u64_bf16(v0), svreinterpret_u64_bf16(v1));
+      svst1_bf16(pg16_all, (bfloat16_t *)b_offset, svreinterpret_bf16_u64(t0));
+
+      b_offset += 16;
     }
   }
 
   if (n & 1) {
     a_offsetx[0] = a_offset;
-    for (BLASLONG i = 0; i < m / 4; i++) {
-      v0 = svld1_bf16(pg16, (bfloat16_t *)a_offsetx[0]);
-      svst1_bf16(pg16, (bfloat16_t *)b_offset, v0);
-      b_offset += 4;
-      a_offsetx[0] += 4;
+
+    for (BLASLONG i = 0; i < m / 8; i++) {
+      v0 = svld1_bf16(pg16_first_8, (bfloat16_t *)a_offsetx[0]);
+      v1 = svdup_bf16(zero_value_bf16);
+
+      t0 = svzip1_u64(svreinterpret_u64_bf16(v0), svreinterpret_u64_bf16(v1));
+      svst1_bf16(pg16_all, (bfloat16_t *)b_offset, svreinterpret_bf16_u64(t0));
+
+      b_offset += 16;
+      a_offsetx[0] += 8;
     }
-    if (m & 3) {
-      BLASLONG rest = m & 3;
-      b_offset[0] = a_offsetx[0][0];
-      b_offset[1] = rest == 1 ? 0 : a_offsetx[0][1];
-      b_offset[2] = rest <= 2 ? 0 : a_offsetx[0][2];
-      b_offset[3] = rest <= 3 ? 0 : a_offsetx[0][3];
+
+    if (rest) { // remainder along k dim
+      v0 = svld1_bf16(pg16_rest, (bfloat16_t *)a_offsetx[0]);
+      v1 = svdup_bf16(zero_value_bf16);
+      t0 = svzip1_u64(svreinterpret_u64_bf16(v0), svreinterpret_u64_bf16(v1));
+      svst1_bf16(pg16_all, (bfloat16_t *)b_offset, svreinterpret_bf16_u64(t0));
     }
   }
 
   return 0;
 }
-
