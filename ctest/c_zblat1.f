@@ -41,7 +41,7 @@
          IF (PASS) THEN
             WRITE (NOUT,99998)
          ELSE
-            CALL ABORT
+            ERROR STOP
         END IF
    20 CONTINUE
 *
@@ -231,7 +231,7 @@
                CALL ITEST1(IZAMAXTEST(N,CX,INCX),ITRUE3(NP1))
             ELSE
                WRITE (NOUT,*) ' Shouldn''t be here in CHECK1'
-               CALL ABORT
+               ERROR STOP
             END IF
 *
    40    CONTINUE
@@ -515,7 +515,7 @@
                CALL CTEST(LENY,CY,CT10Y(1,KN,KI),CSIZE3,1.0D0)
             ELSE
                WRITE (NOUT,*) ' Shouldn''t be here in CHECK2'
-               CALL ABORT
+               ERROR STOP
             END IF
 *
    40    CONTINUE
