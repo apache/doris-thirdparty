@@ -213,9 +213,9 @@
 #ifdef ARCH_X86_64
 #define SGEMM_DIRECT_PERFORMANT gotoblas -> sgemm_direct_performant
 #define  SGEMM_DIRECT		gotoblas -> sgemm_direct
-#else
+#elif ARCH_ARM64
 #define SGEMM_DIRECT_PERFORMANT    sgemm_direct_performant
-#define  SGEMM_DIRECT		sgemm_direct
+#define  SGEMM_DIRECT		gotoblas -> sgemm_direct
 #endif
 
 #define	SGEMM_ONCOPY		gotoblas -> sgemm_oncopy

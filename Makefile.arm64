@@ -30,6 +30,11 @@ FCOMMON_OPT += -march=armv8-a+sve
 endif
 endif
 
+ifeq ($(CORE), ARMV9SME)
+CCOMMON_OPT += -march=armv9-a+sve2+sme
+FCOMMON_OPT += -march=armv9-a+sve2
+endif
+
 ifeq ($(CORE), CORTEXA53)
 CCOMMON_OPT += -march=armv8-a -mtune=cortex-a53
 ifneq ($(F_COMPILER), NAG)

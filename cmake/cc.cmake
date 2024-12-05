@@ -238,6 +238,12 @@ if (${CORE} STREQUAL ARMV8SVE)
   endif ()
 endif ()
 
+if (${CORE} STREQUAL ARMV9SME)
+  if (NOT DYNAMIC_ARCH)
+    set (CCOMMON_OPT "${CCOMMON_OPT} -march=armv9-a+sme")
+  endif ()
+endif ()
+
 if (${CORE} STREQUAL CORTEXA510)
   if (NOT DYNAMIC_ARCH)
     set (CCOMMON_OPT "${CCOMMON_OPT} -march=armv8-a+sve")

@@ -221,6 +221,12 @@ BLASLONG (*ismin_k) (BLASLONG, float *, BLASLONG);
   void (*sgemm_direct) (BLASLONG, BLASLONG, BLASLONG, float *, BLASLONG , float *, BLASLONG , float * , BLASLONG);
   int  (*sgemm_direct_performant) (BLASLONG M, BLASLONG N, BLASLONG K);
 #endif
+#ifdef ARCH_ARM64
+#ifdef HAVE_SME
+  void (*sgemm_direct) (BLASLONG, BLASLONG, BLASLONG, float *, BLASLONG , float *, BLASLONG , float * , BLASLONG);
+#endif
+#endif
+
   
   int    (*sgemm_kernel   )(BLASLONG, BLASLONG, BLASLONG, float, float *, float *, float *, BLASLONG);
   int    (*sgemm_beta     )(BLASLONG, BLASLONG, BLASLONG, float, float *, BLASLONG, float *, BLASLONG, float  *, BLASLONG);

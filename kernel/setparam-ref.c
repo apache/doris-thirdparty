@@ -179,6 +179,11 @@ gotoblas_t TABLE_NAME = {
   sgemm_directTS,
   sgemm_direct_performantTS,	
 #endif
+#ifdef ARCH_ARM64
+#ifdef HAVE_SME
+  sgemm_directTS,
+#endif
+#endif
 
   sgemm_kernelTS, sgemm_betaTS,
 #if SGEMM_DEFAULT_UNROLL_M != SGEMM_DEFAULT_UNROLL_N
