@@ -6,6 +6,9 @@ hostarch=`uname -m | sed -e 's/i.86/x86/'`
 if [ "$hostos" = "AIX" ] || [ "$hostos" = "SunOS" ]; then
     hostarch=`uname -p`
 fi
+if [ "$hostarch" = "evbarm" ]; then
+    hostarch=`uname -p`
+fi
 case "$hostarch" in
     amd64) hostarch=x86_64 ;;
     arm*) [ "$hostarch" = "arm64" ] || hostarch='arm' ;;
