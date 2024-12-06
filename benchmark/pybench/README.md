@@ -43,7 +43,17 @@ have all what it takes to build OpenBLAS from source, plus `python` and
 $ python -mpip install numpy meson ninja pytest pytest-benchmark
 ```
 
-The benchmark syntax is consistent with that of `pytest-benchmark` framework. The incantation to run the suite locally is `$ pytest benchmark/pybench/benchmarks/test_blas.py`.
+The Meson build system looks for the installed OpenBLAS using pkgconfig, so the openblas.pc created during the OpenBLAS build needs
+to be somewhere on the search path of pkgconfig or in a folder pointed to by the environment variable PKG_CONFIG_PATH.
+
+If you want to build the benchmark suite using flang (or flang-new) instead of gfortran for the Fortran parts, you currently need
+to edit the meson.build file and change the line `'fortran_std=legacy'` to `'fortran_std=none'` to work around an incompatibility
+between Meson and flang.
+
+If you are building and running the benchmark under MS Windows, it may be necessary to copy the generated openblas_wrap module from
+your build folder to the `benchmarks` folder.
+
+The benchmark syntax is consistent with that of `pytest-benchmark` framework. The incantation to run the suite locally is `$ pytest benchmark/pybench/benchmarks/bench_blas.py`.
 
 An ASV compatible benchmark suite is planned but currently not implemented.
 
