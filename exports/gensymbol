@@ -900,7 +900,6 @@ lapackobjs2d="$lapackobjs2d
 
 lapackobjs2s="$lapackobjs2s
     sgelst
-    sgeqp2rk
     sgeqp3rk
     slaqp2rk
     slaqp3rk
