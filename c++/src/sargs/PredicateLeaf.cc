@@ -390,10 +390,15 @@ namespace orc {
 
   DIAGNOSTIC_POP
 
+  static bool col_stats_hasnull(const proto::ColumnStatistics& stats) {
+    // for foward compatibility, if hasnull is not set, assume that the column has nulls
+    return stats.has_hasnull() ? stats.hasnull() : true;
+  }
+
   static TruthValue evaluateBoolPredicate(const PredicateLeaf::Operator op,
                                           const std::vector<Literal>& literals,
                                           const proto::ColumnStatistics& stats) {
-    bool hasNull = stats.hasnull();
+    bool hasNull = col_stats_hasnull(stats);
     if (!stats.has_bucketstatistics() || stats.bucketstatistics().count_size() == 0) {
       // does not have bool stats
       return hasNull ? TruthValue::YES_NO_NULL : TruthValue::YES_NO;
@@ -513,7 +518,7 @@ namespace orc {
             colStats.intstatistics().has_maximum()) {
           const auto& stats = colStats.intstatistics();
           result = evaluatePredicateRange(mOperator, literal2Long(mLiterals), stats.minimum(),
-                                          stats.maximum(), colStats.hasnull());
+                                          stats.maximum(), col_stats_hasnull(colStats));
         }
         break;
       }
@@ -522,10 +527,10 @@ namespace orc {
             colStats.doublestatistics().has_maximum()) {
           const auto& stats = colStats.doublestatistics();
           if (!std::isfinite(stats.sum())) {
-            result = colStats.hasnull() ? TruthValue::YES_NO_NULL : TruthValue::YES_NO;
+            result = col_stats_hasnull(colStats) ? TruthValue::YES_NO_NULL : TruthValue::YES_NO;
           } else {
             result = evaluatePredicateRange(mOperator, literal2Double(mLiterals), stats.minimum(),
-                                            stats.maximum(), colStats.hasnull());
+                                            stats.maximum(), col_stats_hasnull(colStats));
           }
         }
         break;
@@ -536,7 +541,7 @@ namespace orc {
             colStats.stringstatistics().has_maximum()) {
           const auto& stats = colStats.stringstatistics();
           result = evaluatePredicateRange(mOperator, literal2String(mLiterals), stats.minimum(),
-                                          stats.maximum(), colStats.hasnull());
+                                          stats.maximum(), col_stats_hasnull(colStats));
         }
         break;
       }
@@ -545,7 +550,7 @@ namespace orc {
             colStats.datestatistics().has_maximum()) {
           const auto& stats = colStats.datestatistics();
           result = evaluatePredicateRange(mOperator, literal2Date(mLiterals), stats.minimum(),
-                                          stats.maximum(), colStats.hasnull());
+                                          stats.maximum(), col_stats_hasnull(colStats));
         }
         break;
       }
@@ -564,7 +569,7 @@ namespace orc {
               stats.maximumutc() / 1000,
               static_cast<int32_t>((stats.maximumutc() % 1000) * 1000000) + maxNano);
           result = evaluatePredicateRange(mOperator, literal2Timestamp(mLiterals), minTimestamp,
-                                          maxTimestamp, colStats.hasnull());
+                                          maxTimestamp, col_stats_hasnull(colStats));
         }
         break;
       }
@@ -574,7 +579,7 @@ namespace orc {
           const auto& stats = colStats.decimalstatistics();
           result = evaluatePredicateRange(mOperator, literal2Decimal(mLiterals),
                                           Decimal(stats.minimum()), Decimal(stats.maximum()),
-                                          colStats.hasnull());
+                                          col_stats_hasnull(colStats));
         }
         break;
       }
@@ -589,7 +594,7 @@ namespace orc {
     }
 
     // make sure null literal is respected for IN operator
-    if (mOperator == Operator::IN && colStats.hasnull()) {
+    if (mOperator == Operator::IN && col_stats_hasnull(colStats)) {
       for (const auto& literal : mLiterals) {
         if (literal.isNull()) {
           result = TruthValue::YES_NO_NULL;
@@ -698,12 +703,13 @@ namespace orc {
       }
     }
 
-    bool allNull = colStats.hasnull() && colStats.numberofvalues() == 0;
+    bool allNull = col_stats_hasnull(colStats) && colStats.numberofvalues() == 0;
     if (mOperator == Operator::IS_NULL ||
         ((mOperator == Operator::EQUALS || mOperator == Operator::NULL_SAFE_EQUALS) &&
          mLiterals.at(0).isNull())) {
       // IS_NULL operator does not need to check min/max stats and bloom filter
-      return allNull ? TruthValue::YES : (colStats.hasnull() ? TruthValue::YES_NO : TruthValue::NO);
+      return allNull ? TruthValue::YES
+                     : (col_stats_hasnull(colStats) ? TruthValue::YES_NO : TruthValue::NO);
     } else if (allNull) {
       // if we don't have any value, everything must have been null
       return TruthValue::IS_NULL;
@@ -711,7 +717,7 @@ namespace orc {
 
     TruthValue result = evaluatePredicateMinMax(colStats);
     if (shouldEvaluateBloomFilter(mOperator, result, bloomFilter)) {
-      return evaluatePredicateBloomFiter(bloomFilter, colStats.hasnull());
+      return evaluatePredicateBloomFiter(bloomFilter, col_stats_hasnull(colStats));
     } else {
       return result;
     }
