@@ -45,6 +45,8 @@ namespace orc {
     const orc::IntegerColumnStatistics* intColStats;
     intColStats = reinterpret_cast<const orc::IntegerColumnStatistics*>(
         stripeStats->getRowIndexStatistics(1, 0));
+    // (syt) For forward compatibility, if has_null is not set in the orc file, it should be
+    // regarded as has_null is true
     EXPECT_EQ(
         "Data type: Integer\nValues: 2000\nHas null: yes\nMinimum: 1\nMaximum: 2000\nSum: "
         "2001000\n",
