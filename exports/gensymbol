@@ -869,8 +869,12 @@ lapackobjs2z="$lapackobjs2z
 #functions added post 3.11
 
 lapackobjs2c="$lapackobjs2c
+    cgelst
+    cgeqp3rk
     claqp2rk
     claqp3rk
+    clatrs3
+    crscl
     ctrsyl3
     "
 #    claqz0
@@ -893,6 +897,16 @@ lapackobjs2d="$lapackobjs2d
 #    dlaqz2
 #    dlaqz3
 #    dlaqz4
+
+lapackobjs2s="$lapackobjs2s
+    sgelst
+    sgeqp3rk
+    slaqp2rk
+    slaqp3rk
+    slarmm
+    slatrs3
+    strsyl3
+    "
 
 lapackobjs2z="$lapackobjs2z
     zgelst
