@@ -69,8 +69,8 @@ DROTKERNEL   = rot.c
 CROTKERNEL   = zrot.S
 ZROTKERNEL   = zrot.S
 
-SSCALKERNEL  = scal.c
-DSCALKERNEL  = scal.c
+SSCALKERNEL  = scal.S
+DSCALKERNEL  = scal.S
 CSCALKERNEL  = zscal.S
 ZSCALKERNEL  = zscal.S
 
