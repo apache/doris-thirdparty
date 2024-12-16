@@ -149,6 +149,9 @@ SegmentTermEnum::SegmentTermEnum(const SegmentTermEnum& clone) : fieldInfos(clon
     if (clone.buffer != NULL) memcpy(buffer, clone.buffer, bufferLength * sizeof(TCHAR));
 
     isDictCompress_ = isFlagSet(fieldInfos->getFlags(), FlagBits::DICT_COMPRESS);
+    if (isDictCompress_) {
+        byteArrayDataInput_ = clone.byteArrayDataInput_;
+    }
 }
 
 SegmentTermEnum::~SegmentTermEnum() {
