@@ -3254,7 +3254,7 @@ void blas_shutdown(void){
 #endif
       newmemory[pos].lock   = 0;
     }
-    free(newmemory);
+    free((void*)newmemory);
     newmemory = NULL;
     memory_overflowed = 0;  
   }
