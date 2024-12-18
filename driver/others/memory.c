@@ -2538,7 +2538,7 @@ static void *alloc_shm(void *address){
 }
 #endif
 
-#if defined OS_LINUX  || defined OS_AIX  || defined __sun__  || defined OS_WINDOWS
+#if ((defined ALLOC_HUGETLB) && (defined OS_LINUX  || defined OS_AIX  || defined __sun__  || defined OS_WINDOWS))
 
 static void alloc_hugetlb_free(struct release_t *release){
 
