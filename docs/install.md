@@ -437,36 +437,54 @@ To then use the built OpenBLAS shared library in Visual Studio:
       [Qt Creator](http://qt.nokia.com/products/developer-tools/).
 
 
-#### Windows on Arm
+### Windows on Arm
 
-While OpenBLAS can be built with Microsoft VisualStudio (Community Edition or commercial), you would only be able to build for the GENERIC target
-that does not use optimized assembly kernels, also the stock VisualStudio lacks the Fortran compiler necessary for building the LAPACK component.
-It is therefore highly recommended to download the free LLVM compiler suite and use it to compile OpenBLAS outside of VisualStudio.
+A fully functional native OpenBLAS for WoA that can be built as both a static and dynamic library using LLVM toolchain and Visual Studio 2022. Before starting to build, make sure that you have installed Visual Studio 2022 on your ARM device, including the "Desktop Development with C++" component (that contains the cmake tool).
+(Note that you can use the free "Visual Studio 2022 Community Edition" for this task. In principle it would be possible to build with VisualStudio alone, but using
+the LLVM toolchain enables native compilation of the Fortran sources of LAPACK and of all the optimized assembly files, which VisualStudio cannot handle on its own)
 
-The following tools needs to be installed to build for Windows on Arm (WoA):
+1. Clone OpenBLAS to your local machine and checkout to latest release of OpenBLAS (unless you want to build the latest development snapshot - here we are using  the 0.3.28 release as the example, of course this exact version may be outdated by the time you read this) 
+  
+      ```cmd
+      git clone https://github.com/OpenMathLib/OpenBLAS.git
+      cd OpenBLAS
+      git checkout v0.3.28
+      ```
+  
+2. Install Latest LLVM toolchain for WoA:
 
--   LLVM for Windows on Arm.
-    Find the latest LLVM build for WoA from [LLVM release page](https://releases.llvm.org/) - you want the package whose name ends in "woa64.exe".
-    (This may not always be present in the very latest point release, as building and uploading the binaries takes time.)
-    E.g: a LLVM 19 build for WoA64 can be found [here](https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.2/LLVM-19.1.2-woa64.exe).
-    Run the LLVM installer and ensure that LLVM is added to the environment variable PATH. (If you do not want to add it to the PATH, you will need to specify
-    both C and Fortran compiler to Make or CMake with their full path later on)
+Download the Latest LLVM toolchain for WoA from [the Release page](https://github.com/llvm/llvm-project/releases/tag/llvmorg-19.1.5). At the time of writing, this     is version 19.1.5 - be sure to select the latest release for which you can find a precompiled package whose name ends in "-woa64.exe" (precompiled packages
+usually lag a week or two behind their corresponding source release).  
+Make sure to enable the option “Add LLVM to the system PATH for all the users”
+Note: Make sure that the path of LLVM toolchain is at the top of Environment Variables section to avoid conflicts between the set of compilers available in the system path
 
-The following steps describe how to build the static library for OpenBLAS with either Make or CMake:
+3. Launch the Native Command Prompt for Windows ARM64:
 
-1.  Build OpenBLAS with Make:
+From the start menu search for “ARM64 Native Tools Command Prompt for Visual Studio 2022”
+Alternatively open command prompt, run the following command to activate the environment:
+"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsarm64.bat"
 
-    ```bash
+Navigate to the OpenBLAS source code directory and start building OpenBLAS by invoking Ninja:
+   
+       ```cmd
+       cd OpenBLAS
+       mkdir build
+       cd build
+       
+       cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DTARGET=ARMV8 -DBINARY=64 -DCMAKE_C_COMPILER=clang-cl -DCMAKE_C_COMPILER=arm64-pc-windows-msvc -DCMAKE_ASM_COMPILER=arm64-pc-windows-msvc -DCMAKE_Fortran_COMPILER=flang-new
+
+       ninja -j16
+       ```
+       
+Note: You might want to include additional options in the cmake command here. For example, the default configuration only generates a static.lib version of the library. If you prefer a DLL, you can add -DBUILD_SHARED_LIBS=ON.
+
+Note that it is also possible to use the same setup to build OpenBLAS with Make, if you prepare Makefiles over the CMake build for some reason:
+
+    ```cmd
     $ make CC=clang-cl FC=flang-new AR="llvm-ar" TARGET=ARMV8 ARCH=arm64 RANLIB="llvm-ranlib" MAKE=make
     ```
 
-2. Build OpenBLAS with CMake
-    ```bash
-    $ mkdir build
-    $ cd build
-    $ cmake .. -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_Fortran_COMPILER=flang-new -DTARGET=ARMV8 -DCMAKE_BUILD_TYPE=Release
-    $ cmake --build .
-    ```
+
 
 #### Generating an import library
 
