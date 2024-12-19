@@ -19,7 +19,6 @@
 package org.apache.hadoop.fs.azurebfs.services;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.net.ProtocolException;
 import java.net.URL;
 import java.util.Arrays;
@@ -34,9 +33,11 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.azurebfs.AbfsConfiguration;
+import org.apache.hadoop.fs.azurebfs.AbfsCountersImpl;
 import org.apache.hadoop.fs.azurebfs.AbstractAbfsIntegrationTest;
 import org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem;
 import org.apache.hadoop.fs.azurebfs.TestAbfsConfigurationFieldsValidation;
@@ -46,11 +47,11 @@ import org.apache.hadoop.fs.azurebfs.contracts.exceptions.AbfsApacheHttpExpect10
 import org.apache.hadoop.fs.azurebfs.contracts.exceptions.AzureBlobFileSystemException;
 import org.apache.hadoop.fs.azurebfs.contracts.services.AppendRequestParameters;
 import org.apache.hadoop.fs.azurebfs.oauth2.AccessTokenProvider;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.azurebfs.constants.ConfigurationKeys;
 import org.apache.hadoop.fs.azurebfs.utils.TracingContext;
 import org.apache.hadoop.fs.azurebfs.utils.TracingHeaderFormat;
 import org.apache.hadoop.security.ssl.DelegatingSSLSocketFactory;
+import org.apache.hadoop.test.ReflectionUtils;
 import org.apache.http.HttpResponse;
 
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
@@ -410,50 +411,30 @@ public final class ITestAbfsClient extends AbstractAbfsIntegrationTest {
     Mockito.doReturn(baseAbfsClientInstance.getAbfsApacheHttpClient()).when(client).getAbfsApacheHttpClient();
 
     // override baseurl
-    client = ITestAbfsClient.setAbfsClientField(client, "abfsConfiguration",
-        abfsConfig);
+    ReflectionUtils.setFinalField(AbfsClient.class, client, "abfsConfiguration", abfsConfig);
 
     // override baseurl
-    client = ITestAbfsClient.setAbfsClientField(client, "baseUrl",
-        baseAbfsClientInstance.getBaseUrl());
+    ReflectionUtils.setFinalField(AbfsClient.class, client, "baseUrl", baseAbfsClientInstance.getBaseUrl());
 
     // override xMsVersion
-    client = ITestAbfsClient.setAbfsClientField(client, "xMsVersion",
-        baseAbfsClientInstance.getxMsVersion());
+    ReflectionUtils.setFinalField(AbfsClient.class, client, "xMsVersion", baseAbfsClientInstance.getxMsVersion());
 
     // override auth provider
     if (currentAuthType == AuthType.SharedKey) {
-      client = ITestAbfsClient.setAbfsClientField(client, "sharedKeyCredentials",
-          new SharedKeyCredentials(
+      ReflectionUtils.setFinalField(AbfsClient.class, client, "sharedKeyCredentials", new SharedKeyCredentials(
               abfsConfig.getAccountName().substring(0,
                   abfsConfig.getAccountName().indexOf(DOT)),
               abfsConfig.getStorageAccountKey()));
     } else {
-      client = ITestAbfsClient.setAbfsClientField(client, "tokenProvider",
-          abfsConfig.getTokenProvider());
+      ReflectionUtils.setFinalField(AbfsClient.class, client, "tokenProvider", abfsConfig.getTokenProvider());
     }
 
     // override user agent
     String userAgent = "APN/1.0 Azure Blob FS/3.4.1-SNAPSHOT (PrivateBuild "
         + "JavaJRE 1.8.0_252; Linux 5.3.0-59-generic/amd64; openssl-1.0; "
         + "UNKNOWN/UNKNOWN) MSFT";
-    client = ITestAbfsClient.setAbfsClientField(client, "userAgent", userAgent);
+    ReflectionUtils.setFinalField(AbfsClient.class, client, "userAgent", userAgent);
 
-    return client;
-  }
-
-  static AbfsClient setAbfsClientField(
-      final AbfsClient client,
-      final String fieldName,
-      Object fieldObject) throws Exception {
-
-    Field field = AbfsClient.class.getDeclaredField(fieldName);
-    field.setAccessible(true);
-    Field modifiersField = Field.class.getDeclaredField("modifiers");
-    modifiersField.setAccessible(true);
-    modifiersField.setInt(field,
-        field.getModifiers() & ~java.lang.reflect.Modifier.FINAL);
-    field.set(client, fieldObject);
     return client;
   }
 

@@ -41,12 +41,12 @@ import org.apache.hadoop.fs.azurebfs.services.AbfsRestOperation;
 import org.apache.hadoop.fs.azurebfs.services.AbfsHttpOperation;
 import org.apache.hadoop.fs.azurebfs.services.ITestAbfsClient;
 import org.apache.hadoop.fs.azurebfs.services.TestAbfsPerfTracker;
-import org.apache.hadoop.fs.azurebfs.utils.TestMockHelpers;
 import org.apache.hadoop.fs.azurebfs.utils.TracingContext;
 import org.apache.hadoop.fs.azurebfs.utils.TracingHeaderValidator;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.test.ReflectionUtils;
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST;
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
@@ -250,9 +250,9 @@ public class ITestAzureBlobFileSystemDelete extends
         fs.getAbfsStore().getClient(),
         this.getConfiguration());
     AzureBlobFileSystemStore mockStore = mock(AzureBlobFileSystemStore.class);
-    mockStore = TestMockHelpers.setClassField(AzureBlobFileSystemStore.class, mockStore,
+    ReflectionUtils.setFinalField(AzureBlobFileSystemStore.class, mockStore,
         "client", mockClient);
-    mockStore = TestMockHelpers.setClassField(AzureBlobFileSystemStore.class,
+    ReflectionUtils.setFinalField(AzureBlobFileSystemStore.class,
         mockStore,
         "abfsPerfTracker",
         TestAbfsPerfTracker.getAPerfTrackerInstance(this.getConfiguration()));
