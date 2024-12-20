@@ -863,7 +863,7 @@ char* getLastTLSExceptionRootCause()
         }
         mutexUnlock(&jvmMutex);
     }
-    return state->lastExceptionRootCause;
+    return state ? state->lastExceptionRootCause : NULL;
 }
 
 char* getLastTLSExceptionStackTrace()
