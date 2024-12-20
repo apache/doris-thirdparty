@@ -142,7 +142,6 @@ private:
 
 private:
 	bool isDictCompress_ = false;
-	std::vector<uint8_t> decompress_buffer;
 	store_v2::ByteArrayDataInput byteArrayDataInput_;
 };
 CL_NS_END

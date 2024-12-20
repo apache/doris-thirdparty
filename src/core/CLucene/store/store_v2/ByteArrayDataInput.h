@@ -28,6 +28,24 @@ public:
         }
     }
 
+    ByteArrayDataInput& operator=(const ByteArrayDataInput& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        if (owns_ && bytes_ != nullptr) {
+            delete bytes_;
+            bytes_ = nullptr;
+        }
+
+        owns_ = true;
+        pos_ = other.pos_;
+        limit_ = other.limit_;
+        bytes_ = new std::vector<uint8_t>(*other.bytes_);
+
+        return *this;
+    }
+
     void reset(std::vector<uint8_t>* bytes) { reset(bytes, 0, bytes->size()); }
 
     void reset(std::vector<uint8_t>* bytes, int32_t offset, int32_t len) {

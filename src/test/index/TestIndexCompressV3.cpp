@@ -5,6 +5,7 @@
 
 #include <ctime>
 #include <exception>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -221,6 +222,63 @@ void TestIndexByteArray(CuTest* tc) {
     std::cout << "\nTestIndexByteArray sucess" << std::endl;
 }
 
+void get_prefix_terms(IndexReader* reader, const std::wstring& field_name,
+                      const std::string& prefix, std::vector<CL_NS(index)::Term*>& prefix_terms,
+                      int32_t max_expansions) {
+    std::wstring ws_prefix = StringUtil::string_to_wstring(prefix);
+
+    Term* prefix_term = _CLNEW Term(field_name.c_str(), ws_prefix.c_str());
+    TermEnum* enumerator = reader->terms(prefix_term);
+
+    int32_t count = 0;
+    Term* lastTerm = nullptr;
+    try {
+        const TCHAR* prefixText = prefix_term->text();
+        const TCHAR* prefixField = prefix_term->field();
+        const TCHAR* tmp = nullptr;
+        size_t i = 0;
+        size_t prefixLen = prefix_term->textLength();
+        do {
+            lastTerm = enumerator->term();
+            if (lastTerm != nullptr && lastTerm->field() == prefixField) {
+                size_t termLen = lastTerm->textLength();
+                if (prefixLen > termLen) {
+                    break;
+                }
+
+                tmp = lastTerm->text();
+
+                for (i = prefixLen - 1; i != -1; --i) {
+                    if (tmp[i] != prefixText[i]) {
+                        tmp = nullptr;
+                        break;
+                    }
+                }
+                if (tmp == nullptr) {
+                    break;
+                }
+
+                if (max_expansions > 0 && count >= max_expansions) {
+                    break;
+                }
+
+                Term* t = _CLNEW Term(field_name.c_str(), tmp);
+                prefix_terms.push_back(t);
+                count++;
+            } else {
+                break;
+            }
+            _CLDECDELETE(lastTerm);
+        } while (enumerator->next());
+    }
+    _CLFINALLY({
+        enumerator->close();
+        _CLDELETE(enumerator);
+        _CLDECDELETE(lastTerm);
+        _CLDECDELETE(prefix_term);
+    });
+}
+
 void TestIndexCompressV3(CuTest* tc) {
     std::srand(getDaySeed());
 
@@ -313,6 +371,51 @@ void TestIndexCompactionV3Exception(CuTest* tc) {
     std::cout << "TestIndexCompactionException sucess" << std::endl;
 }
 
+void TestIndexCompressV3Seek(CuTest* tc) {
+    std::string name = "name";
+
+    char httplogsfile[1024];
+    strcpy(httplogsfile, clucene_data_location);
+    strcat(httplogsfile, "/httplogs.txt");
+
+    std::vector<std::string> datas;
+    std::ifstream file(httplogsfile);
+    if (!file.is_open()) {
+        assertTrue(false);
+    }
+    std::string line;
+    while (std::getline(file, line)) {
+        datas.push_back(line);
+    }
+    file.close();
+
+    RAMDirectory dir;
+    write_index(name, &dir, IndexVersion::kV3, true, datas);
+
+    {
+        auto* reader = IndexReader::open(&dir);
+
+        auto field_name = std::wstring(name.begin(), name.end());
+        std::string prefix = "bg";
+
+        std::vector<CL_NS(index)::Term*> prefix_terms;
+        get_prefix_terms(reader, field_name, prefix, prefix_terms, 50);
+        assertEquals(prefix_terms.size(), 2);
+        assert(lucene_wcstoutf8string(prefix_terms[0]->text(), prefix_terms[0]->textLength()) ==
+               "bg");
+        assert(lucene_wcstoutf8string(prefix_terms[1]->text(), prefix_terms[1]->textLength()) ==
+               "bg2");
+        for (auto& t : prefix_terms) {
+            _CLLDECDELETE(t);
+        }
+
+        reader->close();
+        _CLLDELETE(reader);
+    }
+
+    std::cout << "TestIndexCompressV3Seek sucess" << std::endl;
+}
+
 CuSuite* testIndexCompressV3() {
     CuSuite* suite = CuSuiteNew(_T("CLucene Index Compress V3 Test"));
 
@@ -320,6 +423,7 @@ CuSuite* testIndexCompressV3() {
     SUITE_ADD_TEST(suite, TestIndexCompressV3);
     SUITE_ADD_TEST(suite, TestIndexCompactionDicCompress);
     SUITE_ADD_TEST(suite, TestIndexCompactionV3Exception);
+    SUITE_ADD_TEST(suite, TestIndexCompressV3Seek);
 
     return suite;
 }
