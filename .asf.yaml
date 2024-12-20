@@ -60,7 +60,6 @@ github:
         strict: false
         contexts:
           - Build (Linux)
-          - Build (macOS)
           - CLucene UT (Linux)
     clucene-2.0:
       required_status_checks:
