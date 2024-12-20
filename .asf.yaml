@@ -60,6 +60,5 @@ github:
         strict: false
         contexts:
           - Build (Linux)
-          - Build (macOS)
 notifications:
   pullrequests_status:  commits@doris.apache.org
