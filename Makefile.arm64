@@ -351,4 +351,31 @@ endif
 
 endif
 
+else
+# NVIDIA HPC options necessary to enable SVE in the compiler
+ifeq ($(CORE), THUNDERX2T99)
+CCOMMON_OPT += -tp=thunderx2t99
+FCOMMON_OPT += -tp=thunderx2t99
+endif
+ifeq ($(CORE), NEOVERSEN1)
+CCOMMON_OPT += -tp=neoverse-n1
+FCOMMON_OPT += -tp=neoverse-n1
+endif
+ifeq ($(CORE), NEOVERSEV1)
+CCOMMON_OPT += -tp=neoverse-v1
+FCOMMON_OPT += -tp=neoverse-v1
+endif
+ifeq ($(CORE), NEOVERSEV2)
+CCOMMON_OPT += -tp=neoverse-v2
+FCOMMON_OPT += -tp=neoverse-v2
+endif
+ifeq ($(CORE), ARMV8SVE)
+CCOMMON_OPT += -tp=neoverse-v2
+FCOMMON_OPT += -tp=neoverse-v2
+endif
+ifeq ($(CORE), ARMV9SVE)
+CCOMMON_OPT += -tp=neoverse-v2
+FCOMMON_OPT += -tp=neoverse-v2
+endif
+
 endif
