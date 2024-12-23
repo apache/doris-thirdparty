@@ -91,7 +91,7 @@ static float check_cimatcopy(char api, char order, char trans, blasint rows, bla
         ctranspose(m, n, alpha, data_cimatcopy.a_test, lda_src, data_cimatcopy.a_verify, lda_dst, conj);
     } 
     else {
-        ccopy(m, n, alpha, data_cimatcopy.a_test, lda_src, data_cimatcopy.a_verify, lda_dst, conj);
+        my_ccopy(m, n, alpha, data_cimatcopy.a_test, lda_src, data_cimatcopy.a_verify, lda_dst, conj);
     }
 
     if (api == 'F') {
