@@ -92,7 +92,7 @@ static double check_zomatcopy(char api, char order, char trans, blasint rows, bl
         ztranspose(m, n, alpha, data_zomatcopy.a_test, lda, data_zomatcopy.b_verify, ldb, conj);
     } 
     else {
-        zcopy(m, n, alpha, data_zomatcopy.a_test, lda, data_zomatcopy.b_verify, ldb, conj);
+        my_zcopy(m, n, alpha, data_zomatcopy.a_test, lda, data_zomatcopy.b_verify, ldb, conj);
     }
 
     if (api == 'F') {

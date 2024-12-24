@@ -87,7 +87,7 @@ static float check_somatcopy(char api, char order, char trans, blasint rows, bla
         stranspose(m, n, alpha, data_somatcopy.a_test, lda, data_somatcopy.b_verify, ldb);
     } 
     else {
-        scopy(m, n, alpha, data_somatcopy.a_test, lda, data_somatcopy.b_verify, ldb);
+        my_scopy(m, n, alpha, data_somatcopy.a_test, lda, data_somatcopy.b_verify, ldb);
     }
 
     if (api == 'F') {
