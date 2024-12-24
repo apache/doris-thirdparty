@@ -338,7 +338,7 @@ Please see Changelog.txt.
 
 ## Troubleshooting
 
-* Please read the [FAQ](www.openmathlib.org/OpenBLAS/docs/faq) section of the docs first.
+* Please read the [FAQ](http://www.openmathlib.org/OpenBLAS/docs/faq) section of the docs first.
 * Please use GCC version 4.6 and above to compile Sandy Bridge AVX kernels on Linux/MinGW/BSD.
 * Please use Clang version 3.1 and above to compile the library on Sandy Bridge microarchitecture.
   Clang 3.0 will generate the wrong AVX binary code.
