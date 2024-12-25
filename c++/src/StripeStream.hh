@@ -43,14 +43,16 @@ namespace orc {
     const uint64_t stripeIndex;
     const uint64_t stripeStart;
     InputStream& input;
+    const std::unordered_map<orc::StreamId, std::shared_ptr<InputStream>>& streams;
     const Timezone& writerTimezone;
     const Timezone& readerTimezone;
 
    public:
-    StripeStreamsImpl(const RowReaderImpl& reader, uint64_t index,
-                      const proto::StripeInformation& stripeInfo, const proto::StripeFooter& footer,
-                      uint64_t stripeStart, InputStream& input, const Timezone& writerTimezone,
-                      const Timezone& readerTimezone);
+    StripeStreamsImpl(
+        const RowReaderImpl& reader, uint64_t index, const proto::StripeInformation& stripeInfo,
+        const proto::StripeFooter& footer, uint64_t stripeStart, InputStream& input,
+        const std::unordered_map<orc::StreamId, std::shared_ptr<InputStream>>& streams,
+        const Timezone& writerTimezone, const Timezone& readerTimezone);
 
     virtual ~StripeStreamsImpl() override;
 

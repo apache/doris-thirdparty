@@ -25,17 +25,18 @@
 
 namespace orc {
 
-  StripeStreamsImpl::StripeStreamsImpl(const RowReaderImpl& _reader, uint64_t _index,
-                                       const proto::StripeInformation& _stripeInfo,
-                                       const proto::StripeFooter& _footer, uint64_t _stripeStart,
-                                       InputStream& _input, const Timezone& _writerTimezone,
-                                       const Timezone& _readerTimezone)
+  StripeStreamsImpl::StripeStreamsImpl(
+      const RowReaderImpl& _reader, uint64_t _index, const proto::StripeInformation& _stripeInfo,
+      const proto::StripeFooter& _footer, uint64_t _stripeStart, InputStream& _input,
+      const std::unordered_map<orc::StreamId, std::shared_ptr<InputStream>>& _streams,
+      const Timezone& _writerTimezone, const Timezone& _readerTimezone)
       : reader(_reader),
         stripeInfo(_stripeInfo),
         footer(_footer),
         stripeIndex(_index),
         stripeStart(_stripeStart),
         input(_input),
+        streams(_streams),
         writerTimezone(_writerTimezone),
         readerTimezone(_readerTimezone) {
     // PASS
@@ -87,8 +88,10 @@ namespace orc {
       const proto::Stream& stream = footer.streams(i);
       if (stream.has_kind() && stream.kind() == kind &&
           stream.column() == static_cast<uint64_t>(columnId)) {
+        auto iter = streams.find({columnId, static_cast<StreamKind>(kind)});
+        InputStream* inputStream = (iter != streams.end()) ? iter->second.get() : &input;
         uint64_t streamLength = stream.length();
-        uint64_t myBlock = shouldStream ? input.getNaturalReadSize() : streamLength;
+        uint64_t myBlock = shouldStream ? inputStream->getNaturalReadSize() : streamLength;
         if (offset + streamLength > dataEnd) {
           std::stringstream msg;
           msg << "Malformed stream meta at stream index " << i << " in stripe " << stripeIndex
@@ -100,7 +103,7 @@ namespace orc {
         }
         return createDecompressor(reader.getCompression(),
                                   std::make_unique<SeekableFileInputStream>(
-                                      &input, offset, stream.length(), *pool, myBlock),
+                                      inputStream, offset, stream.length(), *pool, myBlock),
                                   reader.getCompressionSize(), *pool,
                                   reader.getFileContents().readerMetrics);
       }

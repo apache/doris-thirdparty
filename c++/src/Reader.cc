@@ -549,11 +549,14 @@ namespace orc {
       if (selectedColumns[colId] && pbStream.has_kind() &&
           (pbStream.kind() == proto::Stream_Kind_ROW_INDEX ||
            pbStream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
-        std::unique_ptr<SeekableInputStream> inStream = createDecompressor(
-            getCompression(),
-            std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
-                contents->stream.get(), offset, pbStream.length(), *contents->pool)),
-            getCompressionSize(), *contents->pool, contents->readerMetrics);
+        auto iter = streams.find({colId, static_cast<StreamKind>(pbStream.kind())});
+        InputStream* inputStream =
+            (iter != streams.end()) ? iter->second.get() : contents->stream.get();
+        std::unique_ptr<SeekableInputStream> inStream =
+            createDecompressor(getCompression(),
+                               std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
+                                   inputStream, offset, pbStream.length(), *contents->pool)),
+                               getCompressionSize(), *contents->pool, contents->readerMetrics);
 
         if (pbStream.kind() == proto::Stream_Kind_ROW_INDEX) {
           proto::RowIndex rowIndex;
@@ -951,7 +954,7 @@ namespace orc {
       readMetadata();
     }
 
-    std::vector<int> allStripesNeeded(numberOfStripes,1);
+    std::vector<int> allStripesNeeded(numberOfStripes, 1);
 
     if (opts.getSearchArgument() && footer->rowindexstride() > 0) {
       auto sargs = opts.getSearchArgument();
@@ -963,18 +966,19 @@ namespace orc {
         return allStripesNeeded;
       }
 
-      for ( uint64_t currentStripeIndex = 0;currentStripeIndex < numberOfStripes ; currentStripeIndex ++) {
+      for (uint64_t currentStripeIndex = 0; currentStripeIndex < numberOfStripes;
+           currentStripeIndex++) {
         const auto& currentStripeStats =
-              contents->metadata->stripestats(static_cast<int>(currentStripeIndex));
-        //Not need add mMetrics,so use 0.
-        allStripesNeeded[currentStripeIndex] = sargsApplier->evaluateStripeStatistics(currentStripeStats, 0);;
+            contents->metadata->stripestats(static_cast<int>(currentStripeIndex));
+        // Not need add mMetrics,so use 0.
+        allStripesNeeded[currentStripeIndex] =
+            sargsApplier->evaluateStripeStatistics(currentStripeStats, 0);
+        ;
       }
       contents->sargsApplier = std::move(sargsApplier);
     }
     return allStripesNeeded;
   }
-
-
 
   uint64_t maxStreamsForType(const proto::Type& type) {
     switch (static_cast<int64_t>(type.kind())) {
@@ -1161,6 +1165,7 @@ namespace orc {
     reader.reset();  // ColumnReaders use lots of memory; free old memory first
     rowIndexes.clear();
     bloomFilterIndex.clear();
+    streams.clear();
     followRowInStripe = 0;
 
     // evaluate file statistics if it exists
@@ -1189,13 +1194,13 @@ namespace orc {
       if (sargsApplier) {
         bool isStripeNeeded = true;
         if (contents->metadata) {
-          const auto &currentStripeStats =
-                  contents->metadata->stripestats(static_cast<int>(currentStripe));
+          const auto& currentStripeStats =
+              contents->metadata->stripestats(static_cast<int>(currentStripe));
           // skip this stripe after stats fail to satisfy sargs
           uint64_t stripeRowGroupCount =
-                  (rowsInCurrentStripe + footer->rowindexstride() - 1) / footer->rowindexstride();
+              (rowsInCurrentStripe + footer->rowindexstride() - 1) / footer->rowindexstride();
           isStripeNeeded =
-                  sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount);
+              sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount);
         }
         if (!isStripeNeeded) {
           // advance to next stripe when current stripe has no matching rows
@@ -1209,11 +1214,12 @@ namespace orc {
       processingStripe = currentStripe;
 
       std::unique_ptr<StripeInformation> currentStripeInformation(new StripeInformationImpl(
-            currentStripeInfo.offset(), currentStripeInfo.indexlength(),
-            currentStripeInfo.datalength(), currentStripeInfo.footerlength(),
-            currentStripeInfo.numberofrows(), contents->stream.get(), *contents->pool,
-            contents->compression, contents->blockSize, contents->readerMetrics));
-      contents->stream->beforeReadStripe(std::move(currentStripeInformation), selectedColumns);
+          currentStripeInfo.offset(), currentStripeInfo.indexlength(),
+          currentStripeInfo.datalength(), currentStripeInfo.footerlength(),
+          currentStripeInfo.numberofrows(), contents->stream.get(), *contents->pool,
+          contents->compression, contents->blockSize, contents->readerMetrics));
+      contents->stream->beforeReadStripe(std::move(currentStripeInformation), selectedColumns,
+                                         streams);
 
       if (sargsApplier) {
         bool isStripeNeeded = true;
@@ -1237,8 +1243,8 @@ namespace orc {
                                            ? getTimezoneByName(currentStripeFooter.writertimezone())
                                            : localTimezone;
       StripeStreamsImpl stripeStreams(*this, currentStripe, currentStripeInfo, currentStripeFooter,
-                                      currentStripeInfo.offset(), *contents->stream, writerTimezone,
-                                      readerTimezone);
+                                      currentStripeInfo.offset(), *contents->stream, streams,
+                                      writerTimezone, readerTimezone);
       reader = buildReader(*contents->schema, stripeStreams, useTightNumericVector);
 
       if (stringDictFilter != nullptr) {
@@ -1760,7 +1766,9 @@ namespace orc {
       // PASS
   };
 
-  void InputStream::beforeReadStripe(std::unique_ptr<StripeInformation> currentStripeInformation,
-                                     std::vector<bool> selectedColumns) {}
+  void InputStream::beforeReadStripe(
+      std::unique_ptr<StripeInformation> currentStripeInformation,
+      std::vector<bool> selectedColumns,
+      std::unordered_map<orc::StreamId, std::shared_ptr<InputStream>>& streams) {}
 
 }  // namespace orc

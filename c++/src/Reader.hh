@@ -162,6 +162,7 @@ namespace orc {
 
     // contents
     std::shared_ptr<FileContents> contents;
+    std::unordered_map<orc::StreamId, std::shared_ptr<InputStream>> streams;
     const bool throwOnHive11DecimalOverflow;
     const int32_t forcedScaleOnHive11Decimal;
 
@@ -322,10 +323,9 @@ namespace orc {
     // internal methods
     void readMetadata() const;
     void checkOrcVersion();
-    void getRowIndexStatistics(
-        const proto::StripeInformation& stripeInfo, uint64_t stripeIndex,
-        const proto::StripeFooter& currentStripeFooter,
-        std::vector<std::vector<proto::ColumnStatistics> >* indexStats) const;
+    void getRowIndexStatistics(const proto::StripeInformation& stripeInfo, uint64_t stripeIndex,
+                               const proto::StripeFooter& currentStripeFooter,
+                               std::vector<std::vector<proto::ColumnStatistics>>* indexStats) const;
 
     // metadata
     mutable bool isMetadataLoaded;
@@ -425,8 +425,8 @@ namespace orc {
       return contents->stream.get();
     }
 
-    void setStream(std::unique_ptr<InputStream> inputStreamUPtr) override{
-      contents->stream =  std::move(inputStreamUPtr);
+    void setStream(std::unique_ptr<InputStream> inputStreamUPtr) override {
+      contents->stream = std::move(inputStreamUPtr);
     }
 
     uint64_t getMemoryUse(int stripeIx = -1) override;
