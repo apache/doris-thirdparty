@@ -156,6 +156,46 @@ namespace orc {
 
   std::string columnEncodingKindToString(ColumnEncodingKind kind);
 
+  class StreamId {
+   public:
+    StreamId(uint64_t columnId, StreamKind streamKind)
+        : _columnId(columnId), _streamKind(streamKind) {}
+
+    size_t hash() const {
+      size_t h1 = std::hash<uint64_t>{}(_columnId);
+      size_t h2 = std::hash<int>{}(static_cast<int>(_streamKind));
+      return h1 ^ (h2 << 1);
+    }
+
+    bool operator==(const StreamId& other) const {
+      return _columnId == other._columnId && _streamKind == other._streamKind;
+    }
+
+    bool operator<(const StreamId& other) const {
+      if (_columnId != other._columnId) {
+        return _columnId < other._columnId;
+      }
+      return static_cast<int>(_streamKind) < static_cast<int>(other._streamKind);
+    }
+
+    std::string toString() const {
+      std::ostringstream oss;
+      oss << "[columnId=" << _columnId << ", streamKind=" << static_cast<int>(_streamKind) << "]";
+      return oss.str();
+    }
+
+    uint64_t columnId() const {
+      return _columnId;
+    }
+    StreamKind streamKind() const {
+      return _streamKind;
+    }
+
+   private:
+    uint64_t _columnId;
+    StreamKind _streamKind;
+  };
+
   class StripeInformation {
    public:
     virtual ~StripeInformation();
@@ -305,5 +345,14 @@ namespace orc {
   }
 
 }  // namespace orc
+
+namespace std {
+  template <>
+  struct hash<orc::StreamId> {
+    size_t operator()(const orc::StreamId& id) const {
+      return id.hash();
+    }
+  };
+}  // namespace std
 
 #endif
