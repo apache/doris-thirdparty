@@ -536,7 +536,6 @@ In your shell, move to this directory: `cd exports`.
 To build OpenBLAS for Android, you will need the following tools installed on your machine:
 
 - [The Android NDK](https://developer.android.com/ndk/)
-- Perl
 - Clang compiler on the build machine
 
 The next two sections below describe how to build with Clang for ARMV7 and
@@ -578,7 +577,9 @@ utility in the make command above, like so:
 AR=${NDK_BUNDLE_DIR}/toolchains/arm-linux-androideabi-4.9/prebuilt/darwin-x86_64/bin/arm-linux-androideabi-gcc-ar
 ```
 otherwise you may get a linker error complaining like `malformed archive header
-name at 8` when the native macOS `ar` command was invoked instead.
+name at 8` when the native macOS `ar` command was invoked instead. Note that
+with recent NDK versions, the AR tool may be named `llvm-ar` rather than what
+is assumed above.
 
  
 #### Building for ARMV8
@@ -608,12 +609,17 @@ Note: for NDK 23b, something as simple as:
 export PATH=/opt/android-ndk-r23b/toolchains/llvm/prebuilt/linux-x86_64/bin/:$PATH
 make HOSTCC=gcc CC=/opt/android-ndk-r23b/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang ONLY_CBLAS=1 TARGET=ARMV8
 ```
-appears to be sufficient on Linux.
+appears to be sufficient on Linux. On OSX, setting AR to the ar provided in the
+"bin" path of the NDK (probably `llvm-ar`) is also necessary.
 
 
 ??? note "Alternative build script for 3 architectures"
 
-    This script will build OpenBLAS for 3 architecture (`ARMV7`, `ARMV8`, `X86`) and install them to `/opt/OpenBLAS/lib`.
+    This script will build OpenBLAS for 3 architecture (`ARMV7`, `ARMV8`,
+    `X86`) and install them to `/opt/OpenBLAS/lib`. Of course you can also copy
+    only the section that is of interest to you - also notice that the `AR=`
+    line may need adapting to the name of the ar tool provided in your
+    `$TOOLCHAIN/bin` - for example `llvm-ar` in some recent NDK versions.
     It was tested on macOS with NDK version 21.3.6528147.
 
     ```bash
