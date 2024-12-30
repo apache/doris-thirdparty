@@ -158,7 +158,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        msystem: [UCRT64, MINGW32, CLANG64, CLANG32]
+        msystem: [UCRT64, MINGW32, CLANG64]
         idx: [int32, int64]
         build-type: [Release]
         include:
@@ -174,14 +174,6 @@ jobs:
             idx: int32
             target-prefix: mingw-w64-clang-x86_64
             fc-pkg: fc
-            # Compiling with Flang 16 seems to cause test errors on machines
-            # with AVX512 instructions. Revisit after MSYS2 distributes Flang 17.
-            no-avx512-flags: -DNO_AVX512=1
-          - msystem: CLANG32
-            idx: int32
-            target-prefix: mingw-w64-clang-i686
-            fc-pkg: cc
-            c-lapack-flags: -DC_LAPACK=ON
           - msystem: UCRT64
             idx: int64
             idx64-flags: -DBINARY=64 -DINTERFACE64=1
@@ -192,9 +184,6 @@ jobs:
             idx64-flags: -DBINARY=64 -DINTERFACE64=1
             target-prefix: mingw-w64-clang-x86_64
             fc-pkg: fc
-            # Compiling with Flang 16 seems to cause test errors on machines
-            # with AVX512 instructions. Revisit after MSYS2 distributes Flang 17.
-            no-avx512-flags: -DNO_AVX512=1
           - msystem: UCRT64
             idx: int32
             target-prefix: mingw-w64-ucrt-x86_64
@@ -202,8 +191,6 @@ jobs:
             build-type: None
         exclude:
           - msystem: MINGW32
-            idx: int64
-          - msystem: CLANG32
             idx: int64
 
     defaults:
@@ -280,8 +267,6 @@ jobs:
                 -DNUM_THREADS=64 \
                 -DTARGET=CORE2 \
                 ${{ matrix.idx64-flags }} \
-                ${{ matrix.c-lapack-flags }} \
-                ${{ matrix.no-avx512-flags }} \
                 -DCMAKE_C_COMPILER_LAUNCHER=ccache \
                 -DCMAKE_Fortran_COMPILER_LAUNCHER=ccache \
                 ..

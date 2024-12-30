@@ -5,14 +5,14 @@ This page documents those non-standard APIs.
 
 ## BLAS-like extensions
 
-| Routine       | Data Types    | Description     |
-| ------------- |:------------- | :---------------|
-| ?axpby        | s,d,c,z       | like axpy with a multiplier for y    |       
-| ?gemm3m       | c,z           | gemm3m            |
-| ?imatcopy     | s,d,c,z       | in-place transpositon/copying   |
-| ?omatcopy     | s,d,c,z       | out-of-place transpositon/copying    |
-| ?geadd        | s,d,c,z       | matrix add   |
-| ?gemmt        | s,d,c,z       | gemm but only a triangular part updated|
+| Routine       | Data Types    | Description                                     |
+| ------------- |:------------- | :-----------------------------------------------|
+| ?axpby        | s,d,c,z       | like `axpy` with a multiplier for `y`           |
+| ?gemm3m       | c,z           | `gemm3m`                                        |
+| ?imatcopy     | s,d,c,z       | in-place transposition/copying                  |
+| ?omatcopy     | s,d,c,z       | out-of-place transposition/copying              |
+| ?geadd        | s,d,c,z       | ATLAS-like matrix add `B = &alpha;*A+&beta;*B`  |
+| ?gemmt        | s,d,c,z       | `gemm` but only a triangular part updated       |
 
 
 ## bfloat16 functionality

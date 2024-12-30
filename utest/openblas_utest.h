@@ -36,7 +36,10 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdlib.h>
 #include "ctest.h"
-
+#if defined(_MSC_VER) && defined(__INTEL_CLANG_COMPILER)
+//#define LAPACK_COMPLEX_STRUCTURE
+#define NOCHANGE
+#endif
 #include <common.h>
 #include <math.h>
 

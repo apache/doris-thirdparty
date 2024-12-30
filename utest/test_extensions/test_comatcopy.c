@@ -92,7 +92,7 @@ static float check_comatcopy(char api, char order, char trans, blasint rows, bla
         ctranspose(m, n, alpha, data_comatcopy.a_test, lda, data_comatcopy.b_verify, ldb, conj);
     } 
     else {
-        ccopy(m, n, alpha, data_comatcopy.a_test, lda, data_comatcopy.b_verify, ldb, conj);
+        my_ccopy(m, n, alpha, data_comatcopy.a_test, lda, data_comatcopy.b_verify, ldb, conj);
     }
 
     if (api == 'F') {

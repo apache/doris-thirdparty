@@ -91,7 +91,7 @@ static double check_zimatcopy(char api, char order, char trans, blasint rows, bl
         ztranspose(m, n, alpha, data_zimatcopy.a_test, lda_src, data_zimatcopy.a_verify, lda_dst, conj);
     } 
     else {
-        zcopy(m, n, alpha, data_zimatcopy.a_test, lda_src, data_zimatcopy.a_verify, lda_dst, conj);
+        my_zcopy(m, n, alpha, data_zimatcopy.a_test, lda_src, data_zimatcopy.a_verify, lda_dst, conj);
     }
 
     if (api == 'F') {

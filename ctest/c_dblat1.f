@@ -47,7 +47,7 @@
          IF (PASS) THEN
             WRITE (NOUT,99998)
          ELSE
-            CALL ABORT
+            ERROR STOP
         END IF
    20 CONTINUE
 *
@@ -139,7 +139,7 @@
             CALL STEST1(SS,DS1(K),DS1(K),SFAC)
          ELSE
             WRITE (NOUT,*) ' Shouldn''t be here in CHECK0'
-            CALL ABORT
+            ERROR STOP
          END IF
    20 CONTINUE
    40 RETURN
@@ -232,7 +232,7 @@
                CALL ITEST1(IDAMAXTEST(N,SX,INCX),ITRUE2(NP1))
             ELSE
                WRITE (NOUT,*) ' Shouldn''t be here in CHECK1'
-               CALL ABORT
+               ERROR STOP
             END IF
    60    CONTINUE
    80 CONTINUE
@@ -387,7 +387,7 @@
                CALL STEST(LENY,SY,STY,SSIZE2(1,1),1.0D0)
             ELSE
                WRITE (NOUT,*) ' Shouldn''t be here in CHECK2'
-               CALL ABORT
+               ERROR STOP
             END IF
   100    CONTINUE
   120 CONTINUE
@@ -475,7 +475,7 @@
    70          CONTINUE      
                ELSE
                WRITE (NOUT,*) ' Shouldn''t be here in CHECK3'
-               CALL ABORT
+               ERROR STOP
             END IF
    40    CONTINUE
    60 CONTINUE
