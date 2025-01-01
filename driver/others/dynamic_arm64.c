@@ -310,7 +310,7 @@ static gotoblas_t *get_coretype(void) {
 			else cpulowperf++;
 			if (cpucap >=1000) part = prt;
 		} else if (implementer == 0x41 ){
-			if (prt >= 0xd4b) cpuhiperf++:
+			if (prt >= 0xd4b) cpuhiperf++;
 			else if (prt>= 0xd07) cpumidperf++;
 			else cpulowperf++;
 		} else cpulowperf++;
