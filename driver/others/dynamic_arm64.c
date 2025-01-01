@@ -273,10 +273,10 @@ static gotoblas_t *get_coretype(void) {
 #ifdef __linux
 	int i;
         int ncores=0;
-	int p,cpucap,cpulowperf=0,cpumidperf=0,cpuhiperf=0;
+	int prt,cpucap,cpulowperf=0,cpumidperf=0,cpuhiperf=0;
         FILE *infile;
-        char buffer[512], *p, *cpu_part = NULL, *cpu_implementer = NULL;
-        p = (char *) NULL ;
+        char buffer[512], *cpu_part = NULL, *cpu_implementer = NULL;
+
 	infile = fopen("/sys/devices/system/cpu/possible","r");
 	if (infile) {
 		(void)fgets(buffer, sizeof(buffer), infile);
@@ -297,7 +297,7 @@ static gotoblas_t *get_coretype(void) {
 		(void)fgets(buffer, sizeof(buffer), infile);
 		midr_el1=strtoul(buffer,NULL,16);
   		implementer = (midr_el1 >> 24) & 0xFF;
-  		p        = (midr_el1 >> 4)  & 0xFFF;
+  		prt        = (midr_el1 >> 4)  & 0xFFF;
 		fclose(infile);
 		sprintf(buffer,"/sys/devices/system/cpu/cpu%d/cpu_capability",i);
 		infile = fopen(buffer,"r");
@@ -308,14 +308,14 @@ static gotoblas_t *get_coretype(void) {
 			if (cpucap >= 1000) cpuhiperf++;
 			else if (cpucap >=500) cpumidperf++;
 			else cpulowperf++;
-			if (cpucap >=1000) part = p;
+			if (cpucap >=1000) part = prt;
 		} else if (implementer == 0x41 ){
-			if (p >= 0xd4b) cpuhiperf++:
-			else if (p>= 0xd07) cpumidperf++;
+			if (prt >= 0xd4b) cpuhiperf++:
+			else if (prt>= 0xd07) cpumidperf++;
 			else cpulowperf++;
 		} else cpulowperf++;
 	}
-	if (!part) part = p;
+	if (!part) part = prt;
 #else	
     snprintf(coremsg, 128, "Kernel lacks cpuid feature support. Auto detection of core type failed !!!\n");
     openblas_warning(1, coremsg);
@@ -323,7 +323,7 @@ static gotoblas_t *get_coretype(void) {
 #endif
   } else {
     get_cpu_ftr(MIDR_EL1, midr_el1);
-  }
+  
   /*
    * MIDR_EL1
    *
@@ -334,7 +334,7 @@ static gotoblas_t *get_coretype(void) {
    */
   implementer = (midr_el1 >> 24) & 0xFF;
   part        = (midr_el1 >> 4)  & 0xFFF;
-
+  }
   switch(implementer)
   {
     case 0x41: // ARM
