@@ -57,9 +57,11 @@ size_t length64=sizeof(value64);
 #define CPU_CORTEXA57     3
 #define CPU_CORTEXA72     4
 #define CPU_CORTEXA73     5
+#define CPU_CORTEXA76    23
 #define CPU_NEOVERSEN1    11
 #define CPU_NEOVERSEV1    16
 #define CPU_NEOVERSEN2    17
+#define CPU_NEOVERSEV2    24
 #define CPU_CORTEXX1      18
 #define CPU_CORTEXX2	  19
 #define CPU_CORTEXA510	  20
@@ -104,7 +106,9 @@ static char *cpuname[] = {
   "CORTEXX2",
   "CORTEXA510",
   "CORTEXA710",
-  "FT2000"
+  "FT2000",
+  "CORTEXA76",
+  "NEOVERSEV2"
 };
 
 static char *cpuname_lower[] = {
@@ -130,7 +134,9 @@ static char *cpuname_lower[] = {
   "cortexx2",
   "cortexa510",
   "cortexa710",
-  "ft2000"
+  "ft2000",
+  "cortexa76",
+  "neoversev2"
 };
 
 static int cpulowperf=0;
@@ -140,7 +146,7 @@ static int cpuhiperf=0;
 int get_feature(char *search)
 {
 
-#ifdef __linux
+#if defined( __linux ) || defined( __NetBSD__ )
 	FILE *infile;
   	char buffer[2048], *p,*t;
   	p = (char *) NULL ;
@@ -179,7 +185,7 @@ static int cpusort(const void *model1, const void *model2)
 int detect(void)
 {
 
-#ifdef __linux
+#if defined( __linux ) || defined( __NetBSD__ )
 	int n,i,ii;
 	int midr_el1;
 	int implementer;
@@ -243,8 +249,8 @@ int detect(void)
 			break;
 		} else {
 		        (void)fgets(buffer, sizeof(buffer), infile);
-        		midr_el1=strtoul(buffer,NULL,16);
-        		fclose(infile);
+			midr_el1=strtoul(buffer,NULL,16);
+			fclose(infile);
 			implementer = (midr_el1 >> 24) & 0xFF;
 			cpucores[i] = (midr_el1 >> 4)  & 0xFFF;
 		sprintf(buffer,"/sys/devices/system/cpu/cpu%d/cpu_capacity",i);
@@ -304,6 +310,10 @@ int detect(void)
 	return CPU_CORTEXX2;
       else if (strstr(cpu_part, "0xd4e")) //X3
 	return CPU_CORTEXX2;
+      else if (strstr(cpu_part, "0xd4f")) //NVIDIA Grace et al.
+        return CPU_NEOVERSEV2;
+      else if (strstr(cpu_part, "0xd0b")) 
+       return CPU_CORTEXA76;
     }
     // Qualcomm
     else if (strstr(cpu_implementer, "0x51") && strstr(cpu_part, "0xc00"))
@@ -361,9 +371,20 @@ int detect(void)
 	}
 #else
 #ifdef __APPLE__
+	sysctlbyname("hw.ncpu",&value64,&length64,NULL,0);
+	cpulowperf=value64;
+	sysctlbyname("hw.nperflevels",&value64,&length64,NULL,0);
+	if (value64 > 1) {
+	sysctlbyname("hw.perflevel0.cpusperl",&value64,&length64,NULL,0);
+	cpuhiperf=value64;
+	sysctlbyname("hw.perflevel1.cpusperl",&value64,&length64,NULL,0);
+	cpulowperf=value64;
+	}
 	sysctlbyname("hw.cpufamily",&value64,&length64,NULL,0);
 	if (value64 ==131287967|| value64 == 458787763 ) return CPU_VORTEX; //A12/M1
 	if (value64 == 3660830781) return CPU_VORTEX; //A15/M2
+        if (value64 == 2271604202) return CPU_VORTEX; //A16/M3
+        if (value64 == 1867590060) return CPU_VORTEX; //M4
 #endif
 	return CPU_ARMV8;	
 #endif
@@ -396,7 +417,7 @@ void get_cpucount(void)
 {
 int n=0;
 
-#ifdef __linux
+#if defined( __linux ) || defined( __NetBSD__ )
 	FILE *infile;
   	char buffer[2048], *p,*t;
   	p = (char *) NULL ;
@@ -423,6 +444,12 @@ int n=0;
 #ifdef __APPLE__
 	sysctlbyname("hw.physicalcpu_max",&value,&length,NULL,0);
 	printf("#define NUM_CORES %d\n",value);
+	if (cpulowperf >0)
+	printf("#define NUM_CORES_LP %d\n",cpulowperf);
+	if (cpumidperf >0)
+	printf("#define NUM_CORES_MP %d\n",cpumidperf);
+	if (cpuhiperf >0)
+	printf("#define NUM_CORES_HP %d\n",cpuhiperf);
 #endif	
 }
 
@@ -489,6 +516,8 @@ void get_cpuconfig(void)
 		break;
 
 	    case CPU_NEOVERSEV1:
+                printf("#define HAVE_SVE 1\n");
+            case CPU_CORTEXA76:
                 printf("#define %s\n", cpuname[d]);
                 printf("#define L1_CODE_SIZE 65536\n");
                 printf("#define L1_CODE_LINESIZE 64\n");
@@ -516,12 +545,32 @@ void get_cpuconfig(void)
                 printf("#define L2_ASSOCIATIVE 8\n");
                 printf("#define DTB_DEFAULT_ENTRIES 48\n");
                 printf("#define DTB_SIZE 4096\n");
+                printf("#define HAVE_SVE 1\n");
                 break;
+       case CPU_NEOVERSEV2:
+                printf("#define ARMV9\n");
+                printf("#define HAVE_SVE 1\n");
+                 printf("#define %s\n", cpuname[d]);
+                 printf("#define L1_CODE_SIZE 65536\n");
+                 printf("#define L1_CODE_LINESIZE 64\n");
+                 printf("#define L1_CODE_ASSOCIATIVE 4\n");
+                 printf("#define L1_DATA_SIZE 65536\n");
+                 printf("#define L1_DATA_LINESIZE 64\n");
+                 printf("#define L1_DATA_ASSOCIATIVE 4\n");
+                 printf("#define L2_SIZE 1048576\n");
+                 printf("#define L2_LINESIZE 64\n");
+                 printf("#define L2_ASSOCIATIVE 8\n");
+                                                                // L1 Data TLB = 48 entries
+                                                                // L2 Data TLB = 2048 entries
+                 printf("#define DTB_DEFAULT_ENTRIES 48\n");
+                 printf("#define DTB_SIZE 4096\n");  // Set to 4096 for symmetry with other configs.
+		break;
 	    case CPU_CORTEXA510:
 	    case CPU_CORTEXA710:
 	    case CPU_CORTEXX1:
 	    case CPU_CORTEXX2:
 		printf("#define ARMV9\n");
+                printf("#define HAVE_SVE 1\n");
                 printf("#define %s\n", cpuname[d]);
                 printf("#define L1_CODE_SIZE 65536\n");
                 printf("#define L1_CODE_LINESIZE 64\n");
@@ -638,6 +687,7 @@ void get_cpuconfig(void)
 		break;
 	    case CPU_A64FX:
 		printf("#define A64FX\n");
+                printf("#define HAVE_SVE 1\n");
     		printf("#define L1_CODE_SIZE 65535\n");
     		printf("#define L1_DATA_SIZE 65535\n");
     		printf("#define L1_DATA_LINESIZE 256\n");
@@ -670,7 +720,7 @@ void get_libname(void)
 void get_features(void)
 {
 
-#ifdef __linux
+#if defined( __linux ) || defined( __NetBSD__ )
 	FILE *infile;
   	char buffer[2048], *p,*t;
   	p = (char *) NULL ;
