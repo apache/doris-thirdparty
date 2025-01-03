@@ -690,6 +690,29 @@ make TARGET=ARMV8 DYNAMIC_ARCH=1 NUM_THREADS=32 HOSTCC=clang NOFORTRAN=1
 Adjust `MIN_IOS_VERSION` as necessary for your installation. E.g., change the version number
 to the minimum iOS version you want to target and execute this file to build the library.
 
+### HarmonyOS
+
+For this target you will need the cross-compiler toolchain package by Huawei, which contains solutions for both Windows and Linux. Only the Linux-based
+toolchain has been tested so far, but the following instructions may apply similarly to Windows:
+
+Download https://repo.huaweicloud.com/harmonyos/os/4.1.1-Release/ohos-sdk-windows_linux-public.tar.gz (or whatever newer version may be available in the future). Use tar xvf ohos-sdk-windows_linux_public.tar.gz to unpack it somewhere on your system. This will create a folder named "ohos-sdk" with subfolders "linux" and "windows". In the linux one you will find a ZIP archive named "native-linux-x64-4.1.7.8-Release.zip" - you need to unzip this where you want to
+install the cross-compiler, for example in /opt/ohos-sdk.
+
+In the directory where you unpacked OpenBLAS, create a build directory for cmake, and change into it :
+```
+mkdir build
+cd build
+```
+Use the version of `cmake` that came with the SDK, and specify the location of its toolchain file as a cmake option. Also set the build target for OpenBLAS to ARMV8 and specify NOFORTRAN=1 (at least as of version 4.1.1, the SDK contains no Fortran compiler):
+```
+/opt/ohos-sdk/linux/native/build-tools/cmake/bin/cmake -DCMAKE_TOOLCHAIN_FILE=/opt/ohos-sdk/linux/native/build/cmake/ohos.toolchain.cmake \
+      -DOHOS_ARCH="arm64-v8a" -DTARGET=ARMV8 -DNOFORTRAN=1 ..
+```
+Additional other OpenBLAS build options like USE_OPENMP=1 or DYNAMIC_ARCH=1 will probably work too.
+Finally do the build:
+```
+/opt/ohos-sdk/linux/native/build-tools/cmake/bin/cmake --build .
+```
 
 ### MIPS
 
