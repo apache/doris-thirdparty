@@ -79,6 +79,13 @@ if they are not set in the environment.
 - `CC`: `TARGET` C compiler used for compilation (can be cross-toolchains).
 - `FC`: `TARGET` Fortran compiler used for compilation (can be cross-toolchains,
   set `NOFORTRAN=1` if the used cross-toolchain has no Fortran compiler).
+- `COMMON_OPT`: flags to add to all invocations of the target C and Fortran compilers
+  (overrides `CFLAGS`/`FFLAGS` - prefer using `COMMON_OPT`)
+- `CCOMMON_OPT`: flags to add to all invocations of the target C compiler
+  (overrides `CFLAGS`)
+- `FCOMMON_OPT`: flags to add to all invocations of the target Fortran compiler
+  (overrides `FFLAGS`)
+- `LDFLAGS`: flags to add to all target linker invocations
 - `AR`, `AS`, `LD`, `RANLIB`: `TARGET` toolchain helpers used for compilation
   (can be cross-toolchains).
 - `HOSTCC`: compiler of build machine, needed to create proper config files for
@@ -92,10 +99,12 @@ if they are not set in the environment.
 
 - `BINARY`: whether to build a 32-bit or 64-bit library (default is `64`, set
   to `32` on a 32-bit platform).
-- `BUILD_SHARED`: create a shared library
-- `BUILD_STATIC`: create a static library
 - `INTERFACE64`: build with 64-bit (ILP64) integer representations to support
   large array index values (incompatible with the standard 32-bit integer (LP64) API).
+
+Note that both shared and static libraries will be built with the Make-based
+build. The CMake build provides `BUILD_SHARED_LIBS`/`BUILD_STATIC_LIBS`
+variables to allow building only one of the two.
 
 #### Data type options
 
@@ -105,9 +114,8 @@ if they are not set in the environment.
 - `BUILD_COMPLEX`: build the single-precision complex functions
 - `BUILD_COMPLEX16`: build the double-precision complex functions
 - `BUILD_BFLOAT16`: build the "half precision brainfloat" real functions 
-- `EXPRECISION`: obsolete option to use float80 of SSE on BSD-like systems
-- `QUAD_PRECISION`: enable support for IEEE quad precision (largely
-  unimplemented leftover from GotoBLAS, do not use)
+- `EXPRECISION`: (do not use, this is a work in progress) option to use `long
+  double` functions
 
 By default, the single- and double-precision real and complex floating-point
 functions are included in the build, while the half- and extended-precision
