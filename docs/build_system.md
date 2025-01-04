@@ -151,3 +151,17 @@ same time, then only one of them will be able to make progress while all the
 rest of them spin-wait for the one available buffer. Setting `NUM_PARALLEL` to
 the upper bound on the number of OpenMP runtimes that you can have in a process
 ensures that there are a sufficient number of buffer sets available.
+
+#### Library and symbol name options
+
+- `FIXED_LIBNAME`: if set to `1`, uses a non-versioned name for the library and
+  no symbolic linking to variant names (default is `0`)
+- `LIBNAMEPREFIX`: prefix that, if given, will be inserted in the library name
+  before `openblas` (e.g., `xxx` will result in `libxxxopenblas.so`)
+- `LIBNAMESUFFIX`: suffix that, if given, will be inserted in the library name
+  after `openblas`, separated by an underscore (e.g., `yyy` will result in
+  `libopenblas_yyy.so`)
+- `SYMBOLPREFIX`: prefix that, if given, will be added to all symbol names
+  *and* to the library name
+- `SYMBOLSUFFIX`: suffix that, if given, will be added to all symbol names
+  *and* to the library name
