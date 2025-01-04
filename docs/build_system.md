@@ -6,8 +6,6 @@
     and is tested, however there may be small differences between the Make and
     CMake builds.
 
-!!! warning
-    This page is made by someone who is not the developer and should not be considered as an official documentation of the build system. For getting the full picture, it is best to read the Makefiles and understand them yourself.
 
 ## Makefile dependency graph
 
