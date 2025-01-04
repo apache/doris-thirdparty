@@ -99,7 +99,7 @@ Here is the result of the DGEMM subroutine's performance on Intel Core i5-2500K 
 
 ### <a name="MSVC"></a>How can I call an OpenBLAS function in Microsoft Visual Studio?
 
-Please read [this page](install.md#visual-studio).
+Please read [this page](install.md#visual-studio-native-windows-abi).
 
 ### <a name="C99_complex_number"></a>How can I use CBLAS and LAPACKE without C99 complex number support (e.g. in Visual Studio)?
 
