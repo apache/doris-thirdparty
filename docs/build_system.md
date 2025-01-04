@@ -60,6 +60,8 @@ Most of the variables are detected automatically in
 [Makefile.prebuild](https://github.com/xianyi/OpenBLAS/blob/develop/Makefile.prebuild),
 if they are not set in the environment.
 
+The most commonly used variables are documented below. There are more options
+though - please read the linked Makefiles if you want to see all variables.
 
 ### CPU related
 
@@ -101,10 +103,8 @@ if they are not set in the environment.
   to `32` on a 32-bit platform).
 - `INTERFACE64`: build with 64-bit (ILP64) integer representations to support
   large array index values (incompatible with the standard 32-bit integer (LP64) API).
-
-Note that both shared and static libraries will be built with the Make-based
-build. The CMake build provides `BUILD_SHARED_LIBS`/`BUILD_STATIC_LIBS`
-variables to allow building only one of the two.
+- `NO_STATIC`: if set to `1`, don't build a static library (default is `0`)
+- `NO_SHARED`: if set to `1`, don't build a shared library (default is `0`)
 
 #### Data type options
 
@@ -165,3 +165,18 @@ ensures that there are a sufficient number of buffer sets available.
   *and* to the library name
 - `SYMBOLSUFFIX`: suffix that, if given, will be added to all symbol names
   *and* to the library name
+
+#### BLAS and LAPACK options
+
+By default, the Fortran and C interfaces to BLAS and LAPACK are built,
+including deprecated functions, while
+[ReLAPACK](https://github.com/HPAC/ReLAPACK) is not.
+
+- `NO_CBLAS`: if set to `1`, don't build the CBLAS interface (default is `0`)
+- `ONLY_CBLAS`: if set to `1`, only build the CBLAS interface (default is `0`)
+- `NO_LAPACK`: if set to `1`, don't build LAPACK (default is `0`)
+- `NO_LAPACKE`: if set to `1`, don't build the LAPACKE interface (default is `0`)
+- `BUILD_LAPACK_DEPRECATED`: if set to `0`, don't build deprecated LAPACK
+  functions (default is `1`)
+- `BUILD_RELAPACK`: if set to `1`, build Recursive LAPACK on top of LAPACK
+  (default is `0`)
