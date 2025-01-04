@@ -9,46 +9,33 @@
 !!! warning
     This page is made by someone who is not the developer and should not be considered as an official documentation of the build system. For getting the full picture, it is best to read the Makefiles and understand them yourself.
 
-## Makefile dep graph
+## Makefile dependency graph
 
+<!---
+An easy way to update this diagram is to copy it into https://mermaid.live
+and edit it interactively.
+-->
+
+```mermaid
+flowchart LR
+    A[Makefile] -->|included by many of the Makefiles in the subdirectories!| B(Makefile.system)
+        B -->|triggered, not included, once by Makefile.system, and runs before any of the actual library code is built. builds and runs the 'getarch' tool for cpu identification, runs the compiler detection scripts c_check/f_check| C{Makefile.prebuild}
+            C -->|either this or Makefile_kernel.conf is generated| D[Makefile.conf]
+            C -->|temporary Makefile.conf during DYNAMIC_ARCH builds| E[Makefile_kernel.conf]
+        B -->|defaults for build options that can be given on the make command line| F[Makefile.rule]
+        B -->|architecture-specific compiler options and OpenBLAS buffer size values| G[Makefile.$ARCH]
+    A --> exports
+    A -->|directories: test, ctest, utest, cpp_thread_test| H(test directories)
+    A --> I($BLASDIRS)
+        I --> interface
+        I --> driver/level2
+        I --> driver/level3
+        I --> driver/others
+    A -->|for each target in DYNAMIC_CORE if DYNAMIC_ARCH=1| kernel
+    A -->|subdirs: timing, testing, testing/EIG, testing/LIN| J($NETLIB_LAPACK_DIR)
+    A --> relapack
 ```
-Makefile                                                        
-|                                                               
-|-----  Makefile.system # !!! this is included by many of the Makefiles in the subdirectories !!!
-|       |
-|       |=====  Makefile.prebuild # This is triggered (not included) once by Makefile.system 
-|       |       |                 # and runs before any of the actual library code is built.
-|       |       |                 # (builds and runs the "getarch" tool for cpu identification,
-|       |       |                 # runs the compiler detection scripts c_check and f_check) 
-|       |       |
-|       |       -----  (Makefile.conf) [ either this or Makefile_kernel.conf is generated ] 
-|       |       |                            { Makefile.system#L243 }
-|       |       -----  (Makefile_kernel.conf) [ temporary Makefile.conf during DYNAMIC_ARCH builds ]
-|       |
-|       |-----  Makefile.rule # defaults for build options that can be given on the make command line
-|       |
-|       |-----  Makefile.$(ARCH) # architecture-specific compiler options and OpenBLAS buffer size values
-|
-|~~~~~ exports/
-|
-|~~~~~ test/
-|
-|~~~~~ utest/  
-|
-|~~~~~ ctest/
-|
-|~~~~~ cpp_thread_test/
-|
-|~~~~~ kernel/
-|
-|~~~~~ ${SUBDIRS}
-|
-|~~~~~ ${BLASDIRS}
-|
-|~~~~~ ${NETLIB_LAPACK_DIR}{,/timing,/testing/{EIG,LIN}}
-|
-|~~~~~ relapack/
-```
+
 
 ## Important Variables
 
