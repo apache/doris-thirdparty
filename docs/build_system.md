@@ -1,7 +1,10 @@
-This page describes the Make-based build, which is the default/authoritative
-build method. Note that the OpenBLAS repository also supports building with
-CMake (not described here) - that generally works and is tested, however there
-may be small differences between the Make and CMake builds.
+!!! info "Supported build systems"
+
+    This page describes the Make-based build, which is the
+    default/authoritative build method. Note that the OpenBLAS repository also
+    supports building with CMake (not described here) - that generally works
+    and is tested, however there may be small differences between the Make and
+    CMake builds.
 
 !!! warning
     This page is made by someone who is not the developer and should not be considered as an official documentation of the build system. For getting the full picture, it is best to read the Makefiles and understand them yourself.
@@ -49,56 +52,78 @@ Makefile
 
 ## Important Variables
 
-Most of the tunable variables are found in [Makefile.rule](https://github.com/xianyi/OpenBLAS/blob/develop/Makefile.rule), along with their detailed descriptions.<br/>
-Most of the variables are detected automatically in [Makefile.prebuild](https://github.com/xianyi/OpenBLAS/blob/develop/Makefile.prebuild), if they are not set in the environment.
+Most of the tunable variables are found in
+[Makefile.rule](https://github.com/xianyi/OpenBLAS/blob/develop/Makefile.rule),
+along with their detailed descriptions.
+
+Most of the variables are detected automatically in
+[Makefile.prebuild](https://github.com/xianyi/OpenBLAS/blob/develop/Makefile.prebuild),
+if they are not set in the environment.
+
 
 ### CPU related
-```
-ARCH         - Target architecture (eg. x86_64)
-TARGET       - Target CPU architecture, in case of DYNAMIC_ARCH=1 means library will not be usable on less capable CPUs
-TARGET_CORE  - TARGET_CORE will override TARGET internally during each cpu-specific cycle of the build for DYNAMIC_ARCH
-DYNAMIC_ARCH - For building library for multiple TARGETs (does not lose any optimizations, but increases library size)
-DYNAMIC_LIST - optional user-provided subset of the DYNAMIC_CORE list in Makefile.system
-```
+
+- `ARCH`: target architecture (e.g., `x86-64`).
+- `DYNAMIC_ARCH`: For building library for multiple `TARGET`s (does not lose any
+  optimizations, but increases library size).
+- `DYNAMIC_LIST`: optional user-provided subset of the `DYNAMIC_CORE` list in
+   [Makefile.system](https://github.com/xianyi/OpenBLAS/blob/develop/Makefile.system).
+- `TARGET`: target CPU architecture. In case of `DYNAMIC_ARCH=1`, it means that
+  the library will not be usable on less capable CPUs.
+- `TARGET_CORE`: override `TARGET` internally during each CPU-specific cycle of
+  the build for `DYNAMIC_ARCH`.
+
 
 ### Toolchain related
-```
-CC                 - TARGET C compiler used for compilation (can be cross-toolchains)
-FC                 - TARGET Fortran compiler used for compilation (can be cross-toolchains, set NOFORTRAN=1 if used cross-toolchain has no fortran compiler)
-AR, AS, LD, RANLIB - TARGET toolchain helpers used for compilation (can be cross-toolchains)
 
-HOSTCC             - compiler of build machine, needed to create proper config files for target architecture
-HOST_CFLAGS        - flags for build machine compiler
-```
+- `CC`: `TARGET` C compiler used for compilation (can be cross-toolchains).
+- `FC`: `TARGET` Fortran compiler used for compilation (can be cross-toolchains,
+  set `NOFORTRAN=1` if the used cross-toolchain has no Fortran compiler).
+- `AR`, `AS`, `LD`, `RANLIB`: `TARGET` toolchain helpers used for compilation
+  (can be cross-toolchains).
+- `HOSTCC`: compiler of build machine, needed to create proper config files for
+  the target architecture.
+- `HOST_CFLAGS`: flags for the build machine compiler.
+
 
 ### Library related
-```
-BINARY          - 32/64 bit library
 
-BUILD_SHARED    - Create shared library
-BUILD_STATIC    - Create static library
+#### Library kind and bitness options
 
-QUAD_PRECISION  - enable support for IEEE quad precision [ largely unimplemented leftover from GotoBLAS, do not use ]
-EXPRECISION     - Obsolete option to use float80 of SSE on BSD-like systems
-INTERFACE64     - Build with 64bit integer representations to support large array index values [ incompatible with standard API ]
+- `BINARY`: whether to build a 32-bit or 64-bit library (default is `64`, set
+  to `32` on a 32-bit platform).
+- `BUILD_SHARED`: create a shared library
+- `BUILD_STATIC`: create a static library
+- `INTERFACE64`: build with 64-bit (ILP64) integer representations to support
+  large array index values (incompatible with the standard 32-bit integer (LP64) API).
 
-BUILD_SINGLE    - build the single-precision real functions of BLAS [and optionally LAPACK] 
-BUILD_DOUBLE    - build the double-precision real functions
-BUILD_COMPLEX   - build the single-precision complex functions
-BUILD_COMPLEX16 - build the double-precision complex functions
-(all four types are included in the build by default when none was specifically selected)
+#### Data type options
 
-BUILD_BFLOAT16  - build the "half precision brainfloat" real functions 
+- `BUILD_SINGLE`: build the single-precision real functions of BLAS and (if
+  it's built) LAPACK
+- `BUILD_DOUBLE`: build the double-precision real functions
+- `BUILD_COMPLEX`: build the single-precision complex functions
+- `BUILD_COMPLEX16`: build the double-precision complex functions
+- `BUILD_BFLOAT16`: build the "half precision brainfloat" real functions 
+- `EXPRECISION`: obsolete option to use float80 of SSE on BSD-like systems
+- `QUAD_PRECISION`: enable support for IEEE quad precision (largely
+  unimplemented leftover from GotoBLAS, do not use)
+
+By default, the single- and double-precision real and complex floating-point
+functions are included in the build, while the half- and extended-precision
+functions are not.
  
-USE_THREAD      - Use a multithreading backend (default to pthread)
-USE_LOCKING     - implement locking for thread safety even when USE_THREAD is not set (so that the singlethreaded library can
-                  safely be called from multithreaded programs)
-USE_OPENMP      - Use OpenMP as multithreading backend
-NUM_THREADS     - define this to the maximum number of parallel threads you expect to need (defaults to the number of cores in the build cpu)
-NUM_PARALLEL    - define this to the number of OpenMP instances that your code may use for parallel calls into OpenBLAS (default 1,see below)
+#### Threading options
 
-```
-
+- `USE_THREAD`: Use a multithreading backend (defaults to `pthreads`).
+- `USE_LOCKING`: implement locking for thread safety even when `USE_THREAD` is
+  not set (so that the single-threaded library can safely be called from
+  multithreaded programs).
+- `USE_OPENMP`: Use OpenMP as multithreading backend
+- `NUM_THREADS`: define this to the maximum number of parallel threads you
+  expect to need (defaults to the number of cores in the build CPU).
+- `NUM_PARALLEL`: define this to the number of OpenMP instances that your code
+  may use for parallel calls into OpenBLAS (the default is `1`, see below).
 
 OpenBLAS uses a fixed set of memory buffers internally, used for communicating
 and compiling partial results from individual threads. For efficiency, the
