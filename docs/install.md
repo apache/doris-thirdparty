@@ -505,7 +505,7 @@ In your shell, move to this directory: `cd exports`.
     incompatibility in the C ABI would be a bug).
 
     The import libraries of MSVC have the suffix `.lib`. They are generated
-    from a `.def` file using MSVC's `lib.exe`. See [the MSVC instructions](use_visual_studio.md#generate-import-library-before-0210-version).
+    from a `.def` file using MSVC's `lib.exe`.
 
 === "MinGW"
 
