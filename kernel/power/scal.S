@@ -59,7 +59,7 @@
 #if !defined(__64BIT__) && defined(DOUBLE)
 #define X r8
 #define INCX r9
-#define FLAG r13
+#define FLAG r11
 #else
 #define X r7
 #define INCX r8
@@ -91,7 +91,7 @@
 	fcmpu	cr0, FZERO, ALPHA
 	bne-	cr0, LL(A1I1)
 
-	ld      FLAG,    48+64+8(SP)
+	LDLONG  FLAG,    48+64+8(SP)
 	cmpwi   cr0, FLAG, 1
 	beq-   cr0, LL(A1I1)
 
