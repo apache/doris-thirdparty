@@ -89,6 +89,3 @@ DROTKERNEL   = ../arm/rot.c
 CROTKERNEL   = ../arm/zrot.c
 ZROTKERNEL   = ../arm/zrot.c
 endif
-
-SSCALKERNEL = ../arm/scal.c
-DSCALKERNEL = ../arm/scal.c
