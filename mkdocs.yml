@@ -51,6 +51,7 @@ nav:
   - extensions.md
   - developers.md
   - build_system.md
+  - runtime_variables.md
   - distributing.md
   - ci.md
   - about.md
