@@ -443,28 +443,43 @@ A fully functional native OpenBLAS for WoA that can be built as both a static an
 (Note that you can use the free "Visual Studio 2022 Community Edition" for this task. In principle it would be possible to build with VisualStudio alone, but using
 the LLVM toolchain enables native compilation of the Fortran sources of LAPACK and of all the optimized assembly files, which VisualStudio cannot handle on its own)
 
-1. Clone OpenBLAS to your local machine and checkout to latest release of OpenBLAS (unless you want to build the latest development snapshot - here we are using  the 0.3.28 release as the example, of course this exact version may be outdated by the time you read this) 
+1. Clone OpenBLAS to your local machine and checkout to latest release of
+   OpenBLAS (unless you want to build the latest development snapshot - here we
+   are using  the 0.3.28 release as the example, of course this exact version
+   may be outdated by the time you read this)
   
-      ```cmd
-      git clone https://github.com/OpenMathLib/OpenBLAS.git
-      cd OpenBLAS
-      git checkout v0.3.28
-      ```
+       ```cmd
+       git clone https://github.com/OpenMathLib/OpenBLAS.git
+       cd OpenBLAS
+       git checkout v0.3.28
+       ```
   
 2. Install Latest LLVM toolchain for WoA:
 
-Download the Latest LLVM toolchain for WoA from [the Release page](https://github.com/llvm/llvm-project/releases/tag/llvmorg-19.1.5). At the time of writing, this     is version 19.1.5 - be sure to select the latest release for which you can find a precompiled package whose name ends in "-woa64.exe" (precompiled packages
-usually lag a week or two behind their corresponding source release).  
-Make sure to enable the option “Add LLVM to the system PATH for all the users”
-Note: Make sure that the path of LLVM toolchain is at the top of Environment Variables section to avoid conflicts between the set of compilers available in the system path
+       Download the Latest LLVM toolchain for WoA from [the Release
+       page](https://github.com/llvm/llvm-project/releases/tag/llvmorg-19.1.5). At
+       the time of writing, this is version 19.1.5 - be sure to select the
+       latest release for which you can find a precompiled package whose name ends
+       in "-woa64.exe" (precompiled packages usually lag a week or two behind their
+       corresponding source release).  Make sure to enable the option
+       *“Add LLVM to the system PATH for all the users”*.
+
+       Note: Make sure that the path of LLVM toolchain is at the top of Environment
+       Variables section to avoid conflicts between the set of compilers available
+       in the system path
 
 3. Launch the Native Command Prompt for Windows ARM64:
 
-From the start menu search for “ARM64 Native Tools Command Prompt for Visual Studio 2022”
-Alternatively open command prompt, run the following command to activate the environment:
-"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsarm64.bat"
+       From the start menu search for *"ARM64 Native Tools Command Prompt for Visual
+       Studio 2022"*. Alternatively open command prompt, run the following command to
+       activate the environment:
 
-Navigate to the OpenBLAS source code directory and start building OpenBLAS by invoking Ninja:
+       ```cmd
+       C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsarm64.bat
+       ```
+
+4. Navigate to the OpenBLAS source code directory and start building OpenBLAS
+   by invoking Ninja:
    
        ```cmd
        cd OpenBLAS
@@ -476,14 +491,18 @@ Navigate to the OpenBLAS source code directory and start building OpenBLAS by in
        ninja -j16
        ```
        
-Note: You might want to include additional options in the cmake command here. For example, the default configuration only generates a static.lib version of the library. If you prefer a DLL, you can add -DBUILD_SHARED_LIBS=ON.
+       Note: You might want to include additional options in the cmake command
+       here. For example, the default configuration only generates a
+       `static.lib` version of the library. If you prefer a DLL, you can add
+       `-DBUILD_SHARED_LIBS=ON`.
 
-Note that it is also possible to use the same setup to build OpenBLAS with Make, if you prepare Makefiles over the CMake build for some reason:
+       Note that it is also possible to use the same setup to build OpenBLAS
+       with Make, if you prefer Makefiles over the CMake build for some
+       reason:
 
-    ```cmd
-    $ make CC=clang-cl FC=flang-new AR="llvm-ar" TARGET=ARMV8 ARCH=arm64 RANLIB="llvm-ranlib" MAKE=make
-    ```
-
+       ```cmd
+       $ make CC=clang-cl FC=flang-new AR="llvm-ar" TARGET=ARMV8 ARCH=arm64 RANLIB="llvm-ranlib" MAKE=make
+       ```
 
 
 #### Generating an import library
