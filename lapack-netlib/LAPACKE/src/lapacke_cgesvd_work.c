@@ -74,10 +74,12 @@ lapack_int LAPACKE_cgesvd_work( int matrix_layout, char jobu, char jobvt,
             LAPACKE_xerbla( "LAPACKE_cgesvd_work", info );
             return info;
         }
-        if( ldvt < ncols_vt ) {
+	if( LAPACKE_lsame( jobvt, 'a' ) || LAPACKE_lsame( jobvt, 's' ) ) {
+	if( ldvt < ncols_vt ) {
             info = -12;
             LAPACKE_xerbla( "LAPACKE_cgesvd_work", info );
             return info;
+        }
         }
         /* Query optimal working array(s) size if requested */
         if( lwork == -1 ) {
