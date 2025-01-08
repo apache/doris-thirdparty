@@ -94,7 +94,7 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1,
   } else {
 
 
-    for (j=n;j>0;j++) {
+    for (j=n;j>0;j--) {
       c_offset1 = c_offset;
       c_offset += ldc;
 
