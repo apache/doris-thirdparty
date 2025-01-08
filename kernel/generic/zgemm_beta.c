@@ -93,8 +93,8 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1,
 
   } else {
 
-    j = n;
-    do {
+
+    for (j=n;j>0;j++) {
       c_offset1 = c_offset;
       c_offset += ldc;
 
@@ -151,8 +151,7 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1,
 	  i --;
 	} while (i > 0);
       }
-      j --;
-    } while (j > 0);
+    }
   }
   return 0;
 }
