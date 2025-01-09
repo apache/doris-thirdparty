@@ -125,9 +125,9 @@ task:
   - make USE_OPENMP=1
 
 FreeBSD_task:
-  name: FreeBSD-gcc12
+  name: FreeBSD-gcc
   freebsd_instance:
-    image_family: freebsd-13-3
+    image_family: freebsd-14-1
   install_script:
   - pkg update -f && pkg upgrade -y && pkg install -y gmake gcc
   compile_script:
@@ -136,9 +136,9 @@ FreeBSD_task:
 
 
 FreeBSD_task:
-  name: freebsd-gcc12-ilp64
+  name: freebsd-gcc-ilp64
   freebsd_instance:
-    image_family: freebsd-13-3
+    image_family: freebsd-14-1
   install_script:
   - pkg update -f && pkg upgrade -y && pkg install -y gmake gcc
   compile_script:
@@ -148,7 +148,7 @@ FreeBSD_task:
 FreeBSD_task:
   name: FreeBSD-clang-openmp
   freebsd_instance:
-    image_family: freebsd-13-3
+    image_family: freebsd-14-1
   install_script:
   - pkg update -f && pkg upgrade -y && pkg install -y gmake gcc 
   - ln -s /usr/local/lib/gcc13/libgfortran.so.5.0.0 /usr/lib/libgfortran.so
