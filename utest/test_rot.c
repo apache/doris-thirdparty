@@ -53,6 +53,23 @@ CTEST(rot,drot_inc_0)
 		ASSERT_DBL_NEAR_TOL(y2[i], y1[i], DOUBLE_EPS);
 	}
 }
+CTEST(rot,drot_inc_1)
+{
+	blasint i=0;
+	blasint N=4,incX=1,incY=1;
+	double c=1.0,s=1.0;
+	double x1[]={1.0,3.0,5.0,7.0};
+	double y1[]={2.0,4.0,6.0,8.0};
+	double x2[]={3.0,7.0,11.0,15.0};
+	double y2[]={1.0,1.0,1.0,1.0};
+
+	BLASFUNC(drot)(&N,x1,&incX,y1,&incY,&c,&s);
+
+	for(i=0; i<N; i++){
+		ASSERT_DBL_NEAR_TOL(x2[i], x1[i], DOUBLE_EPS);
+		ASSERT_DBL_NEAR_TOL(y2[i], y1[i], DOUBLE_EPS);
+	}
+}
 #endif
 
 #ifdef BUILD_COMPLEX16
@@ -89,6 +106,23 @@ CTEST(rot,srot_inc_0)
 	float y2[]={ 0.03906250000000,4.0,6.0,8.0};
 
 	//OpenBLAS
+	BLASFUNC(srot)(&N,x1,&incX,y1,&incY,&c,&s);
+
+	for(i=0; i<N; i++){
+		ASSERT_DBL_NEAR_TOL(x2[i], x1[i], SINGLE_EPS);
+		ASSERT_DBL_NEAR_TOL(y2[i], y1[i], SINGLE_EPS);
+	}
+}
+CTEST(rot,srot_inc_1)
+{
+	blasint i=0;
+	blasint N=4,incX=1,incY=1;
+	float c=1.0,s=1.0;
+	float x1[]={1.0,3.0,5.0,7.0};
+	float y1[]={2.0,4.0,6.0,8.0};
+	float x2[]={3.0,7.0,11.0,15.0};
+	float y2[]={1.0,1.0,1.0,1.0};
+
 	BLASFUNC(srot)(&N,x1,&incX,y1,&incY,&c,&s);
 
 	for(i=0; i<N; i++){
