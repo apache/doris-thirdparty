@@ -51,8 +51,8 @@ lapack_int LAPACKE_ctpmqrt_work( int matrix_layout, char side, char trans,
         }
     } else if( matrix_layout == LAPACK_ROW_MAJOR ) {
         lapack_int nrowsA, ncolsA, nrowsV;
-        if      ( side == LAPACKE_lsame(side, 'l') ) { nrowsA = k; ncolsA = n; nrowsV = m; }
-        else if ( side == LAPACKE_lsame(side, 'r') ) { nrowsA = m; ncolsA = k; nrowsV = n; }
+        if      ( LAPACKE_lsame(side, 'l') ) { nrowsA = k; ncolsA = n; nrowsV = m; }
+        else if ( LAPACKE_lsame(side, 'r') ) { nrowsA = m; ncolsA = k; nrowsV = n; }
         else {
             info = -2;
             LAPACKE_xerbla( "LAPACKE_ctpmqrt_work", info );
