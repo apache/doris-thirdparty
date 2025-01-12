@@ -114,8 +114,10 @@ void goto_set_num_threads(int num_threads) {
 
   adjust_thread_buffers();
 #if defined(ARCH_MIPS64) || defined(ARCH_LOONGARCH64)
+#ifndef DYNAMIC_ARCH
   //set parameters for different number of threads.
   blas_set_parameter();
+#endif
 #endif
 
 }
@@ -123,6 +125,18 @@ void openblas_set_num_threads(int num_threads) {
 
 	goto_set_num_threads(num_threads);
 }
+
+#ifdef OS_LINUX
+
+int openblas_setaffinity(int thread_idx, size_t cpusetsize, cpu_set_t* cpu_set) {
+  fprintf(stderr,"OpenBLAS: use OpenMP environment variables for setting cpu affinity\n");
+  return -1;
+}
+int openblas_getaffinity(int thread_idx, size_t cpusetsize, cpu_set_t* cpu_set) {
+  fprintf(stderr,"OpenBLAS: use OpenMP environment variables for querying cpu affinity\n");
+  return -1;
+}
+#endif
 
 int blas_thread_init(void){
 

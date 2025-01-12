@@ -2,13 +2,14 @@
 ## Author: Hank Anderson <hank@statease.com>
 ##
 
-cmake_minimum_required(VERSION 2.8.5)
+cmake_minimum_required(VERSION 3.16.0)
 
+set (CMAKE_ASM_SOURCE_FILE_EXTENSIONS "S")
 project(OpenBLAS C ASM)
 
 set(OpenBLAS_MAJOR_VERSION 0)
 set(OpenBLAS_MINOR_VERSION 3)
-set(OpenBLAS_PATCH_VERSION 28)
+set(OpenBLAS_PATCH_VERSION 28.dev)
 
 set(OpenBLAS_VERSION "${OpenBLAS_MAJOR_VERSION}.${OpenBLAS_MINOR_VERSION}.${OpenBLAS_PATCH_VERSION}")
 
@@ -101,6 +102,10 @@ if(MSVC AND MSVC_STATIC_CRT)
 endif()
 
 message(WARNING "CMake support is experimental. It does not yet support all build options and may not produce the same Makefiles that OpenBLAS ships with.")
+
+if (USE_OPENMP)
+  find_package(OpenMP REQUIRED)
+endif ()
 
 include("${PROJECT_SOURCE_DIR}/cmake/utils.cmake")
 include("${PROJECT_SOURCE_DIR}/cmake/system.cmake")
@@ -258,8 +263,13 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "AIX|Android|Linux|FreeBSD|OpenBSD|NetBSD|Drago
   endif()
 endif()
 
-if (APPLE AND BUILD_SHARED_LIBS)
-set(CMAKE_MACOSX_RPATH ON)
+if (USE_OPENMP)
+  if(BUILD_STATIC_LIBS)
+    target_link_libraries(${OpenBLAS_LIBNAME}_static OpenMP::OpenMP_C)
+  endif()
+  if(BUILD_SHARED_LIBS)
+    target_link_libraries(${OpenBLAS_LIBNAME}_shared OpenMP::OpenMP_C)
+  endif()
 endif()
 
 # Seems that this hack doesn't required since macOS 11 Big Sur

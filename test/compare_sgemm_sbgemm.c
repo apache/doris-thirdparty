@@ -29,6 +29,8 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "../common.h"
 #define SGEMM   BLASFUNC(sgemm)
 #define SBGEMM   BLASFUNC(sbgemm)
+#define SGEMV   BLASFUNC(sgemv)
+#define SBGEMV   BLASFUNC(sbgemv)
 typedef union
 {
   unsigned short v;
@@ -81,6 +83,16 @@ float16to32 (bfloat16_bits f16)
   return f32.v;
 }
 
+#define SBGEMM_LARGEST  256
+
+void *malloc_safe(size_t size)
+{
+  if (size == 0)
+    return malloc(1);
+  else
+    return malloc(size);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -88,12 +100,45 @@ main (int argc, char *argv[])
   int i, j, l;
   blasint x, y;
   int ret = 0;
-  int loop = 100;
+  int loop = SBGEMM_LARGEST;
   char transA = 'N', transB = 'N';
   float alpha = 1.0, beta = 0.0;
 
   for (x = 0; x <= loop; x++)
   {
+    if ((x > 100) && (x != SBGEMM_LARGEST)) continue;
+    m = k = n = x;
+    float *A = (float *)malloc_safe(m * k * sizeof(FLOAT));
+    float *B = (float *)malloc_safe(k * n * sizeof(FLOAT));
+    float *C = (float *)malloc_safe(m * n * sizeof(FLOAT));
+    bfloat16_bits *AA = (bfloat16_bits *)malloc_safe(m * k * sizeof(bfloat16_bits));
+    bfloat16_bits *BB = (bfloat16_bits *)malloc_safe(k * n * sizeof(bfloat16_bits));
+    float *DD = (float *)malloc_safe(m * n * sizeof(FLOAT));
+    float *CC = (float *)malloc_safe(m * n * sizeof(FLOAT));
+    if ((A == NULL) || (B == NULL) || (C == NULL) || (AA == NULL) || (BB == NULL) ||
+        (DD == NULL) || (CC == NULL))
+      return 1;
+    bfloat16 atmp,btmp;
+    blasint one=1;
+
+    for (j = 0; j < m; j++)
+    {
+      for (i = 0; i < k; i++)
+      {
+        A[j * k + i] = ((FLOAT) rand () / (FLOAT) RAND_MAX) + 0.5;
+        sbstobf16_(&one, &A[j*k+i], &one, &atmp, &one);
+        AA[j * k + i].v = atmp;
+      }
+    }
+    for (j = 0; j < n; j++)
+    {
+      for (i = 0; i < k; i++)
+      {
+        B[j * k + i] = ((FLOAT) rand () / (FLOAT) RAND_MAX) + 0.5;
+        sbstobf16_(&one, &B[j*k+i], &one, &btmp, &one);
+        BB[j * k + i].v = btmp;
+      }
+    }
     for (y = 0; y < 4; y++)
     {
       if ((y == 0) || (y == 2)) {
@@ -106,40 +151,19 @@ main (int argc, char *argv[])
       } else {
         transB = 'T';
       }
-      m = k = n = x;
-      float A[m * k];
-      float B[k * n];
-      float C[m * n];
-      bfloat16_bits AA[m * k], BB[k * n];
-      float DD[m * n], CC[m * n];
-      bfloat16 atmp,btmp;
-      blasint one=1;
 
-      for (j = 0; j < m; j++)
-      {
-        for (i = 0; i < m; i++)
-        {
-          A[j * k + i] = ((FLOAT) rand () / (FLOAT) RAND_MAX) + 0.5;
-          B[j * k + i] = ((FLOAT) rand () / (FLOAT) RAND_MAX) + 0.5;
-          C[j * k + i] = 0;
-          sbstobf16_(&one, &A[j*k+i], &one, &atmp, &one);
-          sbstobf16_(&one, &B[j*k+i], &one, &btmp, &one);
-          AA[j * k + i].v = atmp;
-          BB[j * k + i].v = btmp;
-          CC[j * k + i] = 0;
-          DD[j * k + i] = 0;
-        }
-      }
+      memset(CC, 0, m * n * sizeof(FLOAT));
+      memset(DD, 0, m * n * sizeof(FLOAT));
+      memset(C, 0, m * n * sizeof(FLOAT));
+
       SGEMM (&transA, &transB, &m, &n, &k, &alpha, A,
         &m, B, &k, &beta, C, &m);
       SBGEMM (&transA, &transB, &m, &n, &k, &alpha, (bfloat16*) AA,
         &m, (bfloat16*)BB, &k, &beta, CC, &m);
+
       for (i = 0; i < n; i++)
         for (j = 0; j < m; j++)
-          if (fabs (CC[i * m + j] - C[i * m + j]) > 1.0)
-            ret++;
-      for (i = 0; i < n; i++)
-        for (j = 0; j < m; j++)
+        {
           for (l = 0; l < k; l++)
             if (transA == 'N' && transB == 'N')
             {
@@ -158,14 +182,96 @@ main (int argc, char *argv[])
               DD[i * m + j] +=
                 float16to32 (AA[k * j + l]) * float16to32 (BB[i + l * n]);
             }
-      for (i = 0; i < n; i++)
-        for (j = 0; j < m; j++)
-          if (CC[i * m + j] != DD[i * m + j])
+          if (fabs (CC[i * m + j] - C[i * m + j]) > 1.0)
             ret++;
+          if (fabs (CC[i * m + j] - DD[i * m + j]) > 1.0)
+            ret++;
+        }
     }
+    free(A);
+    free(B);
+    free(C);
+    free(AA);
+    free(BB);
+    free(DD);
+    free(CC);
+  }
+
+  if (ret != 0) {
+    fprintf (stderr, "FATAL ERROR SBGEMM - Return code: %d\n", ret);
+    return ret;
+  }
+
+  for (l = 0; l < 2; l++) {  // l = 1 to test inc_x & inc_y not equal to one.
+  for (x = 1; x <= loop; x++)
+  {
+    k = (x == 0) ? 0 : l + 1;
+    float *A = (float *)malloc_safe(x * x * sizeof(FLOAT));
+    float *B = (float *)malloc_safe(x * sizeof(FLOAT) << l);
+    float *C = (float *)malloc_safe(x * sizeof(FLOAT) << l);
+    bfloat16_bits *AA = (bfloat16_bits *)malloc_safe(x * x * sizeof(bfloat16_bits));
+    bfloat16_bits *BB = (bfloat16_bits *)malloc_safe(x * sizeof(bfloat16_bits) << l);
+    float *DD = (float *)malloc_safe(x * sizeof(FLOAT));
+    float *CC = (float *)malloc_safe(x * sizeof(FLOAT) << l);
+    if ((A == NULL) || (B == NULL) || (C == NULL) || (AA == NULL) || (BB == NULL) ||
+        (DD == NULL) || (CC == NULL))
+      return 1;
+    bfloat16 atmp, btmp;
+    blasint one = 1;
+
+    for (j = 0; j < x; j++)
+    {
+      for (i = 0; i < x; i++)
+      {
+        A[j * x + i] = ((FLOAT) rand () / (FLOAT) RAND_MAX) + 0.5;
+        sbstobf16_(&one, &A[j*x+i], &one, &atmp, &one);
+        AA[j * x + i].v = atmp;
+      }
+      B[j << l] = ((FLOAT) rand () / (FLOAT) RAND_MAX) + 0.5;
+      sbstobf16_(&one, &B[j << l], &one, &btmp, &one);
+      BB[j << l].v = btmp;
+    }
+    for (y = 0; y < 2; y++)
+    {
+      if (y == 0) {
+        transA = 'N';
+      } else {
+        transA = 'T';
+      }
+
+      memset(CC, 0, x * sizeof(FLOAT) << l);
+      memset(DD, 0, x * sizeof(FLOAT));
+      memset(C, 0, x * sizeof(FLOAT) << l);
+
+      SGEMV (&transA, &x, &x, &alpha, A, &x, B, &k, &beta, C, &k);
+      SBGEMV (&transA, &x, &x, &alpha, (bfloat16*) AA, &x, (bfloat16*) BB, &k, &beta, CC, &k);
+
+      for (j = 0; j < x; j++)
+        for (i = 0; i < x; i++)
+          if (transA == 'N') {
+            DD[i] += float16to32 (AA[j * x + i]) * float16to32 (BB[j << l]);
+          } else if (transA == 'T') {
+            DD[j] += float16to32 (AA[j * x + i]) * float16to32 (BB[i << l]);
+          }
+
+      for (j = 0; j < x; j++) {
+        if (fabs (CC[j << l] - C[j << l]) > 1.0)
+          ret++;
+        if (fabs (CC[j << l] - DD[j]) > 1.0)
+          ret++;
+      }
+    }
+    free(A);
+    free(B);
+    free(C);
+    free(AA);
+    free(BB);
+    free(DD);
+    free(CC);
+  }
   }
 
   if (ret != 0)
-    fprintf (stderr, "FATAL ERROR SBGEMM - Return code: %d\n", ret);
+    fprintf (stderr, "FATAL ERROR SBGEMV - Return code: %d\n", ret);
   return ret;
 }

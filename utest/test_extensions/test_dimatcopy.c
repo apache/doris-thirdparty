@@ -86,7 +86,7 @@ static double check_dimatcopy(char api, char order, char trans, blasint rows, bl
         dtranspose(m, n, alpha, data_dimatcopy.a_test, lda_src, data_dimatcopy.a_verify, lda_dst);
     } 
     else {
-        dcopy(m, n, alpha, data_dimatcopy.a_test, lda_src, data_dimatcopy.a_verify, lda_dst);
+        my_dcopy(m, n, alpha, data_dimatcopy.a_test, lda_src, data_dimatcopy.a_verify, lda_dst);
     }
 
     if (api == 'F') {

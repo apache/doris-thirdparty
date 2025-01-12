@@ -42,10 +42,11 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define VSSEG2_FLOAT            __riscv_vsseg2e32_v_f32m2x2
 #define VBOOL_T                 vbool16_t
 #define UINT_V_T                vint32m2_t
-#define VID_V_UINT              __riscv_vid_v_i32m2
+#define VID_V_UINT              __riscv_vid_v_u32m2
 #define VMSGTU_VX_UINT          __riscv_vmsgt_vx_i32m2_b16
 #define VMSEQ_VX_UINT           __riscv_vmseq_vx_i32m2_b16
 #define VFMERGE_VFM_FLOAT       __riscv_vfmerge_vfm_f32m2
+#define V_UM2_TO_IM2            __riscv_vreinterpret_v_u32m2_i32m2
 #else
 #define VSETVL(n)               __riscv_vsetvl_e64m2(n)
 #define FLOAT_V_T               vfloat64m2_t
@@ -63,6 +64,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define VMSGTU_VX_UINT          __riscv_vmsgtu_vx_u64m2_b32
 #define VMSEQ_VX_UINT           __riscv_vmseq_vx_u64m2_b32
 #define VFMERGE_VFM_FLOAT       __riscv_vfmerge_vfm_f64m2
+#define V_UM2_TO_IM2(values)    values
 #endif
 
 int CNAME(BLASLONG m, BLASLONG n, FLOAT *a, BLASLONG lda, BLASLONG posX, BLASLONG posY, FLOAT *b){
@@ -99,7 +101,7 @@ int CNAME(BLASLONG m, BLASLONG n, FLOAT *a, BLASLONG lda, BLASLONG posX, BLASLON
         }
 
         i = 0;
-        do 
+        do
         {
             if (X > posY) 
             {
@@ -119,9 +121,9 @@ int CNAME(BLASLONG m, BLASLONG n, FLOAT *a, BLASLONG lda, BLASLONG posX, BLASLON
                 X ++;
                 i ++;
             } 
-            else 
+            else
             {
-                vindex  = VID_V_UINT(vl);
+                vindex  = V_UM2_TO_IM2(VID_V_UINT(vl));
                 for (unsigned int j = 0; j < vl; j++) 
                 {
                     vax2 = VLSSEG2_FLOAT(ao, stride_lda, vl);

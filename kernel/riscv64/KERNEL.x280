@@ -279,3 +279,9 @@ endif
 ifndef ZGEMM_BETA
 ZGEMM_BETA = zgemm_beta_rvv.c
 endif
+
+ZOMATCOPY_CN = zomatcopy_cn_rvv.c
+COMATCOPY_CN = zomatcopy_cn_rvv.c
+
+DOMATCOPY_CN = omatcopy_cn_rvv.c
+SOMATCOPY_CN = omatcopy_cn_rvv.c

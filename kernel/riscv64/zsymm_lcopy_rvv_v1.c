@@ -41,11 +41,12 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define VLSSEG2_FLOAT           __riscv_vlsseg2e32_v_f32m2x2
 #define VSSEG2_FLOAT            __riscv_vsseg2e32_v_f32m2x2
 #define INT_V_T                 vint32m2_t
-#define VID_V_INT               __riscv_vid_v_i32m2
+#define VID_V_INT               __riscv_vid_v_u32m2
 #define VADD_VX_INT             __riscv_vadd_vx_i32m2
 #define VMSGT_VX_INT            __riscv_vmsgt_vx_i32m2_b16
 #define VBOOL_T                 vbool16_t
 #define VMERGE_VVM_FLOAT        __riscv_vmerge_vvm_f32m2
+#define V_UM2_TO_IM2            __riscv_vreinterpret_v_u32m2_i32m2
 #else
 #define VSETVL(n)               __riscv_vsetvl_e64m2(n)
 #define VSETVL_MAX              __riscv_vsetvlmax_e64m2()
@@ -60,11 +61,12 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define VLSSEG2_FLOAT           __riscv_vlsseg2e64_v_f64m2x2
 #define VSSEG2_FLOAT            __riscv_vsseg2e64_v_f64m2x2
 #define INT_V_T                 vint64m2_t
-#define VID_V_INT               __riscv_vid_v_i64m2
+#define VID_V_INT               __riscv_vid_v_u64m2
 #define VADD_VX_INT             __riscv_vadd_vx_i64m2
 #define VMSGT_VX_INT            __riscv_vmsgt_vx_i64m2_b32
 #define VBOOL_T                 vbool32_t
 #define VMERGE_VVM_FLOAT        __riscv_vmerge_vvm_f64m2
+#define V_UM2_TO_IM2            __riscv_vreinterpret_v_u64m2_i64m2
 #endif
 
 int CNAME(BLASLONG m, BLASLONG n, FLOAT *a, BLASLONG lda, BLASLONG posX, BLASLONG posY, FLOAT *b)
@@ -81,7 +83,7 @@ int CNAME(BLASLONG m, BLASLONG n, FLOAT *a, BLASLONG lda, BLASLONG posX, BLASLON
     INT_V_T vindex_max, vindex;
 
     size_t vl = VSETVL_MAX;
-    vindex_max   = VID_V_INT(vl);
+    vindex_max   = V_UM2_TO_IM2(VID_V_INT(vl));
 
     for (js = n; js > 0; js -= vl, posX += vl) {
         vl = VSETVL(js);
@@ -118,4 +120,3 @@ int CNAME(BLASLONG m, BLASLONG n, FLOAT *a, BLASLONG lda, BLASLONG posX, BLASLON
 
     return 0;
 }
-

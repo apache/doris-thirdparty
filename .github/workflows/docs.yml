@@ -23,7 +23,7 @@ jobs:
           python-version: "3.10"
 
       - name: Install MkDocs and doc theme packages
-        run: pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin
+        run: pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin mkdocs-mermaid2-plugin
 
       - name: Build docs site
         run: mkdocs build

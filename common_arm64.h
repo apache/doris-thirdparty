@@ -44,9 +44,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define RMB  __asm__ __volatile__ ("dmb  ishld" : : : "memory")
 #endif
 
-#define INLINE inline
-
-#if defined( F_INTERFACE_FLANG) || defined(F_INTERFACE_PGI)
+#if defined( F_INTERFACE_FLANG) || (defined(F_INTERFACE_PGI) && (defined(__NVCOMPILER) && (__NVCOMPILER_MAJOR__ < 23 || (__NVCOMPILER_MAJOR__ == 23 && __NVCOMPILER_MINOR__ < 9))))
 #define RETURN_BY_STACK
 #else
 #define RETURN_BY_COMPLEX
@@ -55,6 +53,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef ASSEMBLER
 
 
+#ifndef NO_AFFINITY
 static __inline int WhereAmI(void){
   uint64_t ret;
   __asm__ volatile (
@@ -67,6 +66,7 @@ static __inline int WhereAmI(void){
   if ((int)ret <0) ret = 0;
   return (int)ret;
 }
+#endif
 
 static __inline void blas_lock(volatile BLASULONG *address){
 

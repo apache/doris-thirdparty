@@ -10,6 +10,15 @@
 #define int long
 #endif
 
+#if defined(_MSC_VER) && defined(__INTEL_CLANG_COMPILER)
+//#define LAPACK_COMPLEX_STRUCTURE
+#define NOCHANGE
+#endif
+/* e.g. mingw64/x86_64-w64-mingw32/include/winerror.h */
+#ifdef FAILED
+#undef FAILED
+#endif
+
 #define  TRUE           1
 #define  PASSED         1
 #define  TEST_ROW_MJR	1

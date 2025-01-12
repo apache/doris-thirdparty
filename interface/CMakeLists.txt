@@ -107,6 +107,9 @@ endif ()
 
   # trmm is trsm with a compiler flag set
   GenerateNamedObjects("trsm.c" "TRMM" "trmm" ${CBLAS_FLAG})
+  
+  # gemmtr is gemmt under the name adopted by the Reference BLAS
+  GenerateNamedObjects("gemm.c" "" "gemmtr" ${CBLAS_FLAG})
 
   # max and imax are compiled 4 times
   GenerateNamedObjects("max.c" "" "" ${CBLAS_FLAG})
@@ -123,6 +126,7 @@ if (BUILD_BFLOAT16)
 	GenerateNamedObjects("bf16dot.c" "" "sbdot" ${CBLAS_FLAG} "" "" true "BFLOAT16")
 	GenerateNamedObjects("gemm.c" "" "sbgemm" ${CBLAS_FLAG} "" "" true "BFLOAT16")
 	GenerateNamedObjects("gemmt.c" "" "sbgemmt" ${CBLAS_FLAG} "" "" true "BFLOAT16")
+	GenerateNamedObjects("gemmt.c" "" "sbgemmtr" ${CBLAS_FLAG} "" "" true "BFLOAT16")
 	GenerateNamedObjects("sbgemv.c" "" "sbgemv" ${CBLAS_FLAG} "" "" true "BFLOAT16")
 	GenerateNamedObjects("tobf16.c" "SINGLE_PREC" "sbstobf16" ${CBLAS_FLAG} "" "" true "BFLOAT16")
 	GenerateNamedObjects("tobf16.c" "DOUBLE_PREC" "sbdtobf16" ${CBLAS_FLAG} "" "" true "BFLOAT16")

@@ -426,6 +426,9 @@ dummy :
 install :
 	$(MAKE) -f Makefile.install install
 
+install_tests :
+	$(MAKE) -f Makefile.install install_tests
+
 clean ::
 	@for d in $(SUBDIRS_ALL) ; \
 	do if test -d $$d; then \

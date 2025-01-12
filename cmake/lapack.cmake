@@ -1018,7 +1018,12 @@ foreach (LA_FILE ${LA_GEN_SRC})
 endforeach ()
 
 if (NOT C_LAPACK)
-  set_source_files_properties(${LA_SOURCES} PROPERTIES COMPILE_FLAGS "${LAPACK_FFLAGS}")
+  # The below line is duplicating Fortran flags but NAG has a few flags
+  # that cannot be specified twice. It's possible this is not needed for
+  # any compiler, but for safety, we only turn off for NAG
+  if (NOT ${F_COMPILER} STREQUAL "NAGFOR")
+    set_source_files_properties(${LA_SOURCES} PROPERTIES COMPILE_FLAGS "${LAPACK_FFLAGS}")
+  endif ()
   if (${F_COMPILER} STREQUAL "GFORTRAN")
     set_source_files_properties(${LA_SOURCES} PROPERTIES COMPILE_FLAGS "${LAPACK_FFLAGS} -fno-tree-vectorize")
   endif()

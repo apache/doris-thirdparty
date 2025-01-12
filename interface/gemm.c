@@ -39,6 +39,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include "common.h"
 #ifdef FUNCTION_PROFILE
 #include "functable.h"
@@ -85,7 +86,7 @@
 #endif
 
 static int (*gemm[])(blas_arg_t *, BLASLONG *, BLASLONG *, IFLOAT *, IFLOAT *, BLASLONG) = {
-#ifndef GEMM3M
+#if !defined(GEMM3M) || defined(GENERIC)
   GEMM_NN, GEMM_TN, GEMM_RN, GEMM_CN,
   GEMM_NT, GEMM_TT, GEMM_RT, GEMM_CT,
   GEMM_NR, GEMM_TR, GEMM_RR, GEMM_CR,
@@ -498,7 +499,16 @@ void CNAME(enum CBLAS_ORDER order, enum CBLAS_TRANSPOSE TransA, enum CBLAS_TRANS
 	 args.m, args.n, args.k, args.lda, args.ldb, args.ldc);
 #endif
 
-#if defined(GEMM_GEMV_FORWARD) && !defined(GEMM3M) && !defined(COMPLEX) && !defined(BFLOAT16)
+#if defined(GEMM_GEMV_FORWARD) && !defined(GEMM3M) && !defined(COMPLEX) && (!defined(BFLOAT16) || defined(GEMM_GEMV_FORWARD_BF16))
+#if defined(ARCH_ARM64)
+  // The gemv kernels in arm64/{gemv_n.S,gemv_n_sve.c,gemv_t.S,gemv_t_sve.c}
+  // perform poorly in certain circumstances. We use the following boolean
+  // variable along with the gemv argument values to avoid these inefficient
+  // gemv cases, see github issue#4951.
+  bool have_tuned_gemv = false;
+#else
+  bool have_tuned_gemv = true;
+#endif
   // Check if we can convert GEMM -> GEMV
   if (args.k != 0) {
     if (args.n == 1) {
@@ -518,8 +528,11 @@ void CNAME(enum CBLAS_ORDER order, enum CBLAS_TRANSPOSE TransA, enum CBLAS_TRANS
       if (transb & 1) {
         inc_x = args.ldb;
       }
-      GEMV(&NT, &m, &n, args.alpha, args.a, &lda, args.b, &inc_x, args.beta, args.c, &inc_y);
-      return;
+      bool is_efficient_gemv = have_tuned_gemv || ((NT == 'N') || (NT == 'T' && inc_x == 1));
+      if (is_efficient_gemv) {
+        GEMV(&NT, &m, &n, args.alpha, args.a, &lda, args.b, &inc_x, args.beta, args.c, &inc_y);
+        return;
+      }
     }
     if (args.m == 1) {
       blasint inc_x = args.lda;
@@ -538,8 +551,11 @@ void CNAME(enum CBLAS_ORDER order, enum CBLAS_TRANSPOSE TransA, enum CBLAS_TRANS
         m = args.n;
         n = args.k;
       }
-      GEMV(&NT, &m, &n, args.alpha, args.b, &ldb, args.a, &inc_x, args.beta, args.c, &inc_y);
-      return;
+      bool is_efficient_gemv = have_tuned_gemv || ((NT == 'N' && inc_y == 1) || (NT == 'T' && inc_x == 1));
+      if (is_efficient_gemv) {
+        GEMV(&NT, &m, &n, args.alpha, args.b, &ldb, args.a, &inc_x, args.beta, args.c, &inc_y);
+        return;
+      }
     }
   }
 #endif
@@ -572,7 +588,7 @@ void CNAME(enum CBLAS_ORDER order, enum CBLAS_TRANSPOSE TransA, enum CBLAS_TRANS
 
   buffer = (XFLOAT *)blas_memory_alloc(0);
 
-//For target LOONGSON3R5, applying an offset to the buffer is essential
+//For LOONGARCH64, applying an offset to the buffer is essential
 //for minimizing cache conflicts and optimizing performance.
 #if defined(ARCH_LOONGARCH64) && !defined(NO_AFFINITY)
   sa = (XFLOAT *)((BLASLONG)buffer + (WhereAmI() & 0xf) * GEMM_OFFSET_A);

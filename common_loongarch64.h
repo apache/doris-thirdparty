@@ -75,8 +75,6 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define WMB __sync_synchronize()
 #define RMB __sync_synchronize()
 
-#define INLINE inline
-
 #ifndef ASSEMBLER
 
 static inline int blas_quickdivide(blasint x, blasint y){
@@ -281,9 +279,13 @@ REALNAME: ;\
 #define GNUSTACK
 #endif /* defined(__linux__) && defined(__ELF__) */
 
+#ifdef __clang__
+#define EPILOGUE .end
+#else
 #define EPILOGUE      \
     .end    REALNAME ;\
     GNUSTACK
+#endif
 
 #define PROFCODE
 

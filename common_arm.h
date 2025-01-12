@@ -47,8 +47,6 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #endif
 
-#define INLINE inline
-
 #define RETURN_BY_COMPLEX
 
 #ifndef ASSEMBLER
@@ -104,9 +102,16 @@ static inline int blas_quickdivide(blasint x, blasint y){
 
 #if defined(ASSEMBLER) && !defined(NEEDPARAM)
 
+#if !defined(__APPLE__) && !defined(_WIN32)
+#define OPENBLAS_ARM_TYPE_FUNCTION .type	REALNAME, %function ;
+#else
+#define OPENBLAS_ARM_TYPE_FUNCTION
+#endif
+
 #define PROLOGUE \
 	.arm		 ;\
 	.global	REALNAME ;\
+	OPENBLAS_ARM_TYPE_FUNCTION \
 REALNAME:
 
 #define EPILOGUE

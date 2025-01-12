@@ -282,14 +282,18 @@ GEMM_GEMV_FORWARD = 1
 endif
 ifeq ($(ARCH), power)
 GEMM_GEMV_FORWARD = 1
+GEMM_GEMV_FORWARD_BF16 = 1
 endif
 
 ifeq ($(SMALL_MATRIX_OPT), 1)
 CCOMMON_OPT += -DSMALL_MATRIX_OPT
 endif
-ifeq ($(GEMM_GEMV_FORWARD), 1)
 ifneq ($(ONLY_CBLAS), 1)
+ifeq ($(GEMM_GEMV_FORWARD), 1)
 CCOMMON_OPT += -DGEMM_GEMV_FORWARD
+endif
+ifeq ($(GEMM_GEMV_FORWARD_BF16), 1)
+CCOMMON_OPT += -DGEMM_GEMV_FORWARD_BF16
 endif
 endif
 
@@ -376,9 +380,6 @@ OBJCONV = $(CROSS_SUFFIX)objconv
 ifeq ($(NOFORTRAN), 1)
 C_LAPACK = 1
 override FEXTRALIB = 
-ifeq ($(C_COMPILER), GCC)
-CCOMMON_OPT += -Wno-error=incompatible-pointer-types
-endif
 endif
 
 ifeq ($(C_COMPILER), GCC)
@@ -445,7 +446,7 @@ endif
 
 ifeq ($(OSNAME), Linux)
 EXTRALIB	+= -lm
-NO_EXPRECISION = 1
+#NO_EXPRECISION = 1
 endif
 
 ifeq ($(OSNAME), Android)
@@ -571,7 +572,7 @@ NO_BINARY_MODE	= 1
 endif
 
 ifeq ($(CORE), generic)
-NO_EXPRECISION = 1
+#NO_EXPRECISION = 1
 endif
 
 ifndef NO_EXPRECISION
@@ -594,7 +595,7 @@ endif
 ifeq ($(ARCH), x86_64)
 
 ifeq ($(CORE), generic)
-NO_EXPRECISION = 1
+#NO_EXPRECISION = 1
 endif
 
 ifndef NO_EXPRECISION
@@ -730,7 +731,7 @@ endif
 endif
 
 ifeq ($(ARCH), loongarch64)
-DYNAMIC_CORE = LOONGSON3R5 LOONGSON2K1000 LOONGSONGENERIC
+DYNAMIC_CORE = LA64_GENERIC LA264 LA464
 endif
 
 ifeq ($(ARCH), riscv64)
@@ -827,8 +828,8 @@ BINARY_DEFINED	= 1
 
 ifeq ($(F_COMPILER), GFORTRAN)
 ifeq ($(C_COMPILER), GCC)
-# EXPRECISION	= 1
-# CCOMMON_OPT	+= -DEXPRECISION
+EXPRECISION	= 1
+CCOMMON_OPT	+= -DEXPRECISION
 endif
 endif
 endif
@@ -1612,6 +1613,13 @@ NO_AFFINITY = 1
 endif
 endif
 
+ifeq ($(ARCH), POWER)
+ifeq ($(DEBUG), 1)
+CCOMMON_OPT := $(filter-out -O%, $(CCOMMON_OPT)) -O0
+FCOMMON_OPT := $(filter-out -O%, $(FCOMMON_OPT)) -O0
+endif
+endif
+
 ifdef NO_AFFINITY
 ifeq ($(NO_AFFINITY), 0)
 override undefine NO_AFFINITY
@@ -1723,8 +1731,8 @@ LAPACK_FFLAGS := $(filter-out -msse3 -mssse3 -msse4.1 -mavx -mavx2 -mskylake-avx
 override FFLAGS := $(filter-out -msse3 -mssse3 -msse4.1 -mavx -mavx2 -mskylake-avx512 ,$(FFLAGS))
 endif
 ifeq ($(F_COMPILER),FLANGNEW)
-LAPACK_FFLAGS := $(filter-out -m32 -m64 -msse3 -mssse3 -msse4.1 -mavx -mavx2 -mskylake-avx512 ,$(FFLAGS))
-override FFLAGS := $(filter-out -m32 -m64 -msse3 -mssse3 -msse4.1 -mavx -mavx2 -mskylake-avx512 ,$(FFLAGS))
+LAPACK_FFLAGS := $(filter-out -m32 -m64 -msse3 -mssse3 -msse4.1 -mavx -mavx2 -mskylake-avx512 -mtune=% -mabi=% ,$(FFLAGS))
+override FFLAGS := $(filter-out -m32 -m64 -msse3 -mssse3 -msse4.1 -mavx -mavx2 -mskylake-avx512 -mtune=% -mabi=% ,$(FFLAGS))
 endif
 
 LAPACK_CFLAGS = $(CFLAGS)

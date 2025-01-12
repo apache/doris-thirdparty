@@ -2,12 +2,8 @@
 
 [![Join the chat at https://gitter.im/xianyi/OpenBLAS](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/xianyi/OpenBLAS?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-Travis CI: [![Build Status](https://travis-ci.com/xianyi/OpenBLAS.svg?branch=develop)](https://travis-ci.com/xianyi/OpenBLAS)
-
-AppVeyor: [![Build status](https://ci.appveyor.com/api/projects/status/09sohd35n8nkkx64/branch/develop?svg=true)](https://ci.appveyor.com/project/xianyi/openblas/branch/develop)
-
 Cirrus CI: [![Build Status](https://api.cirrus-ci.com/github/xianyi/OpenBLAS.svg?branch=develop)](https://cirrus-ci.com/github/xianyi/OpenBLAS)
-<!-- Drone CI: [![Build Status](https://cloud.drone.io/api/badges/xianyi/OpenBLAS/status.svg?branch=develop)](https://cloud.drone.io/xianyi/OpenBLAS/)-->
+
 
 
 [![Build Status](https://dev.azure.com/xianyi/OpenBLAS/_apis/build/status/xianyi.OpenBLAS?branchName=develop)](https://dev.azure.com/xianyi/OpenBLAS/_build/latest?definitionId=1&branchName=develop)
@@ -19,11 +15,14 @@ OSUOSL IBMZ-CI [![Build Status](http://ibmz-ci.osuosl.org/buildStatus/icon?job=O
 
 OpenBLAS is an optimized BLAS (Basic Linear Algebra Subprograms) library based on GotoBLAS2 1.13 BSD version.
 
-Please read the documentation on the OpenBLAS wiki pages: <https://github.com/xianyi/OpenBLAS/wiki>.
+For more information about OpenBLAS, please see:
+
+- The documentation at [openmathlib.org/OpenBLAS/docs/](http://www.openmathlib.org/OpenBLAS/docs),
+- The home page at [openmathlib.org/OpenBLAS/](http://www.openmathlib.org/OpenBLAS).
 
 For a general introduction to the BLAS routines, please refer to the extensive documentation of their reference implementation hosted at netlib:
 <https://www.netlib.org/blas>. On that site you will likewise find documentation for the reference implementation of the higher-level library LAPACK - the **L**inear **A**lgebra **Pack**age that comes included with OpenBLAS. If you are looking for a general primer or refresher on Linear Algebra, the set of six
-20-minute lecture videos by Prof. Gilbert Strang on either MIT OpenCourseWare <https://ocw.mit.edu/resources/res-18-010-a-2020-vision-of-linear-algebra-spring-2020/> or Youtube <https://www.youtube.com/playlist?list=PLUl4u3cNGP61iQEFiWLE21EJCxwmWvvek> may be helpful.
+20-minute lecture videos by Prof. Gilbert Strang on either MIT OpenCourseWare [here](https://ocw.mit.edu/resources/res-18-010-a-2020-vision-of-linear-algebra-spring-2020/) or YouTube [here](https://www.youtube.com/playlist?list=PLUl4u3cNGP61iQEFiWLE21EJCxwmWvvek) may be helpful.
 
 ## Binary Packages
 
@@ -31,24 +30,29 @@ We provide official binary packages for the following platform:
 
   * Windows x86/x86_64
 
-You can download them from [file hosting on sourceforge.net](https://sourceforge.net/projects/openblas/files/) or from the Releases section of the github project page, [https://github.com/xianyi/OpenBLAS/releases](https://github.com/xianyi/OpenBLAS/releases).
+You can download them from [file hosting on sourceforge.net](https://sourceforge.net/projects/openblas/files/) or from the [Releases section of the GitHub project page](https://github.com/OpenMathLib/OpenBLAS/releases).
+
+OpenBLAS is also packaged for many package managers - see [the installation section of the docs](http://www.openmathlib.org/OpenBLAS/docs/install/) for details.
 
 ## Installation from Source
 
-Download from project homepage, https://xianyi.github.com/OpenBLAS/, or check out the code
-using Git from https://github.com/xianyi/OpenBLAS.git. (If you want the most up to date version, be
-sure to use the develop branch - master is several years out of date due to a change of maintainership.)
-Buildtime parameters can be chosen in Makefile.rule, see there for a short description of each option.
-Most can also be given directly on the make or cmake command line.
+Obtain the source code from https://github.com/OpenMathLib/OpenBLAS/. Note that the default branch
+is `develop` (a `master` branch is still present, but far out of date).
+
+Build-time parameters can be chosen in `Makefile.rule`, see there for a short description of each option.
+Most options can also be given directly on the command line as parameters to your `make` or `cmake` invocation.
 
 ### Dependencies
 
 Building OpenBLAS requires the following to be installed:
 
-* GNU Make
-* A C compiler, e.g. GCC or Clang
+* GNU Make or CMake
+* A C compiler, e.g. GCC or Clang 
 * A Fortran compiler (optional, for LAPACK)
-* IBM MASS (optional, see below)
+
+In general, using a recent version of the compiler is strongly recommended.
+If a Fortran compiler is not available, it is possible to compile an older version of the included LAPACK
+that has been machine-translated to C.
 
 ### Normal compile
 
@@ -64,26 +68,31 @@ For building with `cmake`, the usual conventions apply, i.e. create a build dire
 OpenBLAS source directory or separate from it, and invoke `cmake` there with the path to the source tree and any 
 build options you plan to set.
 
+For more details, see the [Building from source](http://www.openmathlib.org/OpenBLAS/docs/install/#building-from-source)
+section in the docs.
+
 ### Cross compile
 
-Set `CC` and `FC` to point to the cross toolchains, and set `HOSTCC` to your host C compiler.
+Set `CC` and `FC` to point to the cross toolchains, and if you use `make`, also set `HOSTCC` to your host C compiler.
 The target must be specified explicitly when cross compiling.
 
 Examples:
 
-* On an x86 box, compile this library for a loongson3a CPU:
+* On a Linux system, cross-compiling to an older MIPS64 router board:
   ```sh
-  make BINARY=64 CC=mips64el-unknown-linux-gnu-gcc FC=mips64el-unknown-linux-gnu-gfortran HOSTCC=gcc TARGET=LOONGSON3A
+  make BINARY=64 CC=mipsisa64r6el-linux-gnuabi64-gcc FC=mipsisa64r6el-linux-gnuabi64-gfortran HOSTCC=gcc TARGET=P6600
   ```
-  or same with the newer mips-crosscompiler put out by Loongson that defaults to the 32bit ABI:
+*  or to a Windows x64 host: 
   ```sh
-  make HOSTCC=gcc CC='/opt/mips-loongson-gcc7.3-linux-gnu/2019.06-29/bin/mips-linux-gnu-gcc -mabi=64' FC='/opt/mips-loongson-gcc7.3-linux-gnu/2019.06-29/bin/mips-linux-gnu-gfortran -mabi=64' TARGET=LOONGSON3A
+  make CC="i686-w64-mingw32-gcc -Bstatic" FC="i686-w64-mingw32-gfortran -static-libgfortran" TARGET=HASWELL BINARY=32 CROSS=1 NUM_THREADS=20 CONSISTENT_FPCSR=1 HOSTCC=gcc
   ```
 
-* On an x86 box, compile this library for a loongson3a CPU with loongcc (based on Open64) compiler:
-  ```sh
-  make CC=loongcc FC=loongf95 HOSTCC=gcc TARGET=LOONGSON3A CROSS=1 CROSS_SUFFIX=mips64el-st-linux-gnu-   NO_LAPACKE=1 NO_SHARED=1 BINARY=32
-  ```
+You can find instructions for other cases both in the "Supported Systems" section below and in
+the [Building from source docs](http://www.openmathlib.org/OpenBLAS/docs/install).
+The `.yml` scripts included with the sources (which contain the
+build scripts for the "continuous integration" (CI) build tests automatically run on every proposed change to the sources) may also provide additional hints.
+
+When compiling for a more modern CPU target of the same architecture, e.g. `TARGET=SKYLAKEX` on a `HASWELL` host, option `CROSS=1` can be used to suppress the automatic invocation of the tests at the end of the build.
 
 ### Debug version
 
@@ -219,6 +228,26 @@ e.g.:
     HOSTCC=gcc HOSTFC=gfortran -j
   ```
 
+#### LOONGARCH64
+
+- **LA64_GENERIC**: Optimized Level-3, Level-2 and Level-1 BLAS with scalar instruction
+  ```sh
+  make HOSTCC=gcc TARGET=LA64_GENERIC CC=loongarch64-unknown-linux-gnu-gcc FC=loongarch64-unknown-linux-gnu-gfortran USE_SIMPLE_THREADED_LEVEL3=1
+  ```
+  The old-style TARGET=LOONGSONGENERIC is still supported
+
+- **LA264**: Optimized Level-3, Level-2 and Level-1 BLAS with LSX instruction
+  ```sh
+  make HOSTCC=gcc TARGET=LA264 CC=loongarch64-unknown-linux-gnu-gcc FC=loongarch64-unknown-linux-gnu-gfortran USE_SIMPLE_THREADED_LEVEL3=1
+  ```
+  The old-style TARGET=LOONGSON2K1000 is still supported
+
+- **LA464**: Optimized Level-3, Level-2 and Level-1 BLAS with LASX instruction
+  ```sh
+  make HOSTCC=gcc TARGET=LA464 CC=loongarch64-unknown-linux-gnu-gcc FC=loongarch64-unknown-linux-gnu-gfortran USE_SIMPLE_THREADED_LEVEL3=1
+  ```
+  The old-style TARGET=LOONGSON3R5 is still supported
+
 ### Support for multiple targets in a single library
 
 OpenBLAS can be built for multiple targets with runtime detection of the target cpu by specifiying `DYNAMIC_ARCH=1` in Makefile.rule, on the gmake command line or as `-DDYNAMIC_ARCH=TRUE` in cmake.
@@ -236,8 +265,12 @@ on **ZARCH** it comprises Z13 and Z14 as well as generic zarch support.
 
 On **riscv64**, DYNAMIC_ARCH enables support for riscv64_zvl128b and riscv64_zvl256b in addition to generic riscv64 support.  A compiler that supports RVV 1.0 is required to build OpenBLAS for riscv64 when DYNAMIC_ARCH is enabled.
 
-The `TARGET` option can be used in conjunction with `DYNAMIC_ARCH=1` to specify which cpu model should be assumed for all the
-common code in the library, usually you will want to set this to the oldest model you expect to encounter.
+On **LoongArch64**, it comprises LA264 and LA464 as well as generic LoongArch64 support.
+
+The `TARGET` option can - and usually **should** - be used in conjunction with `DYNAMIC_ARCH=1` to specify which cpu model should be assumed for all the common code in the library, usually you will want to set this to the oldest model you expect to encounter.
+Failure to specify this may lead to advanced instructions being used by the compiler, just because the build host happens to support them. This is most likely to happen when aggressive optimization options are in effect, and the resulting library may then crash with an
+illegal instruction error on weaker hardware, before it even reaches the BLAS routines specifically included for that cpu.
+
 Please note that it is not possible to combine support for different architectures, so no combined 32 and 64 bit or x86_64 and arm64 in the same library.
 
 ### Supported OS
@@ -291,24 +324,28 @@ If you compile this library with `USE_OPENMP=1`, you should use the above functi
 
 ## Reporting bugs
 
-Please submit an issue in https://github.com/xianyi/OpenBLAS/issues.
+Please submit an issue in https://github.com/OpenMathLib/OpenBLAS/issues.
 
 ## Contact
 
++ Use github discussions: https://github.com/OpenMathLib/OpenBLAS/discussions
 * OpenBLAS users mailing list: https://groups.google.com/forum/#!forum/openblas-users
 * OpenBLAS developers mailing list: https://groups.google.com/forum/#!forum/openblas-dev
 
 ## Change log
 
-Please see Changelog.txt to view the differences between OpenBLAS and GotoBLAS2 1.13 BSD version.
+Please see Changelog.txt.
 
 ## Troubleshooting
 
-* Please read the [FAQ](https://github.com/xianyi/OpenBLAS/wiki/Faq) first.
+* Please read the [FAQ](http://www.openmathlib.org/OpenBLAS/docs/faq) section of the docs first.
 * Please use GCC version 4.6 and above to compile Sandy Bridge AVX kernels on Linux/MinGW/BSD.
 * Please use Clang version 3.1 and above to compile the library on Sandy Bridge microarchitecture.
   Clang 3.0 will generate the wrong AVX binary code.
-* Please use GCC version 6 or LLVM version 6 and above to compile Skylake AVX512 kernels.
+* Please use GCC version 6 or LLVM version 6 and above to compile Skylake/CooperLake AVX512 kernels
+* Please use LLVM version 18 and above (version 19 and above on Windows) if you plan to use
+  its new flang compiler for Fortran
+* Please use GCC version 11 and above to compile OpenBLAS on the POWER architecture
 * The number of CPUs/cores should be less than or equal to 256. On Linux `x86_64` (`amd64`),
   there is experimental support for up to 1024 CPUs/cores and 128 numa nodes if you build
   the library with `BIGNUMA=1`.
@@ -321,12 +358,12 @@ Please see Changelog.txt to view the differences between OpenBLAS and GotoBLAS2 
 
 ## Contributing
 
-1. [Check for open issues](https://github.com/xianyi/OpenBLAS/issues) or open a fresh issue
+1. [Check for open issues](https://github.com/OpenMathLib/OpenBLAS/issues) or open a fresh issue
    to start a discussion around a feature idea or a bug.
-2. Fork the [OpenBLAS](https://github.com/xianyi/OpenBLAS) repository to start making your changes.
+2. Fork the [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS) repository to start making your changes.
 3. Write a test which shows that the bug was fixed or that the feature works as expected.
 4. Send a pull request. Make sure to add yourself to `CONTRIBUTORS.md`.
 
 ## Donation
 
-Please read [this wiki page](https://github.com/xianyi/OpenBLAS/wiki/Donation).
+Please see [the donations section](http://www.openmathlib.org/OpenBLAS/docs/about/#donations) in the docs.

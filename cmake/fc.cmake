@@ -61,21 +61,25 @@ if (${F_COMPILER} STREQUAL "GFORTRAN" OR ${F_COMPILER} STREQUAL "F95" OR CMAKE_F
     endif ()
     if (LOONGARCH64)
       if (BINARY64)
-	CHECK_C_COMPILER_FLAG("-mabi=lp64d" COMPILER_SUPPORT_LP64D_ABI)
-        if(COMPILER_SUPPORT_LP64D_ABI)
-	  set(FCOMMON_OPT "${FCOMMON_OPT} -mabi=lp64d")
-	else()
-	  set(FCOMMON_OPT "${FCOMMON_OPT} -mabi=lp64")
-	endif ()
+        if (NOT CMAKE_Fortran_COMPILER_ID MATCHES "LLVMFlang.*")
+	  CHECK_C_COMPILER_FLAG("-mabi=lp64d" COMPILER_SUPPORT_LP64D_ABI)
+          if(COMPILER_SUPPORT_LP64D_ABI)
+	    set(FCOMMON_OPT "${FCOMMON_OPT} -mabi=lp64d")
+	  else()
+	    set(FCOMMON_OPT "${FCOMMON_OPT} -mabi=lp64")
+	  endif ()
+        endif ()
         if (INTERFACE64) 
           set(FCOMMON_OPT "${FCOMMON_OPT} -fdefault-integer-8") 
         endif () 
       else ()
-	CHECK_C_COMPILER_FLAG("-mabi=ilp32d" COMPILER_SUPPORT_ILP32D_ABI)
-	if(COMPILER_SUPPORT_ILP32D_ABI)
-	  set(FCOMMON_OPT "${FCOMMON_OPT} -mabi=ilp32d")
-	else()
-	  set(FCOMMON_OPT "${FCOMMON_OPT} -mabi=lp32")
+        if (NOT CMAKE_Fortran_COMPILER_ID MATCHES "LLVMFlang.*")
+	  CHECK_C_COMPILER_FLAG("-mabi=ilp32d" COMPILER_SUPPORT_ILP32D_ABI)
+	  if(COMPILER_SUPPORT_ILP32D_ABI)
+	    set(FCOMMON_OPT "${FCOMMON_OPT} -mabi=ilp32d")
+	  else()
+	    set(FCOMMON_OPT "${FCOMMON_OPT} -mabi=lp32")
+          endif ()
 	endif ()
       endif ()
     endif ()
@@ -253,13 +257,40 @@ if (${F_COMPILER} STREQUAL "COMPAQ")
 endif ()
 
 if (${F_COMPILER} STREQUAL "CRAY")
-  set(CCOMMON_OPT "${CCOMMON_OPT} -DF_INTERFACE_INTEL")
+	set(CCOMMON_OPT "${CCOMMON_OPT} -DF_INTERFACE_CRAYFC")
   set(FCOMMON_OPT "${FCOMMON_OPT} -hnopattern")
   if (INTERFACE64)
     set (FCOMMON_OPT "${FCOMMON_OPT} -s integer64")
   endif ()
   if (NOT USE_OPENMP)
-    set(FCOMMON_OPT "${FCOMMON_OPT} -O noomp")
+    set(FCOMMON_OPT "${FCOMMON_OPT} -fno-openmp")
+  else ()
+    set(FCOMMON_OPT "${FCOMMON_OPT} -fopenmp")
+  endif ()
+endif ()
+
+if (${F_COMPILER} STREQUAL "NAGFOR")
+  set(CCOMMON_OPT "${CCOMMON_OPT} -DF_INTERFACE_NAG")
+  if (INTERFACE64)
+    set(FCOMMON_OPT "${FCOMMON_OPT} -i8")
+  endif ()
+  # Options from Makefile.system
+  # -dcfuns: Enable non-standard double precision complex intrinsic functions
+  # -ieee=full: enables all IEEE arithmetic facilities including non-stop arithmetic.
+  # -w=obs: Suppress warning messages about obsolescent features
+  # -thread_safe: Compile code for safe execution in a multi-threaded environment.
+  # -recursive: Specifies that procedures are RECURSIVE by default.
+  set(FCOMMON_OPT "${FCOMMON_OPT} -dcfuns -recursive -ieee=full -w=obs -thread_safe")
+  # Options from Reference-LAPACK
+  # Suppress compiler banner and summary
+  set(FCOMMON_OPT "${FCOMMON_OPT} -quiet")
+  # Disable other common warnings
+  # -w=x77: Suppress warning messages about Fortran 77 features
+  # -w=ques: Suppress warning messages about questionable usage
+  # -w=unused: Suppress warning messages about unused variables
+  set(FCOMMON_OPT "${FCOMMON_OPT} -w=x77 -w=ques -w=unused")
+  if (USE_OPENMP)
+    set(FCOMMON_OPT "${FCOMMON_OPT} -openmp")
   endif ()
 endif ()
 

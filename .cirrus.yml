@@ -89,20 +89,13 @@ task:
       type: text/plain
 
 macos_instance:
-  image: ghcr.io/cirruslabs/macos-monterey-xcode:latest
+  image: ghcr.io/cirruslabs/macos-sonoma-xcode:latest
 task:
   name: AppleM1/LLVM armv7-androidndk xbuild
   compile_script:
-  - brew install android-ndk
-  - export #PATH=/opt/homebrew/opt/llvm/bin:$PATH
-  - export #LDFLAGS="-L/opt/homebrew/opt/llvm/lib"
-  - export #CPPFLAGS="-I/opt/homebrew/opt/llvm/include" 
-  - ls /System/Volumes/Data/opt/homebrew
-  - ls -l /System/Volumes/Data/opt/homebrew/Caskroom/android-ndk
-  - find /System/Volumes/Data/opt/homebrew -name "armv7a-linux-androideabi*-ranlib"
-  - #export CC=/Applications/Xcode-13.4.1.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang
-  - #export CFLAGS="-O2 -unwindlib=none -Wno-macro-redefined -isysroot /Applications/Xcode-13.4.1.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.0.sdk -arch arm64 -miphoneos-version-min=10.0"
-  - export CC=/System/Volumes/Data/opt/homebrew/Caskroom/android-ndk/26d/AndroidNDK*.app/Contents/NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/armv7a-linux-androideabi23-clang
+  - brew install --cask android-ndk
+  - export ANDROID_NDK_HOME="/opt/homebrew/share/android-ndk"
+  - export CC=/opt/homebrew/share/android-ndk/toolchains/llvm/prebuilt/darwin-x86_64/bin/armv7a-linux-androideabi23-clang
   - make TARGET=ARMV7 ARM_SOFTFP_ABI=1 NUM_THREADS=32 HOSTCC=clang NOFORTRAN=1 RANLIB="ls -l"
   always:
     config_artifacts:
@@ -132,9 +125,9 @@ task:
   - make USE_OPENMP=1
 
 FreeBSD_task:
-  name: FreeBSD-gcc12
+  name: FreeBSD-gcc
   freebsd_instance:
-    image_family: freebsd-13-3
+    image_family: freebsd-14-1
   install_script:
   - pkg update -f && pkg upgrade -y && pkg install -y gmake gcc
   compile_script:
@@ -143,9 +136,9 @@ FreeBSD_task:
 
 
 FreeBSD_task:
-  name: freebsd-gcc12-ilp64
+  name: freebsd-gcc-ilp64
   freebsd_instance:
-    image_family: freebsd-13-3
+    image_family: freebsd-14-1
   install_script:
   - pkg update -f && pkg upgrade -y && pkg install -y gmake gcc
   compile_script:
@@ -155,7 +148,7 @@ FreeBSD_task:
 FreeBSD_task:
   name: FreeBSD-clang-openmp
   freebsd_instance:
-    image_family: freebsd-13-3
+    image_family: freebsd-14-1
   install_script:
   - pkg update -f && pkg upgrade -y && pkg install -y gmake gcc 
   - ln -s /usr/local/lib/gcc13/libgfortran.so.5.0.0 /usr/lib/libgfortran.so
