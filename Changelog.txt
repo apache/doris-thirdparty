@@ -26,6 +26,7 @@ general:
  - fixed omission of several single-precision LAPACK symbols in the shared library 
  - improved build instructions for the provided "pybench" benchmarks
  - improved documentation, including added build instructions for WoA and HarmonyOS
+   as well as descriptions of environment variables that affect build and runtime behavior
  - added a separate "make install_tests" target for use with cross-compilations
  - integrated improvements and corrections from Reference-LAPACK:
    - removed a comparison in LAPACKE ?tpmqrt that is always false (LAPACK PR 1062)
