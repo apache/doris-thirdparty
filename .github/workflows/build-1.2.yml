@@ -125,6 +125,7 @@ jobs:
               'maven'
               'node'
               'llvm@15'
+              'llvm@16'
 
           - name: macOS-arm64
             os: macos-14
@@ -150,6 +151,7 @@ jobs:
               'maven'
               'node'
               'llvm@15'
+              'llvm@16'
 
           - name: Linux
             os: ubuntu-22.04
