@@ -43,7 +43,9 @@ jobs:
         run: |
           if [ "$RUNNER_OS" == "Linux" ]; then
             sudo apt-get update
-            sudo apt-get install -y gfortran cmake ccache libtinfo5
+            sudo apt-get install -y gfortran cmake ccache
+            wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
+            sudo apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
           elif [ "$RUNNER_OS" == "macOS" ]; then
             # It looks like "gfortran" isn't working correctly unless "gcc" is re-installed.
             brew reinstall gcc
