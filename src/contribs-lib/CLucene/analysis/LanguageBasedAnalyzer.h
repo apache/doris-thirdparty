@@ -47,7 +47,7 @@ public:
     void setLanguage(const TCHAR *language);
     void setStem(bool s);
     void setMode(AnalyzerMode m);
-    void initDict(const std::string &dictPath);
+    void initDict(const std::string &dictPath) override;
     TokenStream *tokenStream(const TCHAR *fieldName, CL_NS(util)::Reader *reader) override;
     TokenStream *reusableTokenStream(const TCHAR * /*fieldName*/, CL_NS(util)::Reader *reader) override;
 

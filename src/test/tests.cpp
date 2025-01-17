@@ -23,6 +23,7 @@ unittest tests[] = {
         {"IndexCompressV3", testIndexCompressV3},
         {"ByteArrayDataInput", testByteArrayDataInputSuite},
         {"GrowableByteArrayDataOutput", testGrowableByteArrayDataOutputSuite},
+        {"testICU", testICU},
 #ifdef TEST_CONTRIB_LIBS
         {"chinese", testchinese},
 #endif
