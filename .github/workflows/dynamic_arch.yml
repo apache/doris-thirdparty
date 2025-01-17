@@ -356,3 +356,23 @@ jobs:
       - name: Build OpenBLAS
         run: |
           make -j$(nproc) HOSTCC="ccache gcc" CC="ccache ${{ matrix.triple }}-gcc" FC="ccache ${{ matrix.triple }}-gfortran" ARCH=${{ matrix.target }} ${{ matrix.opts }}
+
+  neoverse_build:
+    if: "github.repository == 'OpenMathLib/OpenBLAS'"
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc gfortran make
+          
+      - name: Build OpenBLAS
+        run: |
+          make -j${nproc} TARGET=NEOVERSEN2
+          make -j${nproc} TARGET=NEOVERSEN2 lapack-test
+    
+          
