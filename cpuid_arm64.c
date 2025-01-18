@@ -43,6 +43,9 @@ size_t length64=sizeof(value64);
 #ifndef HWCAP_SVE
 #define HWCAP_SVE (1 << 22)
 #endif
+#if (defined OS_WINDOWS)
+#include <winreg.h>
+#endif
 
 #define get_cpu_ftr(id, var) ({                                 \
                 __asm__ __volatile__ ("mrs %0, "#id : "=r" (var));              \
@@ -385,6 +388,28 @@ int detect(void)
 	if (value64 == 3660830781) return CPU_VORTEX; //A15/M2
         if (value64 == 2271604202) return CPU_VORTEX; //A16/M3
         if (value64 == 1867590060) return CPU_VORTEX; //M4
+#else
+#ifdef OS_WINDOWS
+	HKEY reghandle;
+	HKEY hklm = HKEY_LOCAL_MACHINE;
+	WCHAR valstring[512];
+	PVOID pvalstring=valstring;
+	DWORD size=sizeof (valstring);
+	DWORD type=RRF_RT_ANY;
+	DWORD flags=0;
+	LPCWSTR subkey= L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0";
+        LPCWSTR field=L"ProcessorNameString"; 
+	LONG errcode=RegOpenKeyEx(HKEY_LOCAL_MACHINE,TEXT("Hardware\\Description\\System\\CentralProcessor\\0"), 0, KEY_READ, &reghandle);
+	if (errcode != NO_ERROR) wprintf(L"Could not open registry key for proc0: %x\n",errcode);
+        errcode=RegQueryValueEx(reghandle, "ProcessorNameString", NULL,NULL ,pvalstring,&size);
+	if (errcode != ERROR_SUCCESS) wprintf(L"Error reading cpuname from registry:%x\n",errcode);
+//wprintf(stderr,L"%s\n",(PWSTR)valstring);
+	RegCloseKey(reghandle);
+	if (strstr(valstring, "Snapdragon(R) X Elite")) return CPU_NEOVERSEN1;
+	if (strstr(valstring, "Ampere(R) Altra")) return CPU_NEOVERSEN1;
+	if (strstr(valstring, "Snapdragon (TM) 8cx Gen 3")) return CPU_CORTEXX1;
+	if (strstr(valstring, "Snapdragon Compute Platform")) return CPU_CORTEXX1;
+#endif
 #endif
 	return CPU_ARMV8;	
 #endif
