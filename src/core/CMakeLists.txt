@@ -71,6 +71,11 @@ SET(clucene_core_Files
     ./CLucene/analysis/standard/StandardFilter.cpp
     ./CLucene/analysis/standard/StandardTokenizer.cpp
     ./CLucene/analysis/standard95/StandardTokenizerImpl.cpp
+    ./CLucene/analysis/icu/BreakIteratorWrapper.cpp
+    ./CLucene/analysis/icu/CompositeBreakIterator.cpp
+    ./CLucene/analysis/icu/DefaultICUTokenizerConfig.cpp
+    ./CLucene/analysis/icu/ICUTokenizer.cpp
+    ./CLucene/analysis/icu/ScriptIterator.cpp
     ./CLucene/analysis/Analyzers.cpp
     ./CLucene/analysis/AnalysisHeader.cpp
     ./CLucene/store/MMapInput.cpp
@@ -251,7 +256,7 @@ IF (BUILD_STATIC_LIBRARIES)
     TARGET_LINK_LIBRARIES(clucene-core-static ssl crypto ${BRPC_LIB} ${GLOG_LIB} ${GFLAG_LIB} ${PROTOBUF_LIB})
   ENDIF (USE_BTHREAD)
   TARGET_INCLUDE_DIRECTORIES(clucene-core-static PUBLIC ${Roaring_INCLUDE_DIR})
-  TARGET_LINK_LIBRARIES(clucene-core-static PRIVATE zstd)
+  TARGET_LINK_LIBRARIES(clucene-core-static PRIVATE zstd icu)
 
   SET_TARGET_PROPERTIES(clucene-core-static PROPERTIES
       VERSION ${CLUCENE_VERSION}

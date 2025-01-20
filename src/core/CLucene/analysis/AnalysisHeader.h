@@ -281,6 +281,8 @@ public:
 
     virtual bool isSDocOpt() { return false; }
 
+    virtual void initDict(const std::string &dictPath) {}
+
     /** Creates a TokenStream which tokenizes all the text in the provided
 	Reader.  Default implementation forwards to tokenStream(Reader) for
 	compatibility with older version.  Override to allow Analyzer to choose
