@@ -232,3 +232,6 @@ In chronological order:
 
 * Aniket P. Garade <https://github.com/garadeaniket>   Sushil Pratap Singh <https://github.com/SushilPratap04>  Juliya James <https://github.com/Juliya32> 
   *  [2024-12-13] Optimized swap and rot  Level-1 BLAS routines with ARM SVE  
+
+* Annop Wongwathanarat <annop.wongwathanarat@arm.com>
+  * [2025-01-21] Optimize gemv_t_sve_v1x3 kernel
