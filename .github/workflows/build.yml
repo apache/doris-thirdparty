@@ -25,7 +25,7 @@ jobs:
       matrix:
         config:
           - name: macOS
-            os: macos-12
+            os: macos-15
             packages: >-
               'automake'
               'autoconf'
