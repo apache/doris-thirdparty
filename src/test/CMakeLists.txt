@@ -18,7 +18,7 @@ SOURCE_GROUP("store" ./store/*)
 SOURCE_GROUP("util" ./util/*)
 
 IF (BUILD_CONTRIBS_LIB)
-    SET(test_contribs_lib_files ./contribs-lib/analysis/testChinese.cpp)
+    SET(test_contribs_lib_files ./contribs-lib/analysis/testChinese.cpp ./contribs-lib/analysis/testIK.cpp)
     SET(EXTRA_LIBS ${EXTRA_LIBS} clucene-contribs-lib)
     ADD_DEFINITIONS(-DTEST_CONTRIB_LIBS)
 
@@ -289,6 +289,14 @@ IF (BUILD_STATIC_LIBRARIES)
 
     SET(DICT_SOURCE_DIR ${clucene_SOURCE_DIR}/src/contribs-lib/CLucene/analysis/jieba/dict)
     SET(DICT_TARGET_DIR "${EXECUTABLE_OUTPUT_PATH}/dict")
+
+    SET(IK_DICT_SOURCE_DIR ${clucene_SOURCE_DIR}/src/contribs-lib/CLucene/analysis/ik/dic/dict)
+    SET(IK_DICT_TARGET_DIR "${EXECUTABLE_OUTPUT_PATH}/ik-dict")
+
+    ADD_CUSTOM_COMMAND(TARGET cl_test POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${IK_DICT_SOURCE_DIR} ${IK_DICT_TARGET_DIR}
+            COMMENT "Copying IK dictionary files to ${IK_DICT_TARGET_DIR}")
+
 
     ADD_CUSTOM_COMMAND(TARGET cl_test POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_directory ${DICT_SOURCE_DIR} ${DICT_TARGET_DIR}
