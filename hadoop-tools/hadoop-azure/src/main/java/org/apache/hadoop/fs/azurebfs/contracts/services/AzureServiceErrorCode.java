@@ -21,7 +21,8 @@ package org.apache.hadoop.fs.azurebfs.contracts.services;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
@@ -62,6 +63,9 @@ public enum AzureServiceErrorCode {
   private final String errorCode;
   private final int httpStatusCode;
   private final String errorMessage;
+
+  private static final Logger LOG1 = LoggerFactory.getLogger(AzureServiceErrorCode.class);
+
   AzureServiceErrorCode(String errorCode, int httpStatusCodes, String errorMessage) {
     this.errorCode = errorCode;
     this.httpStatusCode = httpStatusCodes;
@@ -107,7 +111,6 @@ public enum AzureServiceErrorCode {
         return azureServiceErrorCode;
       }
     }
-
     return UNKNOWN;
   }
 
@@ -115,16 +118,15 @@ public enum AzureServiceErrorCode {
     if (errorCode == null || errorCode.isEmpty() || httpStatusCode == UNKNOWN.httpStatusCode || errorMessage == null || errorMessage.isEmpty()) {
       return UNKNOWN;
     }
-
+    String[] errorMessages = errorMessage.split(System.lineSeparator(), 2);
     for (AzureServiceErrorCode azureServiceErrorCode : AzureServiceErrorCode.values()) {
-      if (azureServiceErrorCode.httpStatusCode == httpStatusCode
-          && errorCode.equalsIgnoreCase(azureServiceErrorCode.errorCode)
-          && errorMessage.equalsIgnoreCase(azureServiceErrorCode.errorMessage)
-      ) {
+      if (azureServiceErrorCode.getStatusCode() == httpStatusCode
+          && azureServiceErrorCode.getErrorCode().equalsIgnoreCase(errorCode)
+          && azureServiceErrorCode.getErrorMessage()
+              .equalsIgnoreCase(errorMessages[0])) {
         return azureServiceErrorCode;
       }
     }
-
     return UNKNOWN;
   }
 }

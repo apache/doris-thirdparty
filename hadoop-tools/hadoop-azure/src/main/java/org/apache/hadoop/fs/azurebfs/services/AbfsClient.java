@@ -23,9 +23,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.net.UnknownHostException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -33,13 +35,17 @@ import java.util.Base64;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Locale;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants;
 import org.apache.hadoop.fs.azurebfs.constants.HttpOperationType;
+import org.apache.hadoop.fs.azurebfs.constants.FSOperationType;
 import org.apache.hadoop.fs.azurebfs.contracts.exceptions.AbfsInvalidChecksumException;
 import org.apache.hadoop.fs.azurebfs.contracts.exceptions.AbfsDriverException;
 import org.apache.hadoop.fs.azurebfs.contracts.exceptions.InvalidAbfsRestOperationException;
@@ -47,6 +53,7 @@ import org.apache.hadoop.fs.azurebfs.contracts.exceptions.InvalidFileSystemPrope
 import org.apache.hadoop.fs.azurebfs.contracts.services.AzureServiceErrorCode;
 import org.apache.hadoop.fs.azurebfs.contracts.services.ListResultSchema;
 import org.apache.hadoop.fs.azurebfs.contracts.services.StorageErrorResponseSchema;
+import org.apache.hadoop.fs.azurebfs.utils.MetricFormat;
 import org.apache.hadoop.fs.store.LogExactlyOnce;
 import org.apache.hadoop.fs.azurebfs.AzureBlobFileSystemStore.Permissions;
 import org.apache.hadoop.fs.azurebfs.extensions.EncryptionContextProvider;
@@ -88,10 +95,12 @@ import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.APN_VERS
 import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.CLIENT_VERSION;
 import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.DEFAULT_TIMEOUT;
 import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.EMPTY_STRING;
+import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.FILESYSTEM;
 import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.FORWARD_SLASH;
 import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.FORWARD_SLASH_ENCODE;
-import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.HTTP_METHOD_DELETE;
+import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.HTTP_METHOD_HEAD;
 import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.HTTP_METHOD_PUT;
+import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.HTTP_METHOD_DELETE;
 import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.HUNDRED_CONTINUE;
 import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.JAVA_VENDOR;
 import static org.apache.hadoop.fs.azurebfs.constants.AbfsHttpConstants.JAVA_VERSION;
@@ -117,6 +126,7 @@ import static org.apache.hadoop.fs.azurebfs.constants.HttpHeaderConfigurations.X
 import static org.apache.hadoop.fs.azurebfs.constants.HttpHeaderConfigurations.X_MS_ENCRYPTION_KEY;
 import static org.apache.hadoop.fs.azurebfs.constants.HttpHeaderConfigurations.X_MS_ENCRYPTION_KEY_SHA256;
 import static org.apache.hadoop.fs.azurebfs.constants.HttpHeaderConfigurations.X_MS_VERSION;
+import static org.apache.hadoop.fs.azurebfs.constants.HttpQueryParams.QUERY_PARAM_RESOURCE;
 import static org.apache.hadoop.fs.azurebfs.constants.HttpQueryParams.QUERY_PARAM_TIMEOUT;
 import static org.apache.hadoop.fs.azurebfs.services.RetryReasonConstants.CONNECTION_TIMEOUT_ABBREVIATION;
 
@@ -144,6 +154,13 @@ public abstract class AbfsClient implements Closeable {
   private AccessTokenProvider tokenProvider;
   private SASTokenProvider sasTokenProvider;
   private final AbfsCounters abfsCounters;
+  private final Timer timer;
+  private final String abfsMetricUrl;
+  private boolean isMetricCollectionEnabled = false;
+  private final MetricFormat metricFormat;
+  private final AtomicBoolean isMetricCollectionStopped;
+  private final int metricAnalysisPeriod;
+  private final int metricIdlePeriod;
   private EncryptionContextProvider encryptionContextProvider = null;
   private EncryptionType encryptionType = EncryptionType.NONE;
   private final AbfsThrottlingIntercept intercept;
@@ -151,6 +168,9 @@ public abstract class AbfsClient implements Closeable {
   private final ListeningScheduledExecutorService executorService;
 
   private boolean renameResilience;
+  private TimerTask runningTimerTask;
+  private boolean isSendMetricCall;
+  private SharedKeyCredentials metricSharedkeyCredentials = null;
 
   private KeepAliveCache keepAliveCache;
 
@@ -222,6 +242,35 @@ public abstract class AbfsClient implements Closeable {
         new ThreadFactoryBuilder().setNameFormat("AbfsClient Lease Ops").setDaemon(true).build();
     this.executorService = MoreExecutors.listeningDecorator(
         HadoopExecutors.newScheduledThreadPool(this.abfsConfiguration.getNumLeaseThreads(), tf));
+    this.metricFormat = abfsConfiguration.getMetricFormat();
+    this.isMetricCollectionStopped = new AtomicBoolean(false);
+    this.metricAnalysisPeriod = abfsConfiguration.getMetricAnalysisTimeout();
+    this.metricIdlePeriod = abfsConfiguration.getMetricIdleTimeout();
+    if (!metricFormat.toString().equals("")) {
+      isMetricCollectionEnabled = true;
+      abfsCounters.initializeMetrics(metricFormat);
+      String metricAccountName = abfsConfiguration.getMetricAccount();
+      int dotIndex = metricAccountName.indexOf(AbfsHttpConstants.DOT);
+      if (dotIndex <= 0) {
+        throw new InvalidUriException(
+                metricAccountName + " - account name is not fully qualified.");
+      }
+      String metricAccountKey = abfsConfiguration.getMetricAccountKey();
+      try {
+        metricSharedkeyCredentials = new SharedKeyCredentials(metricAccountName.substring(0, dotIndex),
+                metricAccountKey);
+      } catch (IllegalArgumentException e) {
+        throw new IOException("Exception while initializing metric credentials " + e);
+      }
+    }
+    this.timer = new Timer(
+        "abfs-timer-client", true);
+    if (isMetricCollectionEnabled) {
+      timer.schedule(new TimerTaskImpl(),
+          metricIdlePeriod,
+          metricIdlePeriod);
+    }
+    this.abfsMetricUrl = abfsConfiguration.getMetricUri();
   }
 
   public AbfsClient(final URL baseUrl, final SharedKeyCredentials sharedKeyCredentials,
@@ -253,6 +302,10 @@ public abstract class AbfsClient implements Closeable {
     }
     if (abfsApacheHttpClient != null) {
       abfsApacheHttpClient.close();
+    }
+    if (runningTimerTask != null) {
+      runningTimerTask.cancel();
+      timer.purge();
     }
     if (tokenProvider instanceof Closeable) {
       IOUtils.cleanupWithLogger(LOG,
@@ -291,6 +344,10 @@ public abstract class AbfsClient implements Closeable {
 
   SharedKeyCredentials getSharedKeyCredentials() {
     return sharedKeyCredentials;
+  }
+
+  SharedKeyCredentials getMetricSharedkeyCredentials() {
+    return metricSharedkeyCredentials;
   }
 
   public void setEncryptionType(EncryptionType encryptionType) {
@@ -1036,7 +1093,7 @@ public abstract class AbfsClient implements Closeable {
    */
   @VisibleForTesting
   protected URL createRequestUrl(final String path, final String query)
-          throws AzureBlobFileSystemException {
+      throws AzureBlobFileSystemException {
     return createRequestUrl(baseUrl, path, query);
   }
 
@@ -1050,7 +1107,7 @@ public abstract class AbfsClient implements Closeable {
    */
   @VisibleForTesting
   protected URL createRequestUrl(final URL baseUrl, final String path, final String query)
-          throws AzureBlobFileSystemException {
+      throws AzureBlobFileSystemException {
     String encodedPath = path;
     try {
       encodedPath = urlEncode(path);
@@ -1060,7 +1117,10 @@ public abstract class AbfsClient implements Closeable {
     }
 
     final StringBuilder sb = new StringBuilder();
-    sb.append(baseUrl);
+    if (baseUrl == null) {
+      throw new InvalidUriException("URL provided is null");
+    }
+    sb.append(baseUrl.toString());
     sb.append(encodedPath);
     sb.append(query);
 
@@ -1068,7 +1128,7 @@ public abstract class AbfsClient implements Closeable {
     try {
       url = new URL(sb.toString());
     } catch (MalformedURLException ex) {
-      throw new InvalidUriException(sb.toString());
+      throw new InvalidUriException("URL is malformed" + sb.toString());
     }
     return url;
   }
@@ -1294,7 +1354,7 @@ public abstract class AbfsClient implements Closeable {
    * Getter for abfsCounters from AbfsClient.
    * @return AbfsCounters instance.
    */
-  protected AbfsCounters getAbfsCounters() {
+  public AbfsCounters getAbfsCounters() {
     return abfsCounters;
   }
 
@@ -1330,6 +1390,128 @@ public abstract class AbfsClient implements Closeable {
   @VisibleForTesting
   protected AccessTokenProvider getTokenProvider() {
     return tokenProvider;
+  }
+
+  /**
+   * Retrieves a TracingContext object configured for metric tracking.
+   * This method creates a TracingContext object with the validated client correlation ID,
+   * the host name of the local machine (or "UnknownHost" if unable to determine),
+   * the file system operation type set to GET_ATTR, and additional configuration parameters
+   * for metric tracking.
+   * The TracingContext is intended for use in tracking metrics related to Azure Blob FileSystem (ABFS) operations.
+   *
+   * @return A TracingContext object configured for metric tracking.
+   */
+  private TracingContext getMetricTracingContext() {
+    String hostName;
+    try {
+      hostName = InetAddress.getLocalHost().getHostName();
+    } catch (UnknownHostException e) {
+      hostName = "UnknownHost";
+    }
+    return new TracingContext(TracingContext.validateClientCorrelationID(
+        abfsConfiguration.getClientCorrelationId()),
+        hostName, FSOperationType.GET_ATTR, true,
+        abfsConfiguration.getTracingHeaderFormat(),
+        null, abfsCounters.toString());
+  }
+
+  /**
+   * Synchronized method to suspend or resume timer.
+   * @param timerFunctionality resume or suspend.
+   * @param timerTask The timertask object.
+   * @return true or false.
+   */
+  boolean timerOrchestrator(TimerFunctionality timerFunctionality, TimerTask timerTask) {
+    switch (timerFunctionality) {
+      case RESUME:
+        if (isMetricCollectionStopped.get()) {
+          synchronized (this) {
+            if (isMetricCollectionStopped.get()) {
+              resumeTimer();
+            }
+          }
+        }
+        break;
+      case SUSPEND:
+        long now = System.currentTimeMillis();
+        long lastExecutionTime = abfsCounters.getLastExecutionTime().get();
+        if (isMetricCollectionEnabled && (now - lastExecutionTime >= metricAnalysisPeriod)) {
+          synchronized (this) {
+            if (!isMetricCollectionStopped.get()) {
+              timerTask.cancel();
+              timer.purge();
+              isMetricCollectionStopped.set(true);
+              return true;
+            }
+          }
+        }
+        break;
+      default:
+        break;
+    }
+    return false;
+  }
+
+  private void resumeTimer() {
+    isMetricCollectionStopped.set(false);
+    timer.schedule(new TimerTaskImpl(),
+        metricIdlePeriod,
+        metricIdlePeriod);
+  }
+
+  /**
+   * Initiates a metric call to the Azure Blob FileSystem (ABFS) for retrieving file system properties.
+   * This method performs a HEAD request to the specified metric URL, using default headers and query parameters.
+   *
+   * @param tracingContext The tracing context to be used for capturing tracing information.
+   * @throws IOException throws IOException.
+   */
+  public void getMetricCall(TracingContext tracingContext) throws IOException {
+    this.isSendMetricCall = true;
+    final List<AbfsHttpHeader> requestHeaders = createDefaultHeaders();
+    final AbfsUriQueryBuilder abfsUriQueryBuilder = createDefaultUriQueryBuilder();
+    abfsUriQueryBuilder.addQuery(QUERY_PARAM_RESOURCE, FILESYSTEM);
+
+    final URL url = createRequestUrl(new URL(abfsMetricUrl), EMPTY_STRING, abfsUriQueryBuilder.toString());
+
+    final AbfsRestOperation op = getAbfsRestOperation(
+            AbfsRestOperationType.GetFileSystemProperties,
+            HTTP_METHOD_HEAD,
+            url,
+            requestHeaders);
+    try {
+      op.execute(tracingContext);
+    } finally {
+      this.isSendMetricCall = false;
+    }
+  }
+
+  public boolean isSendMetricCall() {
+    return isSendMetricCall;
+  }
+
+  public boolean isMetricCollectionEnabled() {
+    return isMetricCollectionEnabled;
+  }
+
+  class TimerTaskImpl extends TimerTask {
+    TimerTaskImpl() {
+      runningTimerTask = this;
+    }
+    @Override
+    public void run() {
+      try {
+        if (timerOrchestrator(TimerFunctionality.SUSPEND, this)) {
+            try {
+              getMetricCall(getMetricTracingContext());
+            } finally {
+              abfsCounters.initializeMetrics(metricFormat);
+            }
+        }
+      } catch (IOException e) {
+      }
+    }
   }
 
   /**

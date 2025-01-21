@@ -109,6 +109,8 @@ public final class FileSystemConfigurations {
   public static final boolean DEFAULT_ENABLE_FLUSH = true;
   public static final boolean DEFAULT_DISABLE_OUTPUTSTREAM_FLUSH = true;
   public static final boolean DEFAULT_ENABLE_AUTOTHROTTLING = false;
+  public static final int DEFAULT_METRIC_IDLE_TIMEOUT_MS = 60_000;
+  public static final int DEFAULT_METRIC_ANALYSIS_TIMEOUT_MS = 60_000;
   public static final boolean DEFAULT_FS_AZURE_ACCOUNT_LEVEL_THROTTLING_ENABLED = true;
   public static final int DEFAULT_ACCOUNT_OPERATION_IDLE_TIMEOUT_MS = 60_000;
   public static final int DEFAULT_ANALYSIS_PERIOD_MS = 10_000;
