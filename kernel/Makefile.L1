@@ -336,6 +336,18 @@ ifndef XROTKERNEL
 XROTKERNEL = zrot.S
 endif
 
+ifndef SROTMKERNEL
+SROTMKERNEL = rotm.S
+endif
+
+ifndef DROTMKERNEL
+DROTMKERNEL = rotm.S
+endif
+
+ifndef QROTMKERNEL
+QROTMKERNEL = rotm.S
+endif
+
 ### SCAL ###
 
 ifndef SSCALKERNEL
@@ -504,14 +516,14 @@ SBLASOBJS	+= \
 	sasum_k$(TSUFFIX).$(SUFFIX) ssum_k$(TSUFFIX).$(SUFFIX) saxpy_k$(TSUFFIX).$(SUFFIX) scopy_k$(TSUFFIX).$(SUFFIX) \
 	sdot_k$(TSUFFIX).$(SUFFIX) sdsdot_k$(TSUFFIX).$(SUFFIX) dsdot_k$(TSUFFIX).$(SUFFIX) \
 	snrm2_k$(TSUFFIX).$(SUFFIX) srot_k$(TSUFFIX).$(SUFFIX) sscal_k$(TSUFFIX).$(SUFFIX) sswap_k$(TSUFFIX).$(SUFFIX) \
-	saxpby_k$(TSUFFIX).$(SUFFIX)
+	saxpby_k$(TSUFFIX).$(SUFFIX) srotm_k$(TSUFFIX).$(SUFFIX)
 
 DBLASOBJS	+= \
 	 damax_k$(TSUFFIX).$(SUFFIX)  damin_k$(TSUFFIX).$(SUFFIX)  dmax_k$(TSUFFIX).$(SUFFIX)  dmin_k$(TSUFFIX).$(SUFFIX) \
 	idamax_k$(TSUFFIX).$(SUFFIX) idamin_k$(TSUFFIX).$(SUFFIX) idmax_k$(TSUFFIX).$(SUFFIX) idmin_k$(TSUFFIX).$(SUFFIX) \
 	dasum_k$(TSUFFIX).$(SUFFIX) daxpy_k$(TSUFFIX).$(SUFFIX) dcopy_k$(TSUFFIX).$(SUFFIX) ddot_k$(TSUFFIX).$(SUFFIX) \
 	dnrm2_k$(TSUFFIX).$(SUFFIX) drot_k$(TSUFFIX).$(SUFFIX) dscal_k$(TSUFFIX).$(SUFFIX) dswap_k$(TSUFFIX).$(SUFFIX) \
-	daxpby_k$(TSUFFIX).$(SUFFIX) dsum_k$(TSUFFIX).$(SUFFIX)
+	daxpby_k$(TSUFFIX).$(SUFFIX) dsum_k$(TSUFFIX).$(SUFFIX) drotm_k$(TSUFFIX).$(SUFFIX)
 
 QBLASOBJS	+= \
 	 qamax_k$(TSUFFIX).$(SUFFIX)  qamin_k$(TSUFFIX).$(SUFFIX)  qmax_k$(TSUFFIX).$(SUFFIX)  qmin_k$(TSUFFIX).$(SUFFIX) \
@@ -839,6 +851,12 @@ $(KDIR)srot_k$(TSUFFIX).$(SUFFIX)  $(KDIR)srot_k$(TPSUFFIX).$(PSUFFIX)  : $(KERN
 	$(CC) -c $(CFLAGS) $(FMAFLAG) -UCOMPLEX -UCOMPLEX -UDOUBLE  $< -o $@
 
 $(KDIR)drot_k$(TSUFFIX).$(SUFFIX)  $(KDIR)drot_k$(TPSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(DROTKERNEL)
+	$(CC) -c $(CFLAGS) $(FMAFLAG) -UCOMPLEX -UCOMPLEX -DDOUBLE  $< -o $@
+
+$(KDIR)srotm_k$(TSUFFIX).$(SUFFIX)  $(KDIR)srotm_k$(TPSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(SROTMKERNEL)
+	$(CC) -c $(CFLAGS) $(FMAFLAG) -UCOMPLEX -UCOMPLEX -UDOUBLE  $< -o $@
+
+$(KDIR)drotm_k$(TSUFFIX).$(SUFFIX)  $(KDIR)drotm_k$(TPSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(DROTMKERNEL)
 	$(CC) -c $(CFLAGS) $(FMAFLAG) -UCOMPLEX -UCOMPLEX -DDOUBLE  $< -o $@
 
 $(KDIR)qrot_k$(TSUFFIX).$(SUFFIX)  $(KDIR)qrot_k$(TPSUFFIX).$(PSUFFIX)  : $(KERNELDIR)/$(QROTKERNEL)

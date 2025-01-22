@@ -158,7 +158,7 @@ gotoblas_t TABLE_NAME = {
 #if (BUILD_SINGLE==1) || (BUILD_DOUBLE==1) || (BUILD_COMPLEX==1)
   scopy_kTS, sdot_kTS,
 //  dsdot_kTS,
-  srot_kTS,   saxpy_kTS,  
+  srot_kTS,   saxpy_kTS,    srotm_kTS,
 #endif
 #if (BUILD_SINGLE==1) || (BUILD_DOUBLE==1) || (BUILD_COMPLEX==1) || (BUILD_COMPLEX16==1)
   sscal_kTS,
@@ -260,6 +260,7 @@ gotoblas_t TABLE_NAME = {
 #endif
 #if  (BUILD_DOUBLE==1) || (BUILD_COMPLEX16==1)  
   drot_kTS,
+  drotm_kTS,
   daxpy_kTS,
   dscal_kTS, 
   dswap_kTS,
@@ -334,7 +335,7 @@ gotoblas_t TABLE_NAME = {
   qrot_kTS,   qaxpy_kTS,  qscal_kTS, qswap_kTS,
   qgemv_nTS,  qgemv_tTS,  qger_kTS,
   qsymv_LTS,  qsymv_UTS,
-
+  qrotm_kTS,
   qgemm_kernelTS, qgemm_betaTS,
 #if QGEMM_DEFAULT_UNROLL_M != QGEMM_DEFAULT_UNROLL_N
   qgemm_incopyTS, qgemm_itcopyTS,
