@@ -192,7 +192,7 @@ INCLUDE_DIRECTORIES( ${_CL_BOOST_INCLUDE_PATH} )
 
 #include the projects
 ADD_SUBDIRECTORY (src/ext)
-set(PARALLEL_HASHMAP_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/src/ext/parallel_hashmap")
+set(PARALLEL_HASHMAP_INCLUDE_DIR "src/ext/parallel_hashmap")
 include_directories(${PARALLEL_HASHMAP_INCLUDE_DIR})
 include(cmake/FindRoaring.cmake)
 find_package(Roaring REQUIRED)

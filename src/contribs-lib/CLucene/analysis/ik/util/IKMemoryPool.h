@@ -13,24 +13,17 @@ CL_NS_DEF2(analysis, ik)
 template <typename T>
 class IKMemoryPool {
 public:
-    IKMemoryPool(size_t poolSize) : poolSize_(poolSize), allocatedCount_(0) {
-        if (poolSize_ == 0) {
-            throw std::invalid_argument("Pool size must be greater than 0");
+    // IKMemoryPool: A layered memory pool for QuickSortSet::Cell objects, dynamically expanding by adding new layers.
+    IKMemoryPool(size_t layerSize) : layerSize_(layerSize), allocatedCount_(0) {
+        if (layerSize_ == 0) {
+            throw std::invalid_argument("Layer size must be greater than 0");
         }
-
-        memoryBlock_ = std::make_unique<char[]>(sizeof(T) * poolSize_);
-
-        for (size_t i = 0; i < poolSize_; ++i) {
-            char* block = memoryBlock_.get() + (i * sizeof(T));
-            FreeNode* node = reinterpret_cast<FreeNode*>(block);
-            node->next = freeList_;
-            freeList_ = node;
-        }
+        addLayer();
     }
 
     T* allocate() {
-        if (allocatedCount_ >= poolSize_) {
-            throw std::bad_alloc();
+        if (freeList_ == nullptr) {
+            addLayer();
         }
 
         FreeNode* node = freeList_;
@@ -64,19 +57,33 @@ public:
         allocatedCount_ -= count;
     }
 
-    size_t available() const { return poolSize_ - allocatedCount_; }
+    size_t available() const {
+        return (layers_.size() * layerSize_) - allocatedCount_;
+    }
 
-    size_t poolSize() const { return poolSize_; }
+    size_t poolSize() const { return layers_.size() * layerSize_; }
 
 private:
     struct FreeNode {
         FreeNode* next = nullptr;
     };
 
-    size_t poolSize_;
+    size_t layerSize_;
     size_t allocatedCount_;
-    std::unique_ptr<char[]> memoryBlock_;
+    std::vector<std::unique_ptr<char[]>> layers_;
     FreeNode* freeList_ = nullptr;
+    void addLayer() {
+        auto newLayer = std::make_unique<char[]>(sizeof(T) * layerSize_);
+        layers_.push_back(std::move(newLayer));
+
+        char* layerStart = layers_.back().get();
+        for (size_t i = 0; i < layerSize_; ++i) {
+            char* block = layerStart + (i * sizeof(T));
+            FreeNode* node = reinterpret_cast<FreeNode*>(block);
+            node->next = freeList_;
+            freeList_ = node;
+        }
+    }
 };
 CL_NS_END2
 #endif //CLUCENE_IKMEMORYPOOL_H
