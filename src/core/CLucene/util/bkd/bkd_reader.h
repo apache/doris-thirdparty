@@ -160,9 +160,9 @@ public:
                    std::vector<uint8_t> &cellMinPacked,
                    std::vector<uint8_t> &cellMaxPacked);
     std::shared_ptr<intersect_state> get_intersect_state(bkd_reader::intersect_visitor *visitor);
+    int64_t ram_bytes_used();
 
 private:
-    int64_t ram_bytes_used();
     store::Directory* _dir;
     bool _close_directory;
 };
