@@ -29,8 +29,8 @@ void DefaultICUTokenizerConfig::initialize(const std::string& dictPath) {
             _CLTHROWT(CL_ERR_IllegalArgument, error_msg.c_str());
         }
 
-        readBreakIterator(defaultBreakIterator_, dictPath + "/Default.txt");
-        readBreakIterator(myanmarSyllableIterator_, dictPath + "/MyanmarSyllable.txt");
+        readBreakIterator(defaultBreakIterator_, dictPath + "/uax29/Default.txt");
+        readBreakIterator(myanmarSyllableIterator_, dictPath + "/uax29/MyanmarSyllable.txt");
     });
 }
 

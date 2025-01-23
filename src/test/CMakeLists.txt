@@ -294,7 +294,7 @@ IF (BUILD_STATIC_LIBRARIES)
             COMMAND ${CMAKE_COMMAND} -E copy_directory ${DICT_SOURCE_DIR} ${DICT_TARGET_DIR}
             COMMENT "Copying ${DATA_SOURCE_DIR} to ${DATA_TARGET_DIR}/dict")
 
-    SET(ICU_DICT_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/core/CLucene/analysis/icu/data/uax29)
+    SET(ICU_DICT_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/core/CLucene/analysis/icu/data)
     SET(ICU_DICT_TARGET_DIR "${EXECUTABLE_OUTPUT_PATH}/icu-dict")
 
      ADD_CUSTOM_COMMAND(TARGET cl_test POST_BUILD

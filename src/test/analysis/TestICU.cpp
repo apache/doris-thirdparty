@@ -17,12 +17,12 @@ void tokenize(const std::string& s, std::vector<std::string>& datas) {
         ICUAnalyzer analyzer;
         analyzer.initDict("./icu-dict");
         analyzer.set_lowercase(false);
-        std::unique_ptr<ICUTokenizer> tokenizer;
-        tokenizer.reset((ICUTokenizer*)analyzer.tokenStream(L"", nullptr));
 
         lucene::util::SStringReader<char> reader;
         reader.init(s.data(), s.size(), false);
-        tokenizer->reset(&reader);
+
+        std::unique_ptr<ICUTokenizer> tokenizer;
+        tokenizer.reset((ICUTokenizer*)analyzer.tokenStream(L"", &reader));
 
         Token t;
         while (tokenizer->next(&t)) {

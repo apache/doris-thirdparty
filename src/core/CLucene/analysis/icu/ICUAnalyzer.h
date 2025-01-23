@@ -22,6 +22,7 @@ public:
     TokenStream* tokenStream(const TCHAR* fieldName, lucene::util::Reader* reader) override {
         auto tokenizer = _CLNEW ICUTokenizer(_lowercase, _ownReader);
         tokenizer->initialize(dictPath_);
+        tokenizer->reset(reader);
         return tokenizer;
     }
 
