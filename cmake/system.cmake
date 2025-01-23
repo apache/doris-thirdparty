@@ -21,7 +21,15 @@ endif()
 # Other files expect CORE, which is actually TARGET and will become TARGET_CORE for kernel build. Confused yet?
 # It seems we are meant to use TARGET as input and CORE internally as kernel.
 if(NOT DEFINED CORE AND DEFINED TARGET)
-  set(CORE ${TARGET})
+  if (${TARGET} STREQUAL "LOONGSON3R5")
+    set(CORE "LA464")
+  elseif (${TARGET} STREQUAL "LOONGSON2K1000")
+    set(CORE "LA264")
+  elseif (${TARGET} STREQUAL "LOONGSONGENERIC")
+    set(CORE "LA64_GENERIC)")
+  else ()
+    set(CORE ${TARGET})
+  endif()
 endif()
 
 # TARGET_CORE will override TARGET which is used in DYNAMIC_ARCH=1.
