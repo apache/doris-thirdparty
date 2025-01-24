@@ -231,7 +231,10 @@ In chronological order:
   * [2024-01-24] Optimize GEMV forwarding on ARM64 systems
 
 * Aniket P. Garade <https://github.com/garadeaniket>   Sushil Pratap Singh <https://github.com/SushilPratap04>  Juliya James <https://github.com/Juliya32> 
-  *  [2024-12-13] Optimized swap and rot  Level-1 BLAS routines with ARM SVE  
+  *  [2024-12-13] Optimized swap and rot  Level-1 BLAS routines with ARM SVE
 
 * Annop Wongwathanarat <annop.wongwathanarat@arm.com>
   * [2025-01-10] Add thread throttling profile for SGEMM on NEOVERSEV1
+
+* Marek Michalowski <https://github.com/michalowski-arm>
+  * [2025-01-21] Add thread throttling profile for SGEMV on `NEOVERSEV1`
