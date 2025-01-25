@@ -290,6 +290,18 @@ ifndef QROTKERNEL
 QROTKERNEL = rot.S
 endif
 
+ifndef SROTMKERNEL
+SROTMKERNEL = ../generic/rotm.c
+endif
+
+ifndef DROTMKERNEL
+DROTMKERNEL = ../generic/rotm.c
+endif
+
+ifndef QROTMKERNEL
+QROTMKERNEL = ../generic/rotm.c
+endif
+
 ifndef CROTKERNEL
 CROTKERNEL = zrot_sse.S
 endif
