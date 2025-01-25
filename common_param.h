@@ -77,6 +77,7 @@ BLASLONG (*isbmin_k) (BLASLONG, float *, BLASLONG);
   double (*dsbdot_k) (BLASLONG, float *, BLASLONG, float *, BLASLONG);
 
   int    (*sbrot_k)  (BLASLONG, float *, BLASLONG, float *, BLASLONG, float, float);
+  int    (*sbrotm_k) (BLASLONG, float *, BLASLONG, float *, BLASLONG, float *);
 
   int    (*sbaxpy_k) (BLASLONG, BLASLONG, BLASLONG, float, float *, BLASLONG, float *, BLASLONG, float *, BLASLONG);
   int    (*sbscal_k) (BLASLONG, BLASLONG, BLASLONG, float, float *, BLASLONG, float *, BLASLONG, float *, BLASLONG);
