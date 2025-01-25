@@ -235,6 +235,8 @@ In chronological order:
 
 * Annop Wongwathanarat <annop.wongwathanarat@arm.com>
   * [2025-01-10] Add thread throttling profile for SGEMM on NEOVERSEV1
+  * [2025-01-21] Optimize gemv_t_sve_v1x3 kernel
 
 * Marek Michalowski <https://github.com/michalowski-arm>
   * [2025-01-21] Add thread throttling profile for SGEMV on `NEOVERSEV1`
+
