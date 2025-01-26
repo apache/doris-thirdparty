@@ -486,7 +486,7 @@ the LLVM toolchain enables native compilation of the Fortran sources of LAPACK a
        mkdir build
        cd build
 
-       cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DTARGET=ARMV8 -DBINARY=64 -DCMAKE_C_COMPILER=clang-cl -DCMAKE_C_COMPILER_TARGET=arm64-pc-windows-msvc -DCMAKE_ASM_COMPILER_TARGET=arm64-pc-windows-msvc -DCMAKE_Fortran_COMPILER=flang-new
+       cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DTARGET=ARMV8 -DBINARY=64 -DCMAKE_C_COMPILER=clang-cl -DCMAKE_Fortran_COMPILER=flang-new
 
        ninja -j16
        ```
