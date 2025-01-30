@@ -164,7 +164,19 @@ jobs:
   - script: |
       brew update
       make CC=gcc-12 FC=gfortran-12
-     
+
+- job: OSX_LLVM_flangnew
+  pool:
+     vmImage: 'macOS-latest'
+  variables:
+     LD_LIBRARY_PATH: /usr/local/opt/llvm/lib
+     LIBRARY_PATH: /usr/local/opt/llvm/lib
+  steps:   
+  - script: |
+      brew update
+      brew install llvm flang
+      make TARGET=NEHALEM CC=/usr/local/opt/llvm/bin/clang FC=/usr/local/Cellar/flang/19.1.7_1/bin/flang-new NO_SHARED=1
+
 - job: OSX_OpenMP_Clang
   pool:
      vmImage: 'macOS-latest'
