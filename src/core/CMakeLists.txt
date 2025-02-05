@@ -76,6 +76,7 @@ SET(clucene_core_Files
     ./CLucene/analysis/icu/DefaultICUTokenizerConfig.cpp
     ./CLucene/analysis/icu/ICUTokenizer.cpp
     ./CLucene/analysis/icu/ScriptIterator.cpp
+    ./CLucene/analysis/simple/SimpleTokenizer.cpp
     ./CLucene/analysis/Analyzers.cpp
     ./CLucene/analysis/AnalysisHeader.cpp
     ./CLucene/store/MMapInput.cpp
