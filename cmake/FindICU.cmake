@@ -5,7 +5,7 @@ if(NOT TARGET icu)
     set(ICU_ARCHIVE "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/release-75-1.tar.gz")
     set(ICU_EXTRACT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty")
     set(ICU_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/icu/icu4c/source")
-    set(ICU_INSTALL_DIR "${ICU_SOURCE_DIR}/install")
+    set(ICU_INSTALL_DIR "${CMAKE_BINARY_DIR}/icu-build")
     set(ICU_INCLUDE_DIR "${ICU_INSTALL_DIR}/include")
     set(ICU_LIBRARY_DIR "${ICU_INSTALL_DIR}/lib")
     set(ICU_UC_LIB "${ICU_LIBRARY_DIR}/libicuuc.a")
@@ -90,7 +90,6 @@ if(NOT TARGET icu)
             WORKING_DIRECTORY "${ICU_SOURCE_DIR}"
             RESULT_VARIABLE configure_result
             OUTPUT_QUIET
-            ERROR_QUIET
         )
 
         # Check if the configuration was successful
@@ -107,7 +106,6 @@ if(NOT TARGET icu)
             WORKING_DIRECTORY "${ICU_SOURCE_DIR}"
             RESULT_VARIABLE build_result
             OUTPUT_QUIET
-            ERROR_QUIET
         )
 
         # Check if the build was successful
@@ -124,7 +122,6 @@ if(NOT TARGET icu)
             WORKING_DIRECTORY "${ICU_SOURCE_DIR}"
             RESULT_VARIABLE install_result
             OUTPUT_QUIET
-            ERROR_QUIET
         )
 
         # Check if the install was successful
