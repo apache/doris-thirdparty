@@ -40,16 +40,6 @@
 #define SMP_THRESHOLD_MIN 65536.0
 #ifdef RNAME
 #ifdef XDOUBLE
-#define ERROR_NAME "QGEMMT "
-#elif defined(DOUBLE)
-#define ERROR_NAME "DGEMMT "
-#elif defined(BFLOAT16)
-#define ERROR_NAME "SBGEMMT "
-#else
-#define ERROR_NAME "SGEMMT "
-#endif
-#else
-#ifdef XDOUBLE
 #define ERROR_NAME "QGEMMTR"
 #elif defined(DOUBLE)
 #define ERROR_NAME "DGEMMTR"
@@ -57,6 +47,16 @@
 #define ERROR_NAME "SBGEMMTR"
 #else
 #define ERROR_NAME "SGEMMTR"
+#endif
+#else
+#ifdef XDOUBLE
+#define ERROR_NAME "QGEMMT "
+#elif defined(DOUBLE)
+#define ERROR_NAME "DGEMMT "
+#elif defined(BFLOAT16)
+#define ERROR_NAME "SBGEMMT "
+#else
+#define ERROR_NAME "SGEMMT "
 #endif
 #endif
 #else
