@@ -69,7 +69,6 @@
 #else
 #define ERROR_NAME "CGEMMTR"
 #endif
-#endif
 #else
 #ifdef XDOUBLE
 #define ERROR_NAME "XGEMMT "
