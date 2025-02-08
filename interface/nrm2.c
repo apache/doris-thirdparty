@@ -128,18 +128,12 @@ FLOAT CNAME(blasint n, FLOAT *x, blasint incx){
 
   if (n <= 0) return 0.;
 
-  if (n == 1)
 #ifndef COMPLEX
+  if (n == 1)
 #ifdef DOUBLE
     return fabs(x[0]);
 #else
     return fabsf(x[0]);
-#endif
-#else
-#ifdef DOUBLE
-    return fabs(x[0]+fabs(x[1]));
-#else
-    return fabsf(x[0]+fabsf(x[1]));
 #endif
 #endif
 
