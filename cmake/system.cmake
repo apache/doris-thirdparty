@@ -628,6 +628,18 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${CCOMMON_OPT}")
 endif()
 # TODO: not sure what PFLAGS is -hpa
 set(PFLAGS "${PFLAGS} ${CCOMMON_OPT} -I${TOPDIR} -DPROFILE ${COMMON_PROF}")
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
+
+if ("${F_COMPILER}" STREQUAL "FLANG")
+if (${CMAKE_Fortran_COMPILER_VERSION} VERSION_LESS_EQUAL 3)
+  set(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -fno-unroll-loops")
+endif ()
+endif ()
+if (ARM64 AND CMAKE_Fortran_COMPILER_ID MATCHES "LLVMFlang.*" AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
+  set(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -O2")
+endif ()
+endif ()
+
 
 set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${FCOMMON_OPT}")
 # TODO: not sure what FPFLAGS is -hpa
@@ -653,7 +665,7 @@ if (CMAKE_Fortran_COMPILER)
   if ("${F_COMPILER}" STREQUAL "NAGFOR" OR "${F_COMPILER}" STREQUAL "CRAY" OR CMAKE_Fortran_COMPILER_ID MATCHES "LLVMFlang.*")
     set(FILTER_FLAGS "-msse3;-mssse3;-msse4.1;-mavx;-mavx2,-mskylake-avx512")
     if (CMAKE_Fortran_COMPILER_ID MATCHES "LLVMFlang.*")
-      message(STATUS "removing fortran flags")
+      message(STATUS "removing fortran flags not supported by the compiler")
       set(FILTER_FLAGS "${FILTER_FLAGS};-m32;-m64")
     endif ()
     foreach (FILTER_FLAG ${FILTER_FLAGS})
@@ -684,13 +696,6 @@ if (${CMAKE_C_COMPILER_ID} MATCHES "IntelLLVM" AND ${CMAKE_SYSTEM_NAME} STREQUAL
 	set(LAPACK_CFLAGS "${LAPACK_CFLAGS} -DNOCHANGE")
 endif ()
 
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
-if ("${F_COMPILER}" STREQUAL "FLANG")
-if (${CMAKE_Fortran_COMPILER_VERSION} VERSION_LESS_EQUAL 3)
-  set(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -fno-unroll-loops")
-endif ()
-endif ()
-endif ()
 
 if (NOT DEFINED SUFFIX)
   set(SUFFIX o)
