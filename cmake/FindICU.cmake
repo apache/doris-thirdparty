@@ -1,8 +1,8 @@
 if(NOT TARGET icu)
     message(STATUS "ICU target not found, checking for local sources...")
 
-    set(ICU_ARCHIVE_URL "https://github.com/unicode-org/icu/archive/refs/tags/release-75-1.tar.gz")
-    set(ICU_ARCHIVE "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/release-75-1.tar.gz")
+    set(ICU_ARCHIVE_URL "https://github.com/unicode-org/icu/archive/refs/tags/release-69-1.tar.gz")
+    set(ICU_ARCHIVE "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/release-69-1.tar.gz")
     set(ICU_EXTRACT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty")
     set(ICU_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/icu/icu4c/source")
     set(ICU_INSTALL_DIR "${CMAKE_BINARY_DIR}/icu-build")
@@ -51,7 +51,7 @@ if(NOT TARGET icu)
         endif()
 
         # Rename the extracted directory
-        set(ICU_EXTRACTED_DIR "${ICU_EXTRACT_DIR}/icu-release-75-1")
+        set(ICU_EXTRACTED_DIR "${ICU_EXTRACT_DIR}/icu-release-69-1")
         set(ICU_RENAMED_DIR "${ICU_EXTRACT_DIR}/icu")
 
         # Check if the target directory already exists
@@ -83,11 +83,12 @@ if(NOT TARGET icu)
             COMMAND 
                 ./configure
                 --prefix=${ICU_INSTALL_DIR}
-                --disable-shared
                 --enable-static
-                --disable-samples
-                --disable-tests
+                --disable-shared
                 --enable-release
+                --disable-tests
+                --disable-samples
+                --disable-fuzzer
             WORKING_DIRECTORY "${ICU_SOURCE_DIR}"
             RESULT_VARIABLE configure_result
             OUTPUT_QUIET
