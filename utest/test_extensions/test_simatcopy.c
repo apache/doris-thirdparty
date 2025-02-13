@@ -86,7 +86,7 @@ static float check_simatcopy(char api, char order, char trans, blasint rows, bla
         stranspose(m, n, alpha, data_simatcopy.a_test, lda_src, data_simatcopy.a_verify, lda_dst);
     } 
     else {
-        scopy(m, n, alpha, data_simatcopy.a_test, lda_src, data_simatcopy.a_verify, lda_dst);
+        my_scopy(m, n, alpha, data_simatcopy.a_test, lda_src, data_simatcopy.a_verify, lda_dst);
     }
 
     if (api == 'F') {

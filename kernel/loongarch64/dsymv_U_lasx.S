@@ -28,6 +28,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define ASSEMBLER
 
 #include "common.h"
+#include "loongarch64_asm.S"
 
 /* Param */
 #define M      $r4
@@ -57,6 +58,8 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define T2     $r28
 #define T3     $r29
 #define T4     $r30
+#define T5     $r17
+#define T6     $r16
 
 /* LSX vectors */
 #define U0     $xr31
@@ -87,67 +90,8 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define a8     $f8
 #define a9     $f9
 
-
-    PROLOGUE
-
-    LDARG  BUFFER,  $sp,  0
-
-    addi.d  $sp, $sp, -88
-
-    SDARG  $r23,  $sp,    0
-    SDARG  $r24,  $sp,    8
-    SDARG  $r25,  $sp,    16
-    SDARG  $r26,  $sp,    32
-    SDARG  $r27,  $sp,    40
-    SDARG  $r28,  $sp,    48
-    SDARG  $r29,  $sp,    56
-    SDARG  $r30,  $sp,    64
-    SDARG  $r31,  $sp,    72
-    ST     ALPHA, $sp,    80
-
-    xvldrepl.d  VALPHA, $sp, 80
-
-    slli.d     LDA,     LDA,  BASE_SHIFT
-    slli.d     INCX,    INCX, BASE_SHIFT
-    slli.d     INCY,    INCY, BASE_SHIFT
-
-    bge    $r0,    M,    .L999
-    bge    $r0,    N,    .L999
-
-    sub.d  M1,     M,    N
-
-    mul.d   JY,     M1,    INCY
-    mul.d   JX,     M1,    INCX
-
-    move   J,      M1
-    move   AO1,    A
-
-    beq        J,      M,    .L999
-
-.L01:
-    MTC         $f2,   $r0        //temp2
-    fldx.d      $f6,   X,   JX
-    fmul.d      $f3,   ALPHA, $f6  //temp1
-    xvreplve0.d U3,   U3
-    xvreplve0.d U2,   U2
-
-    move      IY,     $r0
-    move      IX,     $r0
-    move      II,     $r0
-    move      I,      $r0
-
-    srai.d    T0,     J,   3
-    beq       I,      T0,    .L03
-
-    mul.d       T1,     J,    LDA
-    add.d       T1,     T1,   II
-
-.L02:  /* /8 */
-    xvldx       U1,    AO1,   T1
-    addi.d      T1,     T1,   32
-    xvldx       U14,   AO1,   T1
-    addi.d      T1,     T1,   32
-
+.macro LOAD_Y_8
+    beqz T5, .L01_Y_0
     fldx.d      $f4,   Y,     IY
     add.d       T2,    IY,    INCY
     fldx.d      $f5,   Y,     T2
@@ -167,20 +111,26 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
     vextrins.d  $vr4,    $vr5,    0x10
     vextrins.d  $vr6,    $vr7,    0x10
-    xvpermi.q   U4,    U6,    0x02
+    xvpermi.q   U4,      U6,      0x02
 
     vextrins.d  $vr8,    $vr9,    0x10
     vextrins.d  $vr10,   $vr11,   0x10
-    xvpermi.q   U8,    U10,    0x02
+    xvpermi.q   U8,      U10,     0x02
+    b .L01_Y_1
+.L01_Y_0:
+    xvldx U4, Y,  IY
+    alsl.d T4, INCY, IY, 2
+    xvldx U8, Y,  T4
+.L01_Y_1:
+.endm
 
-    xvfmadd.d    U4,    U3,    U1,    U4
-    xvfmadd.d    U8,    U3,    U14,   U8
-
-    xvpermi.d   U6,    U4,    0xee
+.macro STORE_Y_8
+    beqz T5, .L01_Y_2
+    xvpermi.d   U6,      U4,      0xee
     vextrins.d  $vr5,    $vr4,    0x01
     vextrins.d  $vr7,    $vr6,    0x01
 
-    xvpermi.d   U10,    U8,    0xee
+    xvpermi.d   U10,     U8,      0xee
     vextrins.d  $vr9,    $vr8,    0x01
     vextrins.d  $vr11,   $vr10,   0x01
 
@@ -200,10 +150,15 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     fstx.d      $f10,  Y,     T2
     add.d       T2,    T2,    INCY
     fstx.d      $f11,  Y,     T2
+    b .L01_Y_3
+.L01_Y_2:
+    xvstx  U4, Y, IY
+    xvstx  U8, Y, T4
+.L01_Y_3:
+.endm
 
-    slli.d      T2,    INCY,  3
-    add.d       IY,    IY,    T2
-
+.macro LOAD_X_8
+    beqz T6, .L01_X_0
     fldx.d      $f4,   X,     IX
     add.d       T2,    IX,    INCX
     fldx.d      $f5,   X,     T2
@@ -223,35 +178,101 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
     vextrins.d  $vr4,    $vr5,    0x10
     vextrins.d  $vr6,    $vr7,    0x10
-    xvpermi.q   U4,    U6,    0x02
+    xvpermi.q   U4,      U6,      0x02
 
     vextrins.d  $vr8,    $vr9,    0x10
     vextrins.d  $vr10,   $vr11,   0x10
-    xvpermi.q   U8,    U10,    0x02
+    xvpermi.q   U8,      U10,     0x02
+    b .L01_X_1
+.L01_X_0:
+    xvldx  U4, X,  IX
+    alsl.d T2, INCX, IX, 2
+    xvldx  U8, X,  T2
+.L01_X_1:
+.endm
 
-    xvand.v     $xr12, $xr2, $xr2
+    PROLOGUE
+
+    addi.d  $sp, $sp, -88
+
+    SDARG  $r23,  $sp,    0
+    SDARG  $r24,  $sp,    8
+    SDARG  $r25,  $sp,    16
+    SDARG  $r26,  $sp,    32
+    SDARG  $r27,  $sp,    40
+    SDARG  $r28,  $sp,    48
+    SDARG  $r29,  $sp,    56
+    SDARG  $r30,  $sp,    64
+    SDARG  $r31,  $sp,    72
+    ST     ALPHA, $sp,    80
+
+    xvldrepl.d  VALPHA, $sp, 80
+
+    addi.d     T5,      INCY, -1
+    addi.d     T6,      INCX, -1
+    slli.d     LDA,     LDA,  BASE_SHIFT
+    slli.d     INCX,    INCX, BASE_SHIFT
+    slli.d     INCY,    INCY, BASE_SHIFT
+
+    bge    $r0,    M,    .L999
+    bge    $r0,    N,    .L999
+
+    sub.d  M1,     M,    N
+
+    mul.d   JY,     M1,    INCY
+    mul.d   JX,     M1,    INCX
+
+    move   J,      M1
+    move   AO1,    A
+
+    beq        J,      M,    .L999
+
+.L01:
+    xvxor.v     U2,    U2,  U2
+    fldx.d      $f6,   X,   JX
+    fmul.d      $f3,   ALPHA, $f6  //temp1
+    xvreplve0.d U3,   U3
+
+    move      IY,     $r0
+    move      IX,     $r0
+    move      II,     $r0
+    move      I,      $r0
+
+    srai.d    T0,     J,   3
+    beq       I,      T0,    .L03
+
+    mul.d       T1,     J,    LDA
+    add.d       T1,     T1,   II
+
+.L02:  /* /8 */
+    xvldx       U1,    AO1,   T1
+    addi.d      T2,     T1,   32
+    xvldx       U14,   AO1,   T2
+
+    LOAD_Y_8
+
+    xvfmadd.d    U4,    U3,    U1,    U4
+    xvfmadd.d    U8,    U3,    U14,   U8
+
+    STORE_Y_8
+
+    alsl.d IY, INCY, IY, 3
+
+    LOAD_X_8
 
     xvfmadd.d    U2,    U1,    U4,    U2
-    xvfsub.d     U2,    U2,    $xr12
     xvfmadd.d    U2,    U14,   U8,    U2
 
-    xvpermi.d    U4,    U2,    0x01
-    xvpermi.d    U5,    U2,    0x02
-    xvpermi.d    U6,    U2,    0x03
+    alsl.d IX, INCX, IX, 3
 
-    fadd.d     $f2,    $f2,   $f4
-    fadd.d     $f2,    $f2,   $f5
-    fadd.d     $f2,    $f2,   $f6
-    fadd.d     $f2,    $f2,   $f12
-
-    xvreplve0.d U2,    U2
-
-    slli.d      T2,    INCX,  3
-    add.d       IX,    IX,    T2
-
+    addi.d     T1,     T1,    64
     addi.d     II,     II,    64
     addi.d     I,      I,     1
     blt        I,      T0,    .L02
+
+    //Acc U2
+    GACC   xvf, d, U4, U2
+    xvreplve0.d U2, U4
 
 .L03:  /* &4 */
     andi      T0,     J,   4

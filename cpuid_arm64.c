@@ -25,6 +25,7 @@
   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   *****************************************************************************/
 
+#include <stdlib.h>
 #include <string.h>
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -32,6 +33,23 @@ int32_t value;
 size_t length=sizeof(value);
 int64_t value64;
 size_t length64=sizeof(value64);
+#endif
+#if (defined OS_LINUX || defined OS_ANDROID)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#ifndef HWCAP_CPUID
+#define HWCAP_CPUID (1 << 11)
+#endif
+#ifndef HWCAP_SVE
+#define HWCAP_SVE (1 << 22)
+#endif
+#if (defined OS_WINDOWS)
+#include <winreg.h>
+#endif
+
+#define get_cpu_ftr(id, var) ({                                 \
+                __asm__ __volatile__ ("mrs %0, "#id : "=r" (var));              \
+        })
 #endif
 
 #define CPU_UNKNOWN     	0
@@ -42,11 +60,11 @@ size_t length64=sizeof(value64);
 #define CPU_CORTEXA57     3
 #define CPU_CORTEXA72     4
 #define CPU_CORTEXA73     5
-#define CPU_CORTEXA76	  23
+#define CPU_CORTEXA76    23
 #define CPU_NEOVERSEN1    11
 #define CPU_NEOVERSEV1    16
 #define CPU_NEOVERSEN2    17
-#define CPU_NEOVERSEV2   24
+#define CPU_NEOVERSEV2    24
 #define CPU_CORTEXX1      18
 #define CPU_CORTEXX2	  19
 #define CPU_CORTEXA510	  20
@@ -93,7 +111,7 @@ static char *cpuname[] = {
   "CORTEXA710",
   "FT2000",
   "CORTEXA76",
-	"NEOVERSEV2"
+  "NEOVERSEV2"
 };
 
 static char *cpuname_lower[] = {
@@ -121,13 +139,17 @@ static char *cpuname_lower[] = {
   "cortexa710",
   "ft2000",
   "cortexa76",
-	"neoversev2"
+  "neoversev2"
 };
+
+static int cpulowperf=0;
+static int cpumidperf=0;
+static int cpuhiperf=0;
 
 int get_feature(char *search)
 {
 
-#ifdef __linux
+#if defined( __linux ) || defined( __NetBSD__ )
 	FILE *infile;
   	char buffer[2048], *p,*t;
   	p = (char *) NULL ;
@@ -158,33 +180,108 @@ int get_feature(char *search)
 #endif
 	return(0);
 }
-
+static int cpusort(const void *model1, const void *model2)
+{
+	return (*(int*)model2-*(int*)model1);
+}
 
 int detect(void)
 {
 
-#ifdef __linux
-
+#if defined( __linux ) || defined( __NetBSD__ )
+	int n,i,ii;
+	int midr_el1;
+	int implementer;
+	int cpucap[1024];
+	int cpucores[1024];
 	FILE *infile;
-	char buffer[512], *p, *cpu_part = NULL, *cpu_implementer = NULL;
+	char cpupart[6],cpuimpl[6];
+	char *cpu_impl=NULL,*cpu_pt=NULL;
+	char buffer[2048], *p, *cpu_part = NULL, *cpu_implementer = NULL;
 	p = (char *) NULL ;
-
-	infile = fopen("/proc/cpuinfo", "r");
-	while (fgets(buffer, sizeof(buffer), infile)) {
-		if ((cpu_part != NULL) && (cpu_implementer != NULL)) {
-			break;
+	cpulowperf=cpumidperf=cpuhiperf=0;
+	for (i=0;i<1024;i++)cpucores[i]=0;
+	n=0;
+	infile = fopen("/sys/devices/system/cpu/possible", "r");
+	if (!infile) {
+		infile = fopen("/proc/cpuinfo", "r");
+		while (fgets(buffer, sizeof(buffer), infile)) {
+			if (!strncmp("processor", buffer, 9))
+ 			n++;
 		}
-
-		if ((cpu_part == NULL) && !strncmp("CPU part", buffer, 8)) {
-			cpu_part = strchr(buffer, ':') + 2;
-			cpu_part = strdup(cpu_part);
-		} else if ((cpu_implementer == NULL) && !strncmp("CPU implementer", buffer, 15)) {
-			cpu_implementer = strchr(buffer, ':') + 2;
-			cpu_implementer = strdup(cpu_implementer);
-		}
+	} else {
+		fgets(buffer, sizeof(buffer), infile);
+		sscanf(buffer,"0-%d",&n);
+ 		n++;
 	}
+        fclose(infile);
 
-	fclose(infile);
+	cpu_implementer=NULL;
+	for (i=0;i<n;i++){
+		sprintf(buffer,"/sys/devices/system/cpu/cpu%d/regs/identification/midr_el1",i);
+		infile= fopen(buffer,"r");
+		if (!infile) {
+			infile = fopen("/proc/cpuinfo", "r");
+			for (ii=0;ii<n;ii++){
+				cpu_part=NULL;cpu_implementer=NULL;
+				while (fgets(buffer, sizeof(buffer), infile)) {
+					if ((cpu_part != NULL) && (cpu_implementer != NULL)) {
+						break;
+					}
+
+					if ((cpu_part == NULL) && !strncmp("CPU part", buffer, 8)) {
+					cpu_pt = strchr(buffer, ':') + 2;
+					cpu_part = strdup(cpu_pt);
+					cpucores[i]=strtol(cpu_part,NULL,0);
+
+					} else if ((cpu_implementer == NULL) && !strncmp("CPU implementer", buffer, 15)) {
+					cpu_impl = strchr(buffer, ':') + 2;
+					cpu_implementer = strdup(cpu_impl);
+					}
+
+				}
+				if (strstr(cpu_implementer, "0x41")) {
+					if (cpucores[ii] >= 0xd4b) cpuhiperf++;
+				else
+					if (cpucores[ii] >= 0xd07) cpumidperf++;
+				else cpulowperf++;
+				}
+				else cpulowperf++;
+			}
+			fclose(infile);
+			break;
+		} else {
+		        (void)fgets(buffer, sizeof(buffer), infile);
+			midr_el1=strtoul(buffer,NULL,16);
+			fclose(infile);
+			implementer = (midr_el1 >> 24) & 0xFF;
+			cpucores[i] = (midr_el1 >> 4)  & 0xFFF;
+		sprintf(buffer,"/sys/devices/system/cpu/cpu%d/cpu_capacity",i);
+		infile= fopen(buffer,"r");
+		if (!infile) {
+				if (implementer== 65) {
+					if (cpucores[i] >= 0xd4b) cpuhiperf++;
+				else
+					if (cpucores[i] >= 0xd07) cpumidperf++;
+				else cpulowperf++;
+				}
+				else cpulowperf++;
+			} else {
+		        (void)fgets(buffer, sizeof(buffer), infile);
+				sscanf(buffer,"%d",&cpucap[i]);
+					if (cpucap[i] >= 1000) cpuhiperf++;
+				else
+					if (cpucap[i] >= 500) cpumidperf++;
+				else cpulowperf++;
+        		fclose(infile);
+			}
+		}
+		sprintf(cpuimpl,"0x%2x",implementer);
+		cpu_implementer=strdup(cpuimpl);
+	}
+	qsort(cpucores,1024,sizeof(int),cpusort);
+	sprintf(cpupart,"0x%3x",cpucores[0]);
+	cpu_part=strdup(cpupart);
 	if(cpu_part != NULL && cpu_implementer != NULL) {
     // Arm
     if (strstr(cpu_implementer, "0x41")) {
@@ -219,7 +316,7 @@ int detect(void)
       else if (strstr(cpu_part, "0xd4f")) //NVIDIA Grace et al.
         return CPU_NEOVERSEV2;
       else if (strstr(cpu_part, "0xd0b")) 
-	return CPU_CORTEXA76;
+       return CPU_CORTEXA76;
     }
     // Qualcomm
     else if (strstr(cpu_implementer, "0x51") && strstr(cpu_part, "0xc00"))
@@ -277,11 +374,42 @@ int detect(void)
 	}
 #else
 #ifdef __APPLE__
+	sysctlbyname("hw.ncpu",&value64,&length64,NULL,0);
+	cpulowperf=value64;
+	sysctlbyname("hw.nperflevels",&value64,&length64,NULL,0);
+	if (value64 > 1) {
+	sysctlbyname("hw.perflevel0.cpusperl",&value64,&length64,NULL,0);
+	cpuhiperf=value64;
+	sysctlbyname("hw.perflevel1.cpusperl",&value64,&length64,NULL,0);
+	cpulowperf=value64;
+	}
 	sysctlbyname("hw.cpufamily",&value64,&length64,NULL,0);
 	if (value64 ==131287967|| value64 == 458787763 ) return CPU_VORTEX; //A12/M1
 	if (value64 == 3660830781) return CPU_VORTEX; //A15/M2
-	if (value64 == 2271604202) return CPU_VORTEX; //A16/M3
-	if (value64 == 1867590060) return CPU_VORTEX; //M4
+        if (value64 == 2271604202) return CPU_VORTEX; //A16/M3
+        if (value64 == 1867590060) return CPU_VORTEX; //M4
+#else
+#ifdef OS_WINDOWS
+	HKEY reghandle;
+	HKEY hklm = HKEY_LOCAL_MACHINE;
+	WCHAR valstring[512];
+	PVOID pvalstring=valstring;
+	DWORD size=sizeof (valstring);
+	DWORD type=RRF_RT_ANY;
+	DWORD flags=0;
+	LPCWSTR subkey= L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0";
+        LPCWSTR field=L"ProcessorNameString"; 
+	LONG errcode=RegOpenKeyEx(HKEY_LOCAL_MACHINE,TEXT("Hardware\\Description\\System\\CentralProcessor\\0"), 0, KEY_READ, &reghandle);
+	if (errcode != NO_ERROR) wprintf(L"Could not open registry key for proc0: %x\n",errcode);
+        errcode=RegQueryValueEx(reghandle, "ProcessorNameString", NULL,NULL ,pvalstring,&size);
+	if (errcode != ERROR_SUCCESS) wprintf(L"Error reading cpuname from registry:%x\n",errcode);
+//wprintf(stderr,L"%s\n",(PWSTR)valstring);
+	RegCloseKey(reghandle);
+	if (strstr(valstring, "Snapdragon(R) X Elite")) return CPU_NEOVERSEN1;
+	if (strstr(valstring, "Ampere(R) Altra")) return CPU_NEOVERSEN1;
+	if (strstr(valstring, "Snapdragon (TM) 8cx Gen 3")) return CPU_CORTEXX1;
+	if (strstr(valstring, "Snapdragon Compute Platform")) return CPU_CORTEXX1;
+#endif
 #endif
 	return CPU_ARMV8;	
 #endif
@@ -314,7 +442,7 @@ void get_cpucount(void)
 {
 int n=0;
 
-#ifdef __linux
+#if defined( __linux ) || defined( __NetBSD__ )
 	FILE *infile;
   	char buffer[2048], *p,*t;
   	p = (char *) NULL ;
@@ -331,10 +459,22 @@ int n=0;
   	fclose(infile);
 
 	printf("#define NUM_CORES %d\n",n);
+	if (cpulowperf >0)
+	printf("#define NUM_CORES_LP %d\n",cpulowperf);
+	if (cpumidperf >0)
+	printf("#define NUM_CORES_MP %d\n",cpumidperf);
+	if (cpuhiperf >0)
+	printf("#define NUM_CORES_HP %d\n",cpuhiperf);
 #endif
 #ifdef __APPLE__
 	sysctlbyname("hw.physicalcpu_max",&value,&length,NULL,0);
 	printf("#define NUM_CORES %d\n",value);
+	if (cpulowperf >0)
+	printf("#define NUM_CORES_LP %d\n",cpulowperf);
+	if (cpumidperf >0)
+	printf("#define NUM_CORES_MP %d\n",cpumidperf);
+	if (cpuhiperf >0)
+	printf("#define NUM_CORES_HP %d\n",cpuhiperf);
 #endif	
 }
 
@@ -347,7 +487,6 @@ void get_cpuconfig(void)
   printf("#define ARMV8\n");
   printf("#define HAVE_NEON\n"); // This shouldn't be necessary
   printf("#define HAVE_VFPV4\n"); // This shouldn't be necessary
-
 	int d = detect();
 	switch (d)
 	{
@@ -402,8 +541,8 @@ void get_cpuconfig(void)
 		break;
 
 	    case CPU_NEOVERSEV1:
-		printf("#define HAVE_SVE 1\n");
-	    case CPU_CORTEXA76:
+                printf("#define HAVE_SVE 1\n");
+            case CPU_CORTEXA76:
                 printf("#define %s\n", cpuname[d]);
                 printf("#define L1_CODE_SIZE 65536\n");
                 printf("#define L1_CODE_LINESIZE 64\n");
@@ -431,32 +570,32 @@ void get_cpuconfig(void)
                 printf("#define L2_ASSOCIATIVE 8\n");
                 printf("#define DTB_DEFAULT_ENTRIES 48\n");
                 printf("#define DTB_SIZE 4096\n");
-		printf("#define HAVE_SVE 1\n");
+                printf("#define HAVE_SVE 1\n");
                 break;
-      case CPU_NEOVERSEV2:
+       case CPU_NEOVERSEV2:
                 printf("#define ARMV9\n");
-	        printf("#define HAVE_SVE 1\n");
-                printf("#define %s\n", cpuname[d]);
-                printf("#define L1_CODE_SIZE 65536\n");
-                printf("#define L1_CODE_LINESIZE 64\n");
-                printf("#define L1_CODE_ASSOCIATIVE 4\n");
-                printf("#define L1_DATA_SIZE 65536\n");
-                printf("#define L1_DATA_LINESIZE 64\n");
-                printf("#define L1_DATA_ASSOCIATIVE 4\n");
-                printf("#define L2_SIZE 1048576\n");
-                printf("#define L2_LINESIZE 64\n");
-                printf("#define L2_ASSOCIATIVE 8\n");
-								// L1 Data TLB = 48 entries
-								// L2 Data TLB = 2048 entries
-                printf("#define DTB_DEFAULT_ENTRIES 48\n");
-                printf("#define DTB_SIZE 4096\n");  // Set to 4096 for symmetry with other configs.
-                break;
+                printf("#define HAVE_SVE 1\n");
+                 printf("#define %s\n", cpuname[d]);
+                 printf("#define L1_CODE_SIZE 65536\n");
+                 printf("#define L1_CODE_LINESIZE 64\n");
+                 printf("#define L1_CODE_ASSOCIATIVE 4\n");
+                 printf("#define L1_DATA_SIZE 65536\n");
+                 printf("#define L1_DATA_LINESIZE 64\n");
+                 printf("#define L1_DATA_ASSOCIATIVE 4\n");
+                 printf("#define L2_SIZE 1048576\n");
+                 printf("#define L2_LINESIZE 64\n");
+                 printf("#define L2_ASSOCIATIVE 8\n");
+                                                                // L1 Data TLB = 48 entries
+                                                                // L2 Data TLB = 2048 entries
+                 printf("#define DTB_DEFAULT_ENTRIES 48\n");
+                 printf("#define DTB_SIZE 4096\n");  // Set to 4096 for symmetry with other configs.
+		break;
 	    case CPU_CORTEXA510:
 	    case CPU_CORTEXA710:
 	    case CPU_CORTEXX1:
 	    case CPU_CORTEXX2:
 		printf("#define ARMV9\n");
-		printf("#define HAVE_SVE 1\n");
+                printf("#define HAVE_SVE 1\n");
                 printf("#define %s\n", cpuname[d]);
                 printf("#define L1_CODE_SIZE 65536\n");
                 printf("#define L1_CODE_LINESIZE 64\n");
@@ -559,8 +698,6 @@ void get_cpuconfig(void)
 	    case CPU_VORTEX:
 		printf("#define VORTEX			      \n");
 #ifdef __APPLE__
-		sysctlbyname("hw.cpufamily",&value64,&length64,NULL,0);
-		if (value64 == 1867590060) printf("#define HAVE_SME 1\n");; //M4
 		sysctlbyname("hw.l1icachesize",&value64,&length64,NULL,0);
 		printf("#define L1_CODE_SIZE	     %lld       \n",value64);
 		sysctlbyname("hw.cachelinesize",&value64,&length64,NULL,0);
@@ -575,7 +712,7 @@ void get_cpuconfig(void)
 		break;
 	    case CPU_A64FX:
 		printf("#define A64FX\n");
-		printf("#define HAVE_SVE 1\n");
+                printf("#define HAVE_SVE 1\n");
     		printf("#define L1_CODE_SIZE 65535\n");
     		printf("#define L1_DATA_SIZE 65535\n");
     		printf("#define L1_DATA_LINESIZE 256\n");
@@ -608,7 +745,7 @@ void get_libname(void)
 void get_features(void)
 {
 
-#ifdef __linux
+#if defined( __linux ) || defined( __NetBSD__ )
 	FILE *infile;
   	char buffer[2048], *p,*t;
   	p = (char *) NULL ;

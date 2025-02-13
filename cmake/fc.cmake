@@ -269,6 +269,31 @@ if (${F_COMPILER} STREQUAL "CRAY")
   endif ()
 endif ()
 
+if (${F_COMPILER} STREQUAL "NAGFOR")
+  set(CCOMMON_OPT "${CCOMMON_OPT} -DF_INTERFACE_NAG")
+  if (INTERFACE64)
+    set(FCOMMON_OPT "${FCOMMON_OPT} -i8")
+  endif ()
+  # Options from Makefile.system
+  # -dcfuns: Enable non-standard double precision complex intrinsic functions
+  # -ieee=full: enables all IEEE arithmetic facilities including non-stop arithmetic.
+  # -w=obs: Suppress warning messages about obsolescent features
+  # -thread_safe: Compile code for safe execution in a multi-threaded environment.
+  # -recursive: Specifies that procedures are RECURSIVE by default.
+  set(FCOMMON_OPT "${FCOMMON_OPT} -dcfuns -recursive -ieee=full -w=obs -thread_safe")
+  # Options from Reference-LAPACK
+  # Suppress compiler banner and summary
+  set(FCOMMON_OPT "${FCOMMON_OPT} -quiet")
+  # Disable other common warnings
+  # -w=x77: Suppress warning messages about Fortran 77 features
+  # -w=ques: Suppress warning messages about questionable usage
+  # -w=unused: Suppress warning messages about unused variables
+  set(FCOMMON_OPT "${FCOMMON_OPT} -w=x77 -w=ques -w=unused")
+  if (USE_OPENMP)
+    set(FCOMMON_OPT "${FCOMMON_OPT} -openmp")
+  endif ()
+endif ()
+
 # from the root Makefile - this is for lapack-netlib to compile the correct secnd file.
 if (${F_COMPILER} STREQUAL "GFORTRAN")
   set(TIMER "INT_ETIME")

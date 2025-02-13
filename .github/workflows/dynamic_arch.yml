@@ -43,7 +43,9 @@ jobs:
         run: |
           if [ "$RUNNER_OS" == "Linux" ]; then
             sudo apt-get update
-            sudo apt-get install -y gfortran cmake ccache libtinfo5
+            sudo apt-get install -y gfortran cmake ccache
+            wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
+            sudo apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
           elif [ "$RUNNER_OS" == "macOS" ]; then
             # It looks like "gfortran" isn't working correctly unless "gcc" is re-installed.
             brew reinstall gcc
@@ -158,7 +160,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        msystem: [UCRT64, MINGW32, CLANG64, CLANG32]
+        msystem: [UCRT64, MINGW32, CLANG64]
         idx: [int32, int64]
         build-type: [Release]
         include:
@@ -174,14 +176,6 @@ jobs:
             idx: int32
             target-prefix: mingw-w64-clang-x86_64
             fc-pkg: fc
-            # Compiling with Flang 16 seems to cause test errors on machines
-            # with AVX512 instructions. Revisit after MSYS2 distributes Flang 17.
-            no-avx512-flags: -DNO_AVX512=1
-          - msystem: CLANG32
-            idx: int32
-            target-prefix: mingw-w64-clang-i686
-            fc-pkg: cc
-            c-lapack-flags: -DC_LAPACK=ON
           - msystem: UCRT64
             idx: int64
             idx64-flags: -DBINARY=64 -DINTERFACE64=1
@@ -192,9 +186,6 @@ jobs:
             idx64-flags: -DBINARY=64 -DINTERFACE64=1
             target-prefix: mingw-w64-clang-x86_64
             fc-pkg: fc
-            # Compiling with Flang 16 seems to cause test errors on machines
-            # with AVX512 instructions. Revisit after MSYS2 distributes Flang 17.
-            no-avx512-flags: -DNO_AVX512=1
           - msystem: UCRT64
             idx: int32
             target-prefix: mingw-w64-ucrt-x86_64
@@ -202,8 +193,6 @@ jobs:
             build-type: None
         exclude:
           - msystem: MINGW32
-            idx: int64
-          - msystem: CLANG32
             idx: int64
 
     defaults:
@@ -280,8 +269,6 @@ jobs:
                 -DNUM_THREADS=64 \
                 -DTARGET=CORE2 \
                 ${{ matrix.idx64-flags }} \
-                ${{ matrix.c-lapack-flags }} \
-                ${{ matrix.no-avx512-flags }} \
                 -DCMAKE_C_COMPILER_LAUNCHER=ccache \
                 -DCMAKE_Fortran_COMPILER_LAUNCHER=ccache \
                 ..
@@ -369,3 +356,23 @@ jobs:
       - name: Build OpenBLAS
         run: |
           make -j$(nproc) HOSTCC="ccache gcc" CC="ccache ${{ matrix.triple }}-gcc" FC="ccache ${{ matrix.triple }}-gfortran" ARCH=${{ matrix.target }} ${{ matrix.opts }}
+
+  neoverse_build:
+    if: "github.repository == 'OpenMathLib/OpenBLAS'"
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc gfortran make
+          
+      - name: Build OpenBLAS
+        run: |
+          make -j${nproc} TARGET=NEOVERSEN2
+          make -j${nproc} TARGET=NEOVERSEN2 lapack-test
+    
+          

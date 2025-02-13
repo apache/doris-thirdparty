@@ -51,9 +51,9 @@ In practice, the values are derived by experimentation to yield the block sizes 
 
 ### <a name="reportbug"></a>How can I report a bug?
 
-Please file an issue at this [issue page](https://github.com/xianyi/OpenBLAS/issues) or send mail to the [OpenBLAS mailing list](https://groups.google.com/forum/#!forum/openblas-users).
+Please file an issue at this [issue page](https://github.com/OpenMathLib/OpenBLAS/issues) or send mail to the [OpenBLAS mailing list](https://groups.google.com/forum/#!forum/openblas-users).
 
-Please provide the following information: CPU, OS, compiler, and OpenBLAS compiling flags (Makefile.rule). In addition, please describe how to reproduce this bug.
+Please provide the following information: CPU, OS, compiler, OpenBLAS version and any compiling flags you used (Makefile.rule). In addition, please describe how to reproduce this bug.
 
 ### <a name="publication"></a>How to reference OpenBLAS.
 
@@ -99,13 +99,13 @@ Here is the result of the DGEMM subroutine's performance on Intel Core i5-2500K 
 
 ### <a name="MSVC"></a>How can I call an OpenBLAS function in Microsoft Visual Studio?
 
-Please read [this page](install.md#visual-studio).
+Please read [this page](install.md#visual-studio-native-windows-abi).
 
 ### <a name="C99_complex_number"></a>How can I use CBLAS and LAPACKE without C99 complex number support (e.g. in Visual Studio)?
 
 Zaheer has fixed this bug. You can now use the structure instead of C99 complex numbers. Please read [this issue page](http://github.com/xianyi/OpenBLAS/issues/95) for details.
 
-[This issue](https://github.com/xianyi/OpenBLAS/issues/305) is for using LAPACKE in Visual Studio.
+[This issue](https://github.com/OpenMathLib/OpenBLAS/issues/305) is for using LAPACKE in Visual Studio.
 
 ### <a name="Linux_SEGFAULT"></a>I get a SEGFAULT with multi-threading on Linux. What's wrong?
 
@@ -133,6 +133,13 @@ Background: OpenBLAS implements optimized versions of some LAPACK functions, so 
 
 Some of the LAPACK tests, notably in xeigtstz, try to allocate around 10MB on the stack. You may need to use
 `ulimit -s` to change the default limits on your system to allow this.
+
+### <a name="lapack_test"></a>My build worked fine and passed the BLAS tests, but running `make lapack-test` ends with a number of errors in the summary report
+
+The LAPACK tests were primarily created to test the validity of the Reference-LAPACK implementation, which is implemented in unoptimized, single-threaded Fortran code. This makes it very sensitive to small numerical deviations that can result from the use of specialized cpu instructions that combine multiplications and additions without intermediate rounding and storing to memory (FMA), or from changing the order of mathematical operations by splitting an original problem workload into smaller tasks that are solved in parallel. As a result, you may encounter a small number of errors in the "numerical" column of
+the summary table at the end of the `make lapack-test` run - this is usually nothing to worry about, and the exact number and distribution of errors among the
+four data types will often vary with the optimization flags you supplied to the compiler, or the cpu model for which you built OpenBLAS. Sporadic errors in the column labeled `other` are normally the sign of failed convergence of iterative diagonalizations for the same reasons just mentioned. A more detailed error report is stored in the file testing_results.txt - this should be consulted in case of doubt. Care should be taken if you encounter numerical errors in the hundreds, or `other` errors accompanied by the LAPACK error message "on entry to function_name parameter X had an illegal value" that signals a problem with argument passing between individual functions.
+(See also [this issue](https://github.com/OpenMathLib/OpenBLAS/issues/4032) in the issue tracker on github for additional discussion, examples and links)
 
 ### <a name="no_affinity"></a>How could I disable OpenBLAS threading affinity on runtime?
 

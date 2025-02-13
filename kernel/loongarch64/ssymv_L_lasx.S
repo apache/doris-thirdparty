@@ -28,6 +28,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define ASSEMBLER
 
 #include "common.h"
+#include "loongarch64_asm.S"
 
 /* Param */
 #define M      $r4
@@ -57,6 +58,8 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define T2     $r28
 #define T3     $r29
 #define T4     $r30
+#define T5     $r17
+#define T6     $r16
 
 /* LSX vectors */
 #define U0     $xr31
@@ -87,10 +90,108 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define a8     $f8
 #define a9     $f9
 
+.macro LOAD_Y_8
+    beqz T5, .L01_Y_0
+    add.d       T2,    IY,    INCY
+    fldx.s      $f4,   Y,     T2
+    add.d       T2,    T2,    INCY
+    fldx.s      $f5,   Y,     T2
+    add.d       T2,    T2,    INCY
+    fldx.s      $f6,   Y,     T2
+    add.d       T2,    T2,    INCY
+    fldx.s      $f7,   Y,     T2
+
+    add.d       T2,    T2,    INCY
+    fldx.s      $f8,   Y,     T2
+    add.d       T2,    T2,    INCY
+    fldx.s      $f9,   Y,     T2
+    add.d       T2,    T2,    INCY
+    fldx.s      $f10,  Y,     T2
+    add.d       T2,    T2,    INCY
+    fldx.s      $f11,  Y,     T2
+
+    vextrins.w  $vr4,    $vr5,    0x10
+    vextrins.w  $vr4,    $vr6,    0x20
+    vextrins.w  $vr4,    $vr7,    0x30
+    vextrins.w  $vr8,    $vr9,    0x10
+    vextrins.w  $vr8,    $vr10,   0x20
+    vextrins.w  $vr8,    $vr11,   0x30
+    xvpermi.q   U4,      U8,      0x02
+    b .L01_Y_1
+.L01_Y_0:
+    add.d T3, IY, INCY
+    xvldx U4, Y,  T3
+.L01_Y_1:
+.endm
+
+.macro STORE_Y_8
+    beqz T5, .L01_Y_2
+    xvpermi.d   U8,    U4,        0xee
+    vextrins.w  $vr5,    $vr4,    0x01
+    vextrins.w  $vr6,    $vr4,    0x02
+    vextrins.w  $vr7,    $vr4,    0x03
+    vextrins.w  $vr9,    $vr8,    0x01
+    vextrins.w  $vr10,   $vr8,    0x02
+    vextrins.w  $vr11,   $vr8,    0x03
+
+    add.d       T2,    IY,    INCY
+    fstx.s      $f4,   Y,     T2
+    add.d       T2,    T2,    INCY
+    fstx.s      $f5,   Y,     T2
+    add.d       T2,    T2,    INCY
+    fstx.s      $f6,   Y,     T2
+    add.d       T2,    T2,    INCY
+    fstx.s      $f7,   Y,     T2
+
+    add.d       T2,    T2,    INCY
+    fstx.s      $f8,   Y,     T2
+    add.d       T2,    T2,    INCY
+    fstx.s      $f9,   Y,     T2
+    add.d       T2,    T2,    INCY
+    fstx.s      $f10,  Y,     T2
+    add.d       T2,    T2,    INCY
+    fstx.s      $f11,  Y,     T2
+    b .L01_Y_3
+.L01_Y_2:
+    xvstx  U4, Y, T3
+.L01_Y_3:
+.endm
+
+.macro LOAD_X_8
+    beqz T6, .L01_X_0
+    add.d       T2,    IX,    INCX
+    fldx.s      $f4,   X,     T2
+    add.d       T2,    T2,    INCX
+    fldx.s      $f5,   X,     T2
+    add.d       T2,    T2,    INCX
+    fldx.s      $f6,   X,     T2
+    add.d       T2,    T2,    INCX
+    fldx.s      $f7,   X,     T2
+
+    add.d       T2,    T2,    INCX
+    fldx.s      $f8,   X,     T2
+    add.d       T2,    T2,    INCX
+    fldx.s      $f9,   X,     T2
+    add.d       T2,    T2,    INCX
+    fldx.s      $f10,  X,     T2
+    add.d       T2,    T2,    INCX
+    fldx.s      $f11,  X,     T2
+
+    vextrins.w  $vr4,    $vr5,    0x10
+    vextrins.w  $vr4,    $vr6,    0x20
+    vextrins.w  $vr4,    $vr7,    0x30
+    vextrins.w  $vr8,    $vr9,    0x10
+    vextrins.w  $vr8,    $vr10,   0x20
+    vextrins.w  $vr8,    $vr11,   0x30
+    xvpermi.q   U4,    U8,    0x02
+    b .L01_X_1
+.L01_X_0:
+    add.d T3, IX, INCX
+    xvldx U4, X,  T3
+.L01_X_1:
+.endm
 
     PROLOGUE
-
-    LDARG  BUFFER,  $sp,  0
 
     addi.d  $sp, $sp, -88
 
@@ -107,6 +208,8 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
     xvldrepl.w  VALPHA, $sp, 80
 
+    addi.d     T5,      INCY, -1
+    addi.d     T6,      INCX, -1
     slli.d     LDA,     LDA,  BASE_SHIFT
     slli.d     INCX,    INCX, BASE_SHIFT
     slli.d     INCY,    INCY, BASE_SHIFT
@@ -122,11 +225,10 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     beq        J,      N,    .L999
 
 .L01:
-    MTC         a2,   $r0        //temp2
+    xvxor.v     U2,   U2,  U2
     fldx.s      a6,   X,   JX
     fmul.s      a3,   ALPHA, a6  //temp1
     xvreplve0.w U3,   U3
-    xvreplve0.w U2,   U2
 
     mul.w       T0,   J,   LDA
     slli.d      T1,   J,   BASE_SHIFT
@@ -156,120 +258,28 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .L02:  /* /8 */
     xvldx       U1,    AO1,   T1
 
-    add.d       T2,    IY,    INCY
-    fldx.s      $f4,   Y,     T2
-    add.d       T2,    T2,    INCY
-    fldx.s      $f5,   Y,     T2
-    add.d       T2,    T2,    INCY
-    fldx.s      $f6,   Y,     T2
-    add.d       T2,    T2,    INCY
-    fldx.s      $f7,   Y,     T2
-
-    add.d       T2,    T2,    INCY
-    fldx.s      $f8,   Y,     T2
-    add.d       T2,    T2,    INCY
-    fldx.s      $f9,   Y,     T2
-    add.d       T2,    T2,    INCY
-    fldx.s      $f10,  Y,     T2
-    add.d       T2,    T2,    INCY
-    fldx.s      $f11,  Y,     T2
-
-    vextrins.w  $vr4,    $vr5,    0x10
-    vextrins.w  $vr4,    $vr6,    0x20
-    vextrins.w  $vr4,    $vr7,    0x30
-    vextrins.w  $vr8,    $vr9,    0x10
-    vextrins.w  $vr8,    $vr10,   0x20
-    vextrins.w  $vr8,    $vr11,   0x30
-    xvpermi.q   U4,    U8,    0x02
+    LOAD_Y_8
 
     xvfmadd.s    U4,    U3,    U1,    U4
 
-    xvpermi.d   U8,    U4,    0xee
-    vextrins.w  $vr5,    $vr4,    0x01
-    vextrins.w  $vr6,    $vr4,    0x02
-    vextrins.w  $vr7,    $vr4,    0x03
-    vextrins.w  $vr9,    $vr8,    0x01
-    vextrins.w  $vr10,   $vr8,    0x02
-    vextrins.w  $vr11,   $vr8,    0x03
+    STORE_Y_8
 
-    add.d       T2,    IY,    INCY
-    fstx.s      $f4,   Y,     T2
-    add.d       T2,    T2,    INCY
-    fstx.s      $f5,   Y,     T2
-    add.d       T2,    T2,    INCY
-    fstx.s      $f6,   Y,     T2
-    add.d       T2,    T2,    INCY
-    fstx.s      $f7,   Y,     T2
+    alsl.d IY, INCY, IY, 3
 
-    add.d       T2,    T2,    INCY
-    fstx.s      $f8,   Y,     T2
-    add.d       T2,    T2,    INCY
-    fstx.s      $f9,   Y,     T2
-    add.d       T2,    T2,    INCY
-    fstx.s      $f10,  Y,     T2
-    add.d       T2,    T2,    INCY
-    fstx.s      $f11,  Y,     T2
-
-    slli.d      T2,    INCY,  3
-    add.d       IY,    IY,    T2
-
-    add.d       T2,    IX,    INCX
-    fldx.s      $f4,   X,     T2
-    add.d       T2,    T2,    INCX
-    fldx.s      $f5,   X,     T2
-    add.d       T2,    T2,    INCX
-    fldx.s      $f6,   X,     T2
-    add.d       T2,    T2,    INCX
-    fldx.s      $f7,   X,     T2
-
-    add.d       T2,    T2,    INCX
-    fldx.s      $f8,   X,     T2
-    add.d       T2,    T2,    INCX
-    fldx.s      $f9,   X,     T2
-    add.d       T2,    T2,    INCX
-    fldx.s      $f10,  X,     T2
-    add.d       T2,    T2,    INCX
-    fldx.s      $f11,  X,     T2
-
-    vextrins.w  $vr4,    $vr5,    0x10
-    vextrins.w  $vr4,    $vr6,    0x20
-    vextrins.w  $vr4,    $vr7,    0x30
-    vextrins.w  $vr8,    $vr9,    0x10
-    vextrins.w  $vr8,    $vr10,   0x20
-    vextrins.w  $vr8,    $vr11,   0x30
-    xvpermi.q   U4,    U8,    0x02
-
-    xvand.v     $xr12, $xr2, $xr2
+    LOAD_X_8
 
     xvfmadd.s    U2,    U1,    U4,    U2
-    xvfsub.s     U2,    U2,    $xr12
 
-    xvpickve.w   U4,    U2,    0x01
-    xvpickve.w   U5,    U2,    0x02
-    xvpickve.w   U6,    U2,    0x03
-    xvpickve.w   U7,    U2,    0x04
-    xvpickve.w   U8,    U2,    0x05
-    xvpickve.w   U9,    U2,    0x06
-    xvpickve.w   U10,   U2,    0x07
-
-    fadd.s     $f2,    $f2,   $f4
-    fadd.s     $f2,    $f2,   $f5
-    fadd.s     $f2,    $f2,   $f6
-    fadd.s     $f2,    $f2,   $f7
-    fadd.s     $f2,    $f2,   $f8
-    fadd.s     $f2,    $f2,   $f9
-    fadd.s     $f2,    $f2,   $f10
-    fadd.s     $f2,    $f2,   $f12
-
-    xvreplve0.d U2,    U2
-
-    slli.d      T2,    INCX,  3
-    add.d       IX,    IX,    T2
+    alsl.d IX, INCX, IX, 3
 
     addi.d     II,     II,    32
     addi.d     T1,     T1,    32
     addi.d     I,      I,     1
     blt        I,      T0,    .L02
+
+    //Acc U2
+    GACC   xvf, s, U4, U2
+    xvreplve0.d U2, U4
 
 .L03:  /* &4 */
     sub.d     T0,     M,    J

@@ -107,21 +107,33 @@ int NAME(blasint *N, blasint *NRHS, FLOAT *a, blasint *ldA, blasint *ipiv,
 
 #ifndef PPC440
   buffer = (FLOAT *)blas_memory_alloc(1);
-
+  
   sa = (FLOAT *)((BLASLONG)buffer + GEMM_OFFSET_A);
   sb = (FLOAT *)(((BLASLONG)sa + ((GEMM_P * GEMM_Q * COMPSIZE * SIZE + GEMM_ALIGN) & ~GEMM_ALIGN)) + GEMM_OFFSET_B);
 #endif
 
 #ifdef SMP
   args.common = NULL;
-#ifndef DOUBLE
-  if (args.m*args.n < 40000)
+
+#if defined(_WIN64) && defined(_M_ARM64)
+  #ifdef COMPLEX
+    if (args.m * args.n > 600)
+  #else
+    if (args.m * args.n > 1000)
+  #endif
+      args.nthreads = num_cpu_avail(4);
+    else
+      args.nthreads = 1;
 #else
-  if (args.m*args.n < 10000)
+  #ifndef DOUBLE
+    if (args.m * args.n < 40000)
+  #else
+    if (args.m * args.n < 10000)
+  #endif
+      args.nthreads = 1;
+    else
+      args.nthreads = num_cpu_avail(4);
 #endif
-	args.nthreads=1;
-  else
-         args.nthreads = num_cpu_avail(4);
 
   if (args.nthreads == 1) {
 #endif

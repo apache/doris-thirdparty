@@ -10,6 +10,10 @@ if (${HOST_OS} STREQUAL "WINDOWS")
   set(HOST_OS WINNT)
 endif ()
 
+if (${HOST_OS} STREQUAL "IOS")
+  set(HOST_OS DARWIN)
+endif ()
+
 if (${HOST_OS} STREQUAL "LINUX")
 # check if we're building natively on Android (TERMUX)
     EXECUTE_PROCESS( COMMAND uname -o COMMAND tr -d '\n' OUTPUT_VARIABLE OPERATING_SYSTEM)

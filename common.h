@@ -372,6 +372,12 @@ typedef int blasint;
 #endif
 #endif
 
+#if defined(ARCH_RISCV64)
+#ifndef YIELDING
+#define YIELDING        __asm__ __volatile__ ("nop;nop;nop;nop;nop;nop;nop;nop;\n");
+#endif
+#endif
+
 
 #ifdef __EMSCRIPTEN__
 #define YIELDING

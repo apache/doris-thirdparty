@@ -65,12 +65,12 @@ extern void ctranspose(blasint rows, blasint cols, float *alpha, float *a_src, i
 extern void ztranspose(blasint rows, blasint cols, double *alpha, double *a_src, int lda_src, 
                 double *a_dst, blasint lda_dst, int conj);
 
-extern void scopy(blasint rows, blasint cols, float alpha, float *a_src, int lda_src, 
+extern void my_scopy(blasint rows, blasint cols, float alpha, float *a_src, int lda_src, 
            float *a_dst, blasint lda_dst);
-extern void dcopy(blasint rows, blasint cols, double alpha, double *a_src, int lda_src, 
+extern void my_dcopy(blasint rows, blasint cols, double alpha, double *a_src, int lda_src, 
            double *a_dst, blasint lda_dst);
-extern void ccopy(blasint rows, blasint cols, float *alpha, float *a_src, int lda_src, 
+extern void my_ccopy(blasint rows, blasint cols, float *alpha, float *a_src, int lda_src, 
            float *a_dst, blasint lda_dst, int conj);
-extern void zcopy(blasint rows, blasint cols, double *alpha, double *a_src, int lda_src, 
+extern void my_zcopy(blasint rows, blasint cols, double *alpha, double *a_src, int lda_src, 
            double *a_dst, blasint lda_dst, int conj);                
 #endif

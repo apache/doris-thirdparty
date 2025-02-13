@@ -87,7 +87,7 @@ static double check_domatcopy(char api, char order, char trans, blasint rows, bl
         dtranspose(m, n, alpha, data_domatcopy.a_test, lda, data_domatcopy.b_verify, ldb);
     } 
     else {
-        dcopy(m, n, alpha, data_domatcopy.a_test, lda, data_domatcopy.b_verify, ldb);
+        my_dcopy(m, n, alpha, data_domatcopy.a_test, lda, data_domatcopy.b_verify, ldb);
     }
 
     if (api == 'F') {

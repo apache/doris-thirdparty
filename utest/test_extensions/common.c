@@ -206,7 +206,7 @@ void ztranspose(blasint rows, blasint cols, double *alpha, double *a_src, int ld
  * param lda_dst - leading dimension of output matrix A
  * param conj specifies conjugation
  */
-void scopy(blasint rows, blasint cols, float alpha, float *a_src, int lda_src, 
+void my_scopy(blasint rows, blasint cols, float alpha, float *a_src, int lda_src, 
            float *a_dst, blasint lda_dst)
 {
     blasint i, j;
@@ -217,7 +217,7 @@ void scopy(blasint rows, blasint cols, float alpha, float *a_src, int lda_src,
     }
 }
 
-void dcopy(blasint rows, blasint cols, double alpha, double *a_src, int lda_src, 
+void my_dcopy(blasint rows, blasint cols, double alpha, double *a_src, int lda_src, 
            double *a_dst, blasint lda_dst)
 {
     blasint i, j;
@@ -228,7 +228,7 @@ void dcopy(blasint rows, blasint cols, double alpha, double *a_src, int lda_src,
     }
 }
 
-void ccopy(blasint rows, blasint cols, float *alpha, float *a_src, int lda_src, 
+void my_ccopy(blasint rows, blasint cols, float *alpha, float *a_src, int lda_src, 
            float *a_dst, blasint lda_dst, int conj)
 {
     blasint i, j;
@@ -243,7 +243,7 @@ void ccopy(blasint rows, blasint cols, float *alpha, float *a_src, int lda_src,
     }
 }
 
-void zcopy(blasint rows, blasint cols, double *alpha, double *a_src, int lda_src, 
+void my_zcopy(blasint rows, blasint cols, double *alpha, double *a_src, int lda_src, 
            double *a_dst, blasint lda_dst, int conj)
 {
     blasint i, j;

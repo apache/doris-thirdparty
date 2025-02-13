@@ -547,7 +547,7 @@ static int gemm_driver(blas_arg_t *args, BLASLONG *range_m, BLASLONG
 
 #ifdef USE_OPENMP
   static omp_lock_t level3_lock, critical_section_lock;
-  static volatile BLASLONG init_lock = 0, omp_lock_initialized = 0,
+  static volatile BLASULONG init_lock = 0, omp_lock_initialized = 0,
                   parallel_section_left = MAX_PARALLEL_NUMBER;
 
   // Lock initialization; Todo : Maybe this part can be moved to blas_init() in blas_server_omp.c

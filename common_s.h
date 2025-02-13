@@ -24,6 +24,7 @@
 #define	SSCAL_K			sscal_k
 #define	SSWAP_K			sswap_k
 #define	SROT_K			srot_k
+#define	SROTM_K			srotm_k
 
 #define	SGEMV_N			sgemv_n
 #define	SGEMV_T			sgemv_t
@@ -189,6 +190,7 @@
 #define	SSCAL_K			gotoblas -> sscal_k
 #define	SSWAP_K			gotoblas -> sswap_k
 #define	SROT_K			gotoblas -> srot_k
+#define	SROTM_K			gotoblas -> srotm_k
 
 #define	SGEMV_N			gotoblas -> sgemv_n
 #define	SGEMV_T			gotoblas -> sgemv_t

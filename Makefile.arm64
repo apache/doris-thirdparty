@@ -106,7 +106,7 @@ ifeq ($(CORE), NEOVERSEV1)
 ifeq (1, $(filter 1,$(GCCVERSIONGTEQ7) $(ISCLANG)))
 ifeq (1, $(filter 1,$(GCCVERSIONGTEQ10) $(ISCLANG)))
 ifeq (1, $(filter 1,$(GCCMINORVERSIONGTEQ4) $(GCCVERSIONGTEQ11) $(ISCLANG)))
-CCOMMON_OPT += -march=armv8.4-a+sve
+CCOMMON_OPT += -march=armv8.4-a+sve+bf16
 ifeq (1, $(ISCLANG))
 CCOMMON_OPT += -mtune=cortex-x1
 else
@@ -116,7 +116,7 @@ ifneq ($(F_COMPILER), NAG)
 FCOMMON_OPT += -march=armv8.4-a -mtune=neoverse-v1
 endif
 else
-CCOMMON_OPT += -march=armv8.4-a+sve 
+CCOMMON_OPT += -march=armv8.4-a+sve+bf16 
 ifneq ($(CROSS), 1)
 CCOMMON_OPT += -mtune=native
 endif
@@ -354,6 +354,33 @@ endif
 endif
 endif
 
+endif
+
+else
+# NVIDIA HPC options necessary to enable SVE in the compiler
+ifeq ($(CORE), THUNDERX2T99)
+CCOMMON_OPT += -tp=thunderx2t99
+FCOMMON_OPT += -tp=thunderx2t99
+endif
+ifeq ($(CORE), NEOVERSEN1)
+CCOMMON_OPT += -tp=neoverse-n1
+FCOMMON_OPT += -tp=neoverse-n1
+endif
+ifeq ($(CORE), NEOVERSEV1)
+CCOMMON_OPT += -tp=neoverse-v1
+FCOMMON_OPT += -tp=neoverse-v1
+endif
+ifeq ($(CORE), NEOVERSEV2)
+CCOMMON_OPT += -tp=neoverse-v2
+FCOMMON_OPT += -tp=neoverse-v2
+endif
+ifeq ($(CORE), ARMV8SVE)
+CCOMMON_OPT += -tp=neoverse-v2
+FCOMMON_OPT += -tp=neoverse-v2
+endif
+ifeq ($(CORE), ARMV9SVE)
+CCOMMON_OPT += -tp=neoverse-v2
+FCOMMON_OPT += -tp=neoverse-v2
 endif
 
 endif

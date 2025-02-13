@@ -191,22 +191,29 @@ endif
 #Generating OpenBLASConfig.cmake
 	@echo Generating $(OPENBLAS_CMAKE_CONFIG) in $(DESTDIR)$(OPENBLAS_CMAKE_DIR)
 	@echo "SET(OpenBLAS_VERSION \"${VERSION}\")" > "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
-	@echo "SET(OpenBLAS_INCLUDE_DIRS ${OPENBLAS_INCLUDE_DIR})" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
+	@echo "file(REAL_PATH \"../../..\" _OpenBLAS_ROOT_DIR BASE_DIRECTORY \$${CMAKE_CURRENT_LIST_DIR} )" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
+	@echo "SET(OpenBLAS_INCLUDE_DIRS \$${_OpenBLAS_ROOT_DIR}/include)" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
 
 ifneq ($(NO_SHARED),1)
 #ifeq logical or
 ifeq ($(OSNAME), $(filter $(OSNAME),Linux FreeBSD NetBSD OpenBSD DragonFly))
-	@echo "SET(OpenBLAS_LIBRARIES ${OPENBLAS_LIBRARY_DIR}/$(LIBPREFIX)$(SYMBOLSUFFIX).so)" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
+	@echo "SET(OpenBLAS_LIBRARIES \$${_OpenBLAS_ROOT_DIR}/lib/$(LIBPREFIX).so)" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
 endif
 ifeq ($(OSNAME), $(filter $(OSNAME),WINNT CYGWIN_NT))
-	@echo "SET(OpenBLAS_LIBRARIES ${OPENBLAS_BINARY_DIR}/$(LIBDLLNAME))" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
+	@echo "SET(OpenBLAS_LIBRARIES \$${_OpenBLAS_ROOT_DIR}/bin/$(LIBDLLNAME))" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
 endif
 ifeq ($(OSNAME), Darwin)
-	@echo "SET(OpenBLAS_LIBRARIES ${OPENBLAS_LIBRARY_DIR}/$(LIBPREFIX).dylib)" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
+	@echo "SET(OpenBLAS_LIBRARIES \$${_OpenBLAS_ROOT_DIR}/lib/$(LIBPREFIX).dylib)" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
+endif
+	@echo "add_library(OpenBLAS::OpenBLAS SHARED IMPORTED)"
+	@echo "target_include_directories(OpenBLAS::OpenBLAS INTERFACE \$${OpenBLAS_INCLUDE_DIRS})"
+ifeq ($(OSNAME), $(filter $(OSNAME),WINNT CYGWIN_NT))
+	@echo "set_property(TARGET OpenBLAS::OpenBLAS PROPERTY IMPORTED_LOCATION \$${OpenBLAS_LIBRARIES})"
+	@echo "set_property(TARGET OpenBLAS::OpenBLAS PROPERTY IMPORTED_IMPLIB \$${_OpenBLAS_ROOT_DIR}/lib/libopenblas.lib)"
 endif
 else
 #only static
-	@echo "SET(OpenBLAS_LIBRARIES ${OPENBLAS_LIBRARY_DIR}/$(LIBPREFIX).$(LIBSUFFIX))" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
+	@echo "SET(OpenBLAS_LIBRARIES \$${_OpenBLAS_ROOT_DIR}/lib/$(LIBPREFIX).$(LIBSUFFIX))" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG)"
 endif
 #Generating OpenBLASConfigVersion.cmake
 	@echo Generating $(OPENBLAS_CMAKE_CONFIG_VERSION) in $(DESTDIR)$(OPENBLAS_CMAKE_DIR)
@@ -220,3 +227,96 @@ endif
 	@echo "  endif ()" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG_VERSION)"
 	@echo "endif ()" >> "$(DESTDIR)$(OPENBLAS_CMAKE_DIR)/$(OPENBLAS_CMAKE_CONFIG_VERSION)"
 	@echo Install OK!
+
+install_tests : lib.grd
+ifneq ($(ONLY_CBLAS), 1)
+	@install -m 666 utest/openblas_utest $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 utest/openblas_utest_ext $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+ifeq ($(NOFORTRAN), $(filter 0,$(NOFORTRAN)))
+ifndef NO_FBLAS
+ifeq ($(BUILD_BFLOAT16),1)
+	@install -m 666 test/test_sbgemm $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+endif
+ifeq ($(BUILD_SINGLE),1)
+	@install -m 666 test/sblat1 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/sblat2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/sblat3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/sblat2.dat $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/sblat3.dat $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+endif
+ifeq ($(BUILD_DOUBLE),1)
+	@install -m 666 test/dblat1 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/dblat2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/dblat3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/dblat2.dat $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/dblat3.dat $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+endif
+ifeq ($(BUILD_COMPLEX),1)
+	@install -m 666 test/cblat1 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/cblat2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/cblat3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/cblat2.dat $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/cblat3.dat $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+ifeq ($(ARCH), filter($(ARCH), x86 x86_64 ia64 MIPS))
+	@install -m 666 test/cblat3_3m $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/cblat3_3m.dat $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+endif
+endif
+ifeq ($(BUILD_COMPLEX16),1)
+	@install -m 666 test/zblat1 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/zblat2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/zblat3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/zblat2.dat $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/zblat3.dat $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+ifeq ($(ARCH), filter($(ARCH), x86 x86_64 ia64 MIPS))
+	@install -m 666 test/zblat3_3m $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 test/zblat3_3m.dat $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+endif
+endif
+endif
+endif
+ifneq ($(ONLY_CBLAS), 1)
+ifeq ($(BUILD_SINGLE),1)
+	@install -m 666 ctest/xscblat1 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/xscblat2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/xscblat3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/sin2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/sin3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+endif
+ifeq ($(BUILD_DOUBLE),1)
+	@install -m 666 ctest/xdcblat1 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/xdcblat2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/xdcblat3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/din2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/din3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+endif
+ifeq ($(BUILD_COMPLEX),1)
+	@install -m 666 ctest/xccblat1 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/xccblat2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/xccblat3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/cin2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/cin3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+ifeq ($(ARCH), filter($(ARCH), x86 x86_64 ia64 MIPS))
+	@install -m 666 ctest/xccblat3_3m $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/cin3_3m $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+endif
+endif
+ifeq ($(BUILD_COMPLEX16),1)
+	@install -m 666 ctest/xzcblat1 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/xzcblat2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/xzcblat3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/zin2 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/zin3 $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+ifeq ($(ARCH), filter($(ARCH), x86 x86_64 ia64 MIPS))
+	@install -m 666 ctest/xzcblat3_3m $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 ctest/zin3_3m $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+endif
+endif
+
+endif
+ifeq ($(CPP_THREAD_SAFETY_TEST), 1)
+	@install -m 666 cpp_thread_test/dgemm_tester $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+	@install -m 666 cpp_thread_test/dgemv_tester $(DESTDIR)$(OPENBLAS_BINARY_DIR)
+endif
+endif
+
