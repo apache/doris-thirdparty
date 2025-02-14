@@ -26,5 +26,6 @@ unittest tests[] = {
         {"testICU", testICU},
 #ifdef TEST_CONTRIB_LIBS
         {"chinese", testchinese},
+        {"ik", testik},
 #endif
         {"LastTest", NULL}};
