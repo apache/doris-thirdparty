@@ -372,7 +372,7 @@ jobs:
           
       - name: Build OpenBLAS
         run: |
-          make -j${nproc} TARGET=NEOVERSEN2
-          make -j${nproc} TARGET=NEOVERSEN2 lapack-test
+          make -j${nproc} 
+          make -j${nproc} lapack-test
     
           
