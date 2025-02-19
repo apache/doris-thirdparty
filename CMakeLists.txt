@@ -197,8 +197,7 @@ find_package(Roaring REQUIRED)
 
 #zstd
 find_package(Zstd REQUIRED)
-#icu
-find_package(ICU REQUIRED)
+
 #sse2neon
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/3rdparty/sse2neon)
 
