@@ -254,6 +254,7 @@ if (${CORE} STREQUAL ARMV9SME)
 	    set (CCOMMON_OPT  "${CCOMMON_OPT} -tp=host")
     else ()
     set (CCOMMON_OPT "${CCOMMON_OPT} -march=armv9-a+sme")
+    endif ()
   endif ()
 endif ()
 
