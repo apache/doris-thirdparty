@@ -393,14 +393,21 @@ void CNAME(enum CBLAS_ORDER order, enum CBLAS_TRANSPOSE TransA, enum CBLAS_TRANS
   PRINT_DEBUG_CNAME;
 
 #if !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16) && defined(USE_SGEMM_KERNEL_DIRECT)
-#ifdef DYNAMIC_ARCH
+#if defined(DYNAMIC_ARCH) && defined(ARCH_x86)
  if (support_avx512() )
-#endif
   if (beta == 0 && alpha == 1.0 && order == CblasRowMajor && TransA == CblasNoTrans && TransB == CblasNoTrans && SGEMM_DIRECT_PERFORMANT(m,n,k)) {
 	SGEMM_DIRECT(m, n, k, a, lda, b, ldb, c, ldc);
 	return;
   }
-
+#endif
+#if defined(DYNAMIC_ARCH) && defined(ARCH_ARM64)
+ if (support_sme1()){
+  if (beta == 0 && alpha == 1.0 && order == CblasRowMajor && TransA == CblasNoTrans && TransB == CblasNoTrans) {
+	SGEMM_DIRECT(m, n, k, a, lda, b, ldb, c, ldc);
+	return;
+  }
+ }
+#endif
 #endif
 
 #ifndef COMPLEX
