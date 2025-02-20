@@ -77,13 +77,29 @@ static inline int get_gemv_optimal_nthreads_neoversev1(BLASLONG MN, int ncpu) {
 }
 #endif
 
+#if defined(DYNAMIC_ARCH) || defined(NEOVERSEV2)
+static inline int get_gemv_optimal_nthreads_neoversev2(BLASLONG MN, int ncpu) {
+  return
+      MN < 24964L    ? 1
+    : MN < 65536L    ? MIN(ncpu, 8)
+    : MN < 262144L   ? MIN(ncpu, 32)
+    : MN < 1638400L  ? MIN(ncpu, 64)
+    : ncpu;
+}
+#endif
+
 static inline int get_gemv_optimal_nthreads(BLASLONG MN) {
   int ncpu = num_cpu_avail(3);
 #if defined(NEOVERSEV1) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
   return get_gemv_optimal_nthreads_neoversev1(MN, ncpu);
+#elif defined(NEOVERSEV2) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
+  return get_gemv_optimal_nthreads_neoversev2(MN, ncpu);
 #elif defined(DYNAMIC_ARCH) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
   if (strcmp(gotoblas_corename(), "neoversev1") == 0) {
     return get_gemv_optimal_nthreads_neoversev1(MN, ncpu);
+  }
+  if (strcmp(gotoblas_corename(), "neoversev2") == 0) {
+    return get_gemv_optimal_nthreads_neoversev2(MN, ncpu);
   }
 #endif
 
