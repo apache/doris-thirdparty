@@ -5,6 +5,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <atomic>
 
 namespace lucene::analysis {
 
@@ -18,20 +19,35 @@ DefaultICUTokenizerConfig::DefaultICUTokenizerConfig(bool cjkAsWords, bool myanm
 }
 
 void DefaultICUTokenizerConfig::initialize(const std::string& dictPath) {
-    static std::once_flag once_flag;
-    std::call_once(once_flag, [&dictPath]() {
-        UErrorCode status = U_ZERO_ERROR;
-        cjkBreakIterator_.reset(
-                icu::BreakIterator::createWordInstance(icu::Locale::getRoot(), status));
-        if (U_FAILURE(status)) {
-            std::string error_msg = "Failed to create CJK BreakIterator: ";
-            error_msg += u_errorName(status);
-            _CLTHROWT(CL_ERR_IllegalArgument, error_msg.c_str());
-        }
+    static std::atomic<bool> initialized_(false);
+    if (!initialized_) {
+        static std::mutex mutex;
+        std::lock_guard<std::mutex> lock(mutex);
 
-        readBreakIterator(defaultBreakIterator_, dictPath + "/uax29/Default.txt");
-        readBreakIterator(myanmarSyllableIterator_, dictPath + "/uax29/MyanmarSyllable.txt");
-    });
+        if (!initialized_) {
+            try {
+                UErrorCode status = U_ZERO_ERROR;
+                cjkBreakIterator_.reset(
+                        icu::BreakIterator::createWordInstance(icu::Locale::getRoot(), status));
+                if (U_FAILURE(status)) {
+                    std::string error_msg = "Failed to create CJK BreakIterator: ";
+                    error_msg += u_errorName(status);
+                    _CLTHROWT(CL_ERR_IllegalArgument, error_msg.c_str());
+                }
+
+                readBreakIterator(defaultBreakIterator_, dictPath + "/uax29/Default.txt");
+                readBreakIterator(myanmarSyllableIterator_,
+                                  dictPath + "/uax29/MyanmarSyllable.txt");
+
+                initialized_ = true;
+            } catch (...) {
+                cjkBreakIterator_.reset();
+                defaultBreakIterator_.reset();
+                myanmarSyllableIterator_.reset();
+                throw; // Clean up resources and rethrow the original exception to the caller
+            }
+        }
+    }
 }
 
 icu::BreakIterator* DefaultICUTokenizerConfig::getBreakIterator(int32_t script) {
