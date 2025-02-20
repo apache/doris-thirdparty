@@ -237,8 +237,9 @@ In chronological order:
   * [2025-01-10] Add thread throttling profile for SGEMM on NEOVERSEV1
   * [2025-01-21] Optimize gemv_t_sve_v1x3 kernel
 
-* Marek Michalowski <https://github.com/michalowski-arm>
+* Marek Michalowski <marek.michalowski@arm.com>
   * [2025-01-21] Add thread throttling profile for SGEMV on `NEOVERSEV1`
+  * [2025-02-18] Add thread throttling profile for SGEMM on `NEOVERSEV2`
 
 * Ye Tao <ye.tao@arm.com>
   * [2025-02-03] Optimize SBGEMM kernel on NEOVERSEV1
