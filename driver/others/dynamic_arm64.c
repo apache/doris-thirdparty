@@ -150,7 +150,7 @@ extern gotoblas_t  gotoblas_A64FX;
 #endif
 extern gotoblas_t  gotoblas_THUNDERX3T110;
 #endif
-#define gotoblas_NEOVERSEV2 gotoblas_NEOVERSEV1
+#define gotoblas_NEOVERSEV2 gotoblas_NEOVERSEN2
 
 extern void openblas_warning(int verbose, const char * msg);
 #define FALLBACK_VERBOSE 1
