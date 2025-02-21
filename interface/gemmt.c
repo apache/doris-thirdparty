@@ -688,5 +688,19 @@ void CNAME(enum CBLAS_ORDER order, enum CBLAS_UPLO Uplo,
 
 	IDEBUG_END;
 
+/* transform B back if necessary */
+#if defined(COMPLEX)
+	if (transb > 1){
+#ifndef CBLAS
+		IMATCOPY_K_CNC(nrowb, ncolb, (FLOAT)(1.0), (FLOAT)(0.0), b, ldb);
+#else
+		if (order == CblasColMajor)
+			IMATCOPY_K_CNC(nrowb, ncolb, (FLOAT)(1.0), (FLOAT)(0.0), b, ldb);
+		if (order == CblasRowMajor)
+			IMATCOPY_K_RNC(nrowb, ncolb, (FLOAT)(1.0), (FLOAT)(0.0), b, ldb);
+#endif
+	}
+#endif
+
 	return;
 }
