@@ -1443,6 +1443,80 @@ void testLanguageBasedAnalyzer(CuTest* tc) {
     _CLDELETE(ts);
 }
 
+void testJiebaSpeedFromFile(CuTest* tc, const char* fname, bool printResult) {
+    if (!Misc::dir_Exists(fname)) {
+        if (printResult) {
+            CuMessageA(tc, "File does not exist: %s\n", fname);
+        }
+        return;
+    }
+
+    struct fileStat buf;
+    fileStat(fname, &buf);
+    int64_t bytes = buf.st_size;
+
+    if (printResult) {
+        CuMessageA(tc, "Reading test file containing %d bytes.\n", bytes);
+    }
+
+    std::vector<char> fileContent(bytes);
+    {
+        FILE* f = fopen(fname, "rb");
+        if (f == nullptr) {
+            if (printResult) {
+                CuMessageA(tc, "Failed to open file: %s\n", fname);
+            }
+            return;
+        }
+        fread(fileContent.data(), 1, bytes, f);
+        fclose(f);
+    }
+
+    auto analyzer = std::make_unique<lucene::analysis::LanguageBasedAnalyzer>();
+    analyzer->setLanguage(L"chinese");
+    analyzer->setMode(lucene::analysis::AnalyzerMode::Default);
+    analyzer->initDict("./dict");
+
+    auto stringReader = std::make_unique<lucene::util::SStringReader<char>>(
+            fileContent.data(), fileContent.size(), false);
+
+    uint64_t start = Misc::currentTimeMillis();
+
+    TokenStream* ts = analyzer->tokenStream(_T("contents"), stringReader.get());
+    Token t;
+    int32_t count = 0;
+
+    while (ts->next(&t)) {
+        count++;
+    }
+
+    uint64_t end = Misc::currentTimeMillis();
+    int64_t time = end - start;
+
+    if (printResult) {
+        CuMessageA(tc, "Tokenization time: %d milliseconds\n", time);
+        CuMessageA(tc, "Number of tokens: %d\n", count);
+        CuMessageA(tc, "Average time per token: %.2f microseconds\n", (time * 1000.0) / count);
+        CuMessageA(tc, "Processing speed: %.2f MB/s\n", (bytes / 1024.0 / 1024.0) / (time / 1000.0));
+    }
+
+    _CLDELETE(ts);
+}
+
+void testJiebaSpeed(CuTest* tc) {
+    char loc[1024];
+    strcpy(loc, clucene_data_location);
+    strcat(loc, "/contribs-lib/analysis/chinese/speed-test-text.txt");
+
+    for (int i = 0; i < 3; i++) {
+        testJiebaSpeedFromFile(tc, loc, false);
+    }
+
+    for (int i = 0; i < 5; i++) {
+        testJiebaSpeedFromFile(tc, loc, true);
+    }
+}
+
 CuSuite* testchinese(void) {
     CuSuite* suite = CuSuiteNew(_T("CLucene chinese tokenizer Test"));
 
@@ -1464,6 +1538,7 @@ CuSuite* testchinese(void) {
     SUITE_ADD_TEST(suite, testSimpleJiebaSearchModeTokenizer);
     SUITE_ADD_TEST(suite, testSimpleJiebaAllModeTokenizer2);
     SUITE_ADD_TEST(suite, testSimpleJiebaSearchModeTokenizer2);
+    SUITE_ADD_TEST(suite, testJiebaSpeed);
 
     return suite;
 }

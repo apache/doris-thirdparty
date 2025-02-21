@@ -25,5 +25,6 @@ unittest tests[] = {
         {"GrowableByteArrayDataOutput", testGrowableByteArrayDataOutputSuite},
 #ifdef TEST_CONTRIB_LIBS
         {"chinese", testchinese},
+        {"ik", testik},
 #endif
         {"LastTest", NULL}};
