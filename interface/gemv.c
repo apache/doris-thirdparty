@@ -79,6 +79,11 @@ static inline int get_gemv_optimal_nthreads_neoversev1(BLASLONG MN, int ncpu) {
 
 static inline int get_gemv_optimal_nthreads(BLASLONG MN) {
   int ncpu = num_cpu_avail(3);
+#if defined(_WIN64) && defined(_M_ARM64)
+  if (MN > 100000000L)
+    return num_cpu_avail(4);
+  return 1;
+#endif
 #if defined(NEOVERSEV1) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
   return get_gemv_optimal_nthreads_neoversev1(MN, ncpu);
 #elif defined(DYNAMIC_ARCH) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
