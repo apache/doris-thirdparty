@@ -177,6 +177,7 @@ static int init_amxtile_permission() {
 }
 #endif
 
+#ifdef SMP
 #ifdef DYNAMIC_ARCH
 extern char* gotoblas_corename(void);
 #endif
@@ -242,6 +243,7 @@ static inline int get_gemm_optimal_nthreads(double MNK) {
     }
   }
 }
+#endif
 
 #ifndef CBLAS
 
