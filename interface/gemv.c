@@ -63,6 +63,7 @@ static int (*gemv_thread[])(BLASLONG, BLASLONG, FLOAT, FLOAT *, BLASLONG,  FLOAT
 };
 #endif
 
+#ifdef SMP
 #ifdef DYNAMIC_ARCH
  extern char* gotoblas_corename(void);
 #endif
@@ -108,6 +109,7 @@ static inline int get_gemv_optimal_nthreads(BLASLONG MN) {
   else
     return num_cpu_avail(2);
 }
+#endif
 
 #ifndef CBLAS
 
@@ -248,13 +250,6 @@ void CNAME(enum CBLAS_ORDER order,
 
   if (alpha == ZERO) return;
 	
-#if 0
-/* this optimization causes stack corruption on x86_64 under OSX, Windows and FreeBSD */	
-  if (trans == 0 && incx == 1 && incy == 1 && m*n < 2304 *GEMM_MULTITHREAD_THRESHOLD) {
-    GEMV_N(m, n, 0, alpha, a, lda, x, incx, y, incy, NULL);
-    return;
-  }    
-#endif
   IDEBUG_START;
 
   FUNCTION_PROFILE_START();
