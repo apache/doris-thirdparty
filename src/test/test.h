@@ -90,6 +90,7 @@ CuSuite *testIndexCompressV3(void);
 CuSuite *testByteArrayDataInputSuite(void);
 CuSuite *testGrowableByteArrayDataOutputSuite(void);
 CuSuite *testICU(void);
+CuSuite *testUTF8CharsSuite(void);
 
 #ifdef TEST_CONTRIB_LIBS
 //CuSuite *testGermanAnalyzer(void);
