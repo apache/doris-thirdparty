@@ -15,4 +15,5 @@ SBGEMMONCOPY    = sbgemm_ncopy_$(SBGEMM_UNROLL_N)_neoversev1.c
 SBGEMMOTCOPY    = sbgemm_tcopy_$(SBGEMM_UNROLL_N)_neoversev1.c
 SBGEMMONCOPYOBJ =  sbgemm_oncopy$(TSUFFIX).$(SUFFIX)
 SBGEMMOTCOPYOBJ =  sbgemm_otcopy$(TSUFFIX).$(SUFFIX)
+SBGEMVTKERNEL = sbgemv_t_bfdot.c
 endif
