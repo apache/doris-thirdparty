@@ -65,7 +65,7 @@ namespace orc {
 
     virtual void beforeReadStripe(
         std::unique_ptr<StripeInformation> currentStripeInformation,
-        std::vector<bool> selectedColumns,
+        const std::vector<bool>& selectedColumns,
         std::unordered_map<orc::StreamId, std::shared_ptr<InputStream>>& streams);
   };
 
