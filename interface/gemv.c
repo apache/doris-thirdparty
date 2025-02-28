@@ -89,6 +89,24 @@ static inline int get_gemv_optimal_nthreads_neoversev2(BLASLONG MN, int ncpu) {
 }
 #endif
 
+//thread throttling for dgemv
+#if defined(DYNAMIC_ARCH) || defined(NEOVERSEV1)
+static inline int get_dgemv_optimal_nthreads_neoversev1(BLASLONG MN, int ncpu) {
+
+  return
+  MN < 8100L      ? 1                    
+: MN < 12100L     ? MIN(ncpu, 2)         
+: MN < 36100L     ? MIN(ncpu, 4)         
+: MN < 84100L     ? MIN(ncpu, 8)         
+: MN < 348100L    ? MIN(ncpu, 16)        
+: MN < 435600L    ? MIN(ncpu, 24)        
+: MN < 810000L    ? MIN(ncpu, 32)        
+: MN < 1050625   ? MIN(ncpu, 40)        
+: ncpu;                    
+
+}
+#endif
+
 static inline int get_gemv_optimal_nthreads(BLASLONG MN) {
   int ncpu = num_cpu_avail(3);
 #if defined(_WIN64) && defined(_M_ARM64)
@@ -98,6 +116,8 @@ static inline int get_gemv_optimal_nthreads(BLASLONG MN) {
 #endif
 #if defined(NEOVERSEV1) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
   return get_gemv_optimal_nthreads_neoversev1(MN, ncpu);
+#elif defined(NEOVERSEV1) && !defined(COMPLEX)  && defined(DOUBLE) && !defined(BFLOAT16)
+  return get_dgemv_optimal_nthreads_neoversev1(MN, ncpu);
 #elif defined(NEOVERSEV2) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
   return get_gemv_optimal_nthreads_neoversev2(MN, ncpu);
 #elif defined(DYNAMIC_ARCH) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
