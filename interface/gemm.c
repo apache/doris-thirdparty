@@ -177,6 +177,7 @@ static int init_amxtile_permission() {
 }
 #endif
 
+#ifdef SMP
 #ifdef DYNAMIC_ARCH
 extern char* gotoblas_corename(void);
 #endif
@@ -198,13 +199,36 @@ static inline int get_gemm_optimal_nthreads_neoversev1(double MNK, int ncpu) {
 }
 #endif
 
+#if defined(DYNAMIC_ARCH) || defined(NEOVERSEV2)
+static inline int get_gemm_optimal_nthreads_neoversev2(double MNK, int ncpu) {
+  return
+      MNK < 125000L     ? 1
+    : MNK < 1092727L    ? MIN(ncpu, 6)
+    : MNK < 2628072L    ? MIN(ncpu, 8)
+    : MNK < 8000000L    ? MIN(ncpu, 12)
+    : MNK < 20346417L   ? MIN(ncpu, 16)
+    : MNK < 57066625L   ? MIN(ncpu, 24)
+    : MNK < 91125000L   ? MIN(ncpu, 28)
+    : MNK < 238328000L  ? MIN(ncpu, 40)
+    : MNK < 454756609L  ? MIN(ncpu, 48)
+    : MNK < 857375000L  ? MIN(ncpu, 56)
+    : MNK < 1073741824L ? MIN(ncpu, 64)
+    : ncpu;
+}
+#endif
+
 static inline int get_gemm_optimal_nthreads(double MNK) {
   int ncpu = num_cpu_avail(3);
 #if defined(NEOVERSEV1) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
   return get_gemm_optimal_nthreads_neoversev1(MNK, ncpu);
+#elif defined(NEOVERSEV2) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
+  return get_gemm_optimal_nthreads_neoversev2(MNK, ncpu);
 #elif defined(DYNAMIC_ARCH) && !defined(COMPLEX) && !defined(DOUBLE) && !defined(BFLOAT16)
   if (strcmp(gotoblas_corename(), "neoversev1") == 0) {
     return get_gemm_optimal_nthreads_neoversev1(MNK, ncpu);
+  }
+  if (strcmp(gotoblas_corename(), "neoversev2") == 0) {
+    return get_gemm_optimal_nthreads_neoversev2(MNK, ncpu);
   }
 #endif
   if ( MNK <= (SMP_THRESHOLD_MIN  * (double) GEMM_MULTITHREAD_THRESHOLD) ) {
@@ -219,6 +243,7 @@ static inline int get_gemm_optimal_nthreads(double MNK) {
     }
   }
 }
+#endif
 
 #ifndef CBLAS
 

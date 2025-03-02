@@ -17,4 +17,6 @@ SBGEMMONCOPYOBJ =  sbgemm_oncopy$(TSUFFIX).$(SUFFIX)
 SBGEMMOTCOPYOBJ =  sbgemm_otcopy$(TSUFFIX).$(SUFFIX)
 
 SBGEMVNKERNEL = sbgemv_n_neon.c
+SBGEMVTKERNEL = sbgemv_t_bfdot.c
+
 endif
