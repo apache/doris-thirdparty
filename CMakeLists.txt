@@ -21,6 +21,8 @@ include(CMakePackageConfigHelpers)
 #######
 option(BUILD_WITHOUT_LAPACK "Do not build LAPACK and LAPACKE (Only BLAS or CBLAS)" OFF)
 
+option(BUILD_WITHOUT_LAPACKE "Do not build the C interface to LAPACK)" OFF)
+
 option(BUILD_LAPACK_DEPRECATED "When building LAPACK, include also some older, deprecated routines" ON)
 
 set(LAPACK_STRLEN "" CACHE STRING "When building LAPACK, use this type (e.g. \"int\") for character lengths (defaults to size_t)")
@@ -78,6 +80,10 @@ set(SYMBOLSUFFIX "" CACHE STRING  "Add a suffix to all exported symbol names in 
 #######
 if(BUILD_WITHOUT_LAPACK)
   set(NO_LAPACK 1)
+  set(NO_LAPACKE 1)
+endif()
+
+if (BUILD_WITHOUT_LAPACKE)
   set(NO_LAPACKE 1)
 endif()
 
