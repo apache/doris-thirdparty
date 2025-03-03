@@ -117,13 +117,15 @@ int NAME(blasint *N, blasint *NRHS, FLOAT *a, blasint *ldA, blasint *ipiv,
 
 #if defined(_WIN64) && defined(_M_ARM64)
   #ifdef COMPLEX
-    if (args.m * args.n > 600)
+    if (args.m * args.n <= 300) 
   #else
-    if (args.m * args.n > 1000)
+    if (args.m * args.n <= 500) 
   #endif
-      args.nthreads = num_cpu_avail(4);
-    else
       args.nthreads = 1;
+  else if (args.m * args.n <= 1000)
+    args.nthreads = 4;
+  else
+    args.nthreads = num_cpu_avail(4);
 #else
   #ifndef DOUBLE
     if (args.m * args.n < 40000)
