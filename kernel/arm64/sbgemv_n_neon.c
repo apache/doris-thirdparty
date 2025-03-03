@@ -480,7 +480,6 @@ int CNAME(BLASLONG m, BLASLONG n, FLOAT alpha, bfloat16 *a, BLASLONG lda,
       }
 
       if (m & 2) {
-        float x0, x1;
         x0 = alpha * (BF16_TO_FP32(x_ptr[0]));
         x1 = alpha * (BF16_TO_FP32(x_ptr[1]));
 
@@ -496,7 +495,6 @@ int CNAME(BLASLONG m, BLASLONG n, FLOAT alpha, bfloat16 *a, BLASLONG lda,
       }
 
       if (m & 1) {
-        float x0, x1;
         x0 = alpha * BF16_TO_FP32(x_ptr[0]);
         x1 = alpha * BF16_TO_FP32(x_ptr[1]);
 
