@@ -18,6 +18,7 @@ SOURCE_GROUP("util" ./CLucene/util/*)
 SOURCE_GROUP("analysis-cjk" ./CLucene/analysis/cjk/*)
 SOURCE_GROUP("analysis-jieba" ./CLucene/analysis/jieba/*)
 SOURCE_GROUP("analysis-de" ./CLucene/analysis/de/*)
+SOURCE_GROUP("analysis-ik" ./CLucene/analysis/ik/*)
 #SOURCE_GROUP("highlighter" ./CLucene/highlighter/*)
 SOURCE_GROUP("index" ./CLucene/index/*)
 SOURCE_GROUP("snowball" ./CLucene/snowball/*)
@@ -30,58 +31,71 @@ SET(clucene_contribs_Files
     ./CLucene/util/gzipcompressstream.cpp
     ./CLucene/util/gzipinputstream.cpp
 
-    ./CLucene/analysis/LanguageBasedAnalyzer.cpp
-    ./CLucene/analysis/cjk/CJKAnalyzer.cpp
-    
+	./CLucene/analysis/LanguageBasedAnalyzer.cpp
+	./CLucene/analysis/cjk/CJKAnalyzer.cpp
+
 	./CLucene/analysis/de/GermanAnalyzer.cpp
 	./CLucene/analysis/de/GermanStemFilter.cpp
 	./CLucene/analysis/de/GermanStemmer.cpp
-	
-    #./CLucene/highlighter/Encoder.cpp
-    #./CLucene/highlighter/Formatter.cpp
-    #./CLucene/highlighter/Fragmenter.cpp
-    #./CLucene/highlighter/Highlighter.cpp
-    #./CLucene/highlighter/QueryScorer.cpp
-    #./CLucene/highlighter/QueryTermExtractor.cpp
-    #./CLucene/highlighter/SimpleFragmenter.cpp
-    #./CLucene/highlighter/SimpleHTMLEncoder.cpp
-    #./CLucene/highlighter/SimpleHTMLFormatter.cpp
-    #./CLucene/highlighter/TextFragment.cpp
-    #./CLucene/highlighter/TokenGroup.cpp
-    #./CLucene/highlighter/TokenSources.cpp
-    #./CLucene/highlighter/WeightedTerm.cpp
-    
-    ./CLucene/snowball/Snowball.cpp
-    ./CLucene/snowball/libstemmer/libstemmer.c
-    ./CLucene/snowball/runtime/api.c
-    ./CLucene/snowball/runtime/utilities.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_danish.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_dutch.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_english.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_finnish.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_french.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_german.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_italian.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_norwegian.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_porter.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_portuguese.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_spanish.c
-    ./CLucene/snowball/src_c/stem_ISO_8859_1_swedish.c
-    ./CLucene/snowball/src_c/stem_KOI8_R_russian.c
-    ./CLucene/snowball/src_c/stem_UTF_8_danish.c
-    ./CLucene/snowball/src_c/stem_UTF_8_dutch.c
-    ./CLucene/snowball/src_c/stem_UTF_8_english.c
-    ./CLucene/snowball/src_c/stem_UTF_8_finnish.c
-    ./CLucene/snowball/src_c/stem_UTF_8_french.c
-    ./CLucene/snowball/src_c/stem_UTF_8_german.c
-    ./CLucene/snowball/src_c/stem_UTF_8_italian.c
-    ./CLucene/snowball/src_c/stem_UTF_8_norwegian.c
-    ./CLucene/snowball/src_c/stem_UTF_8_porter.c
-    ./CLucene/snowball/src_c/stem_UTF_8_portuguese.c
-    ./CLucene/snowball/src_c/stem_UTF_8_russian.c
-    ./CLucene/snowball/src_c/stem_UTF_8_spanish.c
-    ./CLucene/snowball/src_c/stem_UTF_8_swedish.c
-    ./CLucene/analysis/jieba/ChineseTokenizer.cpp
+
+	#./CLucene/highlighter/Encoder.cpp
+	#./CLucene/highlighter/Formatter.cpp
+	#./CLucene/highlighter/Fragmenter.cpp
+	#./CLucene/highlighter/Highlighter.cpp
+	#./CLucene/highlighter/QueryScorer.cpp
+	#./CLucene/highlighter/QueryTermExtractor.cpp
+	#./CLucene/highlighter/SimpleFragmenter.cpp
+	#./CLucene/highlighter/SimpleHTMLEncoder.cpp
+	#./CLucene/highlighter/SimpleHTMLFormatter.cpp
+	#./CLucene/highlighter/TextFragment.cpp
+	#./CLucene/highlighter/TokenGroup.cpp
+	#./CLucene/highlighter/TokenSources.cpp
+	#./CLucene/highlighter/WeightedTerm.cpp
+
+	./CLucene/snowball/Snowball.cpp
+	./CLucene/snowball/libstemmer/libstemmer.c
+	./CLucene/snowball/runtime/api.c
+	./CLucene/snowball/runtime/utilities.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_danish.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_dutch.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_english.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_finnish.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_french.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_german.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_italian.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_norwegian.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_porter.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_portuguese.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_spanish.c
+	./CLucene/snowball/src_c/stem_ISO_8859_1_swedish.c
+	./CLucene/snowball/src_c/stem_KOI8_R_russian.c
+	./CLucene/snowball/src_c/stem_UTF_8_danish.c
+	./CLucene/snowball/src_c/stem_UTF_8_dutch.c
+	./CLucene/snowball/src_c/stem_UTF_8_english.c
+	./CLucene/snowball/src_c/stem_UTF_8_finnish.c
+	./CLucene/snowball/src_c/stem_UTF_8_french.c
+	./CLucene/snowball/src_c/stem_UTF_8_german.c
+	./CLucene/snowball/src_c/stem_UTF_8_italian.c
+	./CLucene/snowball/src_c/stem_UTF_8_norwegian.c
+	./CLucene/snowball/src_c/stem_UTF_8_porter.c
+	./CLucene/snowball/src_c/stem_UTF_8_portuguese.c
+	./CLucene/snowball/src_c/stem_UTF_8_russian.c
+	./CLucene/snowball/src_c/stem_UTF_8_spanish.c
+	./CLucene/snowball/src_c/stem_UTF_8_swedish.c
+	./CLucene/analysis/jieba/ChineseTokenizer.cpp
+	./CLucene/analysis/ik/dic/Dictionary.cpp
+	./CLucene/analysis/ik/dic/DictSegment.cpp
+	./CLucene/analysis/ik/IKTokenizer.cpp
+	./CLucene/analysis/ik/core/Lexeme.cpp
+	./CLucene/analysis/ik/core/QuickSortSet.cpp
+	./CLucene/analysis/ik/core/LexemePath.cpp
+	./CLucene/analysis/ik/core/IKSegmenter.cpp
+	./CLucene/analysis/ik/core/CharacterUtil.cpp
+	./CLucene/analysis/ik/core/AnalyzeContext.cpp
+	./CLucene/analysis/ik/core/CJKSegmenter.cpp
+	./CLucene/analysis/ik/core/IKArbitrator.cpp
+	./CLucene/analysis/ik/core/LetterSegmenter.cpp
+	./CLucene/analysis/ik/core/CN_QuantifierSegmenter.cpp
 )
 IF (BUILD_STATIC_LIBRARIES)
 	SET ( clucene_contrib_extra_libs clucene-core-static clucene-shared-static ${EXTRA_LIBS})
