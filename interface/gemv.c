@@ -127,6 +127,12 @@ static inline int get_gemv_optimal_nthreads(BLASLONG MN) {
   if (strcmp(gotoblas_corename(), "neoversev2") == 0) {
     return get_gemv_optimal_nthreads_neoversev2(MN, ncpu);
   }
+#elif defined(DYNAMIC_ARCH) && !defined(COMPLEX) && defined(DOUBLE) && !defined(BFLOAT16)
+  if (strcmp(gotoblas_corename(), "neoversev1") == 0) {
+    return get_dgemv_optimal_nthreads_neoversev1(MN, ncpu);
+  }
+
+
 #endif
 
   if ( MN < 115200L * GEMM_MULTITHREAD_THRESHOLD )
