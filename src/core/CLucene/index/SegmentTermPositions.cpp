@@ -108,7 +108,7 @@ int32_t SegmentTermPositions::read(int32_t* /*docs*/, int32_t* /*freqs*/, int32_
 }
 
 bool SegmentTermPositions::readRange(DocRange* docRange) {
-    _CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: SegmentTermPositions::readDocRange");
+    return SegmentTermDocs::readRange(docRange);
 }
 
 void SegmentTermPositions::skipProx(const int64_t proxPointer, const int32_t _payloadLength){
