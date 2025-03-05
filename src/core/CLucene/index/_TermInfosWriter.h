@@ -64,12 +64,15 @@ public:
 
     void close();
 
+    void setEnableCorrectTermWrite(bool enableCorrectTermWrite);
+
 private:
     void initialise(CL_NS(store)::Directory *directory, const char *segment, int32_t interval, bool IsIndex);
     void writeTerm(CL_NS(store)::IndexOutput* out, int32_t fieldNumber, const T *termText, int32_t termTextLength);
 
 private:
     bool isDictCompress_ = false;
+    bool enableCorrectTermWrite_ = true;
     store_v2::GrowableByteArrayDataOutput tisMemoryOutput_;
 };
 
