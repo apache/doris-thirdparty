@@ -1008,7 +1008,7 @@ void SDocumentsWriter<T>::writeSegment(std::vector<std::string> &flushedFiles) {
 
     auto *termsOut = _CLNEW STermInfosWriter<T>(directory, segmentName.c_str(), fieldInfos,
                                             writer->getTermIndexInterval());
-
+    termsOut->setEnableCorrectTermWrite(writer->getEnableCorrectTermWrite());
     IndexOutput *freqOut = directory->createOutput((segmentName + ".frq").c_str());
     // TODO:add options in field index
     IndexOutput *proxOut = nullptr;

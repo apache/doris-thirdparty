@@ -6,24 +6,24 @@
 ------------------------------------------------------------------------------*/
 #include "test.h"
 
-unittest tests[] = {
-        {"analysis", testanalysis},
-        {"analyzers", testanalyzers},
-        {"analysis", teststandard95},
-        {"document", testdocument},
-        {"field", testField},
-        {"bkd", testBKD},
-        {"MSBRadixSorter",testMSBRadixSorter},
-        {"strconvert", testStrConvert},
-        {"searchRange", testSearchRange},
-        {"MultiPhraseQuery", testMultiPhraseQuery},
-        {"IndexCompaction", testIndexCompaction},
-        {"testStringReader", testStringReader},
-        {"IndexCompress", testIndexCompress},
-        {"IndexCompressV3", testIndexCompressV3},
-        {"ByteArrayDataInput", testByteArrayDataInputSuite},
-        {"GrowableByteArrayDataOutput", testGrowableByteArrayDataOutputSuite},
+unittest tests[] = {{"analysis", testanalysis},
+                    {"analyzers", testanalyzers},
+                    {"analysis", teststandard95},
+                    {"document", testdocument},
+                    {"field", testField},
+                    {"bkd", testBKD},
+                    {"MSBRadixSorter", testMSBRadixSorter},
+                    {"strconvert", testStrConvert},
+                    {"searchRange", testSearchRange},
+                    {"MultiPhraseQuery", testMultiPhraseQuery},
+                    {"IndexCompaction", testIndexCompaction},
+                    {"testStringReader", testStringReader},
+                    {"IndexCompress", testIndexCompress},
+                    {"IndexCompressV3", testIndexCompressV3},
+                    {"ByteArrayDataInput", testByteArrayDataInputSuite},
+                    {"GrowableByteArrayDataOutput", testGrowableByteArrayDataOutputSuite},
+                    {"TestUTF8Chars", testUTF8CharsSuite},
 #ifdef TEST_CONTRIB_LIBS
-        {"chinese", testchinese},
+                    {"chinese", testchinese},
 #endif
-        {"LastTest", NULL}};
+                    {"LastTest", NULL}};

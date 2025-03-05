@@ -158,32 +158,57 @@ CL_NS_DEF(store)
     writeChars(s, length);
   }
 
-  template <>
-  void IndexOutput::writeSChars(const TCHAR* s, const int32_t length){
+ template <>
+  void IndexOutput::writeSCharsOrigin(const TCHAR* s, const int32_t length){
       if ( length < 0 )
+          _CLTHROWA(CL_ERR_IllegalArgument, "IO Argument Error. Value must be a positive value.");
+
+      const int32_t end = length;
+      for (int32_t i = 0; i < end; ++i) {
+          const int32_t code = (int32_t)s[i];
+          if (code >= 0x01 && code <= 0x7F)
+              writeByte((uint8_t)code);
+          else if (((code >= 0x80) && (code <= 0x7FF)) || code == 0) {
+              writeByte((uint8_t)(0xC0 | (code >> 6)));
+              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+          } else {
+              writeByte((uint8_t)(0xE0 | (((uint32_t)code) >> 12))); //unsigned shift
+              writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
+              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+          }
+      }
+  }
+
+  template <>
+  void IndexOutput::writeSChars(const TCHAR* s, const int32_t length) {
+      if (length < 0)
           _CLTHROWA(CL_ERR_IllegalArgument, "IO Argument Error. Value must be a positive value.");
 
       const int32_t end = length;
       for (int32_t i = 0; i < end; ++i) {
           auto code = (uint32_t)s[i];
           if (code >= 0x00 && code <= 0x7F) {
-              writeByte((uint8_t)code);
+            writeByte((uint8_t)code);
           } else if (code <= 0x7FF) {
-              writeByte((uint8_t)(0xC0 | (code >> 6)));
-              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+            writeByte((uint8_t)(0xC0 | (code >> 6)));
+            writeByte((uint8_t)(0x80 | (code & 0x3F)));
           } else if (code <= 0xFFFF) {
-              writeByte((uint8_t)(0xE0 | (code >> 12)));
-              writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
-              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+            writeByte((uint8_t)(0xE0 | (code >> 12)));
+            writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
+            writeByte((uint8_t)(0x80 | (code & 0x3F)));
           } else if (code <= 0x10FFFF) {
-              writeByte((uint8_t)(0xF0 | (code >> 18)));
-              writeByte((uint8_t)(0x80 | ((code >> 12) & 0x3F)));
-              writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
-              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+            // NOTE: This is not correct UTF-8 encoding, but it is what we are doing now.
+            // We must differ it from previous wrong encoding code, previous code will write 3bytes characters starts with 0xF0-0xFF for 4-byte characters.
+            // Which will mixed with the correct 4-byte characters with UTF-8 encoding.
+            // This is a temporary solution, we need to find a better way to handle this.
+            writeByte((uint8_t)(0x80 | (code >> 18)));
+            writeByte((uint8_t)(0x80 | ((code >> 12) & 0x3F)));
+            writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
+            writeByte((uint8_t)(0x80 | (code & 0x3F)));
           } else {
-              writeByte(0xEF);
-              writeByte(0xBF);
-              writeByte(0xBD);
+            writeByte(0xEF);
+            writeByte(0xBF);
+            writeByte(0xBD);
           }
       }
   }
@@ -196,35 +221,38 @@ CL_NS_DEF(store)
       writeBytes((const uint8_t*)s, length);
   }
 
-  void IndexOutput::writeChars(const TCHAR* s, const int32_t length){
-      if ( length < 0 )
+  void IndexOutput::writeChars(const TCHAR* s, const int32_t length) {
+      if (length < 0)
           _CLTHROWA(CL_ERR_IllegalArgument, "IO Argument Error. Value must be a positive value.");
 
       const int32_t end = length;
       for (int32_t i = 0; i < end; ++i) {
           auto code = (uint32_t)s[i];
           if (code >= 0x00 && code <= 0x7F) {
-              writeByte((uint8_t)code);
+            writeByte((uint8_t)code);
           } else if (code <= 0x7FF) {
-              writeByte((uint8_t)(0xC0 | (code >> 6)));
-              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+            writeByte((uint8_t)(0xC0 | (code >> 6)));
+            writeByte((uint8_t)(0x80 | (code & 0x3F)));
           } else if (code <= 0xFFFF) {
-              writeByte((uint8_t)(0xE0 | (code >> 12)));
-              writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
-              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+            writeByte((uint8_t)(0xE0 | (code >> 12)));
+            writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
+            writeByte((uint8_t)(0x80 | (code & 0x3F)));
           } else if (code <= 0x10FFFF) {
-              writeByte((uint8_t)(0xF0 | (code >> 18)));
-              writeByte((uint8_t)(0x80 | ((code >> 12) & 0x3F)));
-              writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
-              writeByte((uint8_t)(0x80 | (code & 0x3F)));
+            // NOTE: This is not correct UTF-8 encoding, but it is what we are doing now.
+            // We must differ it from previous wrong encoding code, previous code will write 3bytes characters starts with 0xF0-0xFF for 4-byte characters.
+            // Which will mixed with the correct 4-byte characters with UTF-8 encoding.
+            // This is a temporary solution, we need to find a better way to handle this.
+            writeByte((uint8_t)(0x80 | (code >> 18)));
+            writeByte((uint8_t)(0x80 | ((code >> 12) & 0x3F)));
+            writeByte((uint8_t)(0x80 | ((code >> 6) & 0x3F)));
+            writeByte((uint8_t)(0x80 | (code & 0x3F)));
           } else {
-              writeByte(0xEF);
-              writeByte(0xBF);
-              writeByte(0xBD);
+            writeByte(0xEF);
+            writeByte(0xBF);
+            writeByte(0xBD);
           }
       }
   }
-
 
   int64_t BufferedIndexOutput::getFilePointer() const{
     return bufferStart + bufferPosition;
