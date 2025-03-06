@@ -129,28 +129,29 @@ CL_NS_USE(util)
       readBytes(b, len, offset);
   }
 
-  void IndexInput::readChars( TCHAR* buffer, const int32_t start, const int32_t len) {
+void IndexInput::readChars(TCHAR* buffer, const int32_t start, const int32_t len) {
     const int32_t end = start + len;
     TCHAR b;
     for (int32_t i = start; i < end; ++i) {
-      b = readByte();
-      if ((b & 0x80) == 0) {
-        b = (b & 0x7F);
-      } else if ((b & 0xE0) != 0xE0) {
-        b = (((b & 0x1F) << 6)
-          | (readByte() & 0x3F));
-      } else {
-		  b = ((b & 0x0F) << 12) | ((readByte() & 0x3F) << 6);
-		  b |= (readByte() & 0x3F);
-      }
-      buffer[i] = b;
-	}
-  }
-
-
-
-
-
+        b = readByte();
+        if ((b & 0x80) == 0) {
+            b = (b & 0x7F);
+        } else if (b >= 0x80 && b <= 0x84) {
+            // NOTE: This is not correct UTF-8 encoding, but it is what we are doing now.
+            // We must differ it from previous wrong encoding code, previous code will write 3bytes characters starts with 0xF0-0xFF for 4-byte characters.
+            // Which will mixed with the correct 4-byte characters with UTF-8 encoding.
+            // This is a temporary solution, we need to find a better way to handle this.
+            b = ((b & 0x07) << 18) | ((readByte() & 0x3F) << 12) | ((readByte() & 0x3F) << 6) |
+                (readByte() & 0x3F);
+        } else if ((b & 0xE0) != 0xE0) {
+            b = (((b & 0x1F) << 6) | (readByte() & 0x3F));
+        } else {
+            b = ((b & 0x0F) << 12) | ((readByte() & 0x3F) << 6);
+            b |= (readByte() & 0x3F);
+        }
+        buffer[i] = b;
+    }
+}
 
 BufferedIndexInput::BufferedIndexInput(int32_t _bufferSize):
 		buffer(NULL),

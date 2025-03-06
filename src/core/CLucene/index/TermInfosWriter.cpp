@@ -205,7 +205,11 @@ void STermInfosWriter<T>::writeTerm(int32_t fieldNumber, const T *termText, int3
 
         output->writeVInt(start);
         output->writeVInt(length);
-        output->writeSChars(newTermWStr.data() + start, length);
+        if (enableCorrectTermWrite_) {
+            output->writeSChars(newTermWStr.data() + start, length);
+        } else {
+            output->writeSCharsOrigin(newTermWStr.data() + start, length);
+        }
         output->writeVInt(fieldNumber);
     } else {
         int32_t start = 0;
@@ -218,11 +222,20 @@ void STermInfosWriter<T>::writeTerm(int32_t fieldNumber, const T *termText, int3
 
         int32_t length = termTextLength - start;
 
-        output->writeVInt(start);                    // write shared prefix length
-        output->writeVInt(length);                   // write delta length
-        output->writeSChars(termText + start, length);// write delta chars
-        output->writeVInt(fieldNumber);              // write field num
+        output->writeVInt(start);
+        output->writeVInt(length);
+        if (enableCorrectTermWrite_) {
+            output->writeSChars(termText + start, length);
+        } else {
+            output->writeSCharsOrigin(termText + start, length);
+        }
+        output->writeVInt(fieldNumber);
     }
+}
+
+template <typename T>
+void STermInfosWriter<T>::setEnableCorrectTermWrite(bool enableCorrectTermWrite) {
+    enableCorrectTermWrite_ = enableCorrectTermWrite;
 }
 
 template class STermInfosWriter<char>;
