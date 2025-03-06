@@ -61,9 +61,12 @@ public:
 
     void close();
 
+    void setEnableCorrectTermWrite(bool enableCorrectTermWrite);
+
 private:
     void initialise(CL_NS(store)::Directory *directory, const char *segment, int32_t interval, bool IsIndex);
     void writeTerm(int32_t fieldNumber, const T *termText, int32_t termTextLength);
+    bool enableCorrectTermWrite_ = true;
 };
 
 // This stores a monotonically increasing set of <Term, TermInfo> pairs in a
