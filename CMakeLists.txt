@@ -194,6 +194,7 @@ INCLUDE_DIRECTORIES( ${_CL_BOOST_INCLUDE_PATH} )
 ADD_SUBDIRECTORY (src/ext)
 include(cmake/FindRoaring.cmake)
 find_package(Roaring REQUIRED)
+INCLUDE_DIRECTORIES(${clucene_SOURCE_DIR}/src/ext/sse2neon)
 #TurboPFOR
 ADD_SUBDIRECTORY (src/ext/for)
 ADD_SUBDIRECTORY (src/shared)

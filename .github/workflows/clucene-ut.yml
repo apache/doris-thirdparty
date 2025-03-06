@@ -22,6 +22,8 @@ on:
     branches:
     - clucene
     - clucene-2.0
+    - clucene-2.1
+    - clucene-3.0
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -78,7 +80,7 @@ jobs:
 
   run_clucene_ut_macos:
     name: CLucene UT (MacOS)
-    runs-on: macos-12
+    runs-on: macos-15
     steps:
     - name: "Checkout ${{ github.event.pull_request.number }} ${{ github.event.pull_request.head.sha }}"
       uses: actions/checkout@v4
