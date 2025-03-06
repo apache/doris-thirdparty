@@ -537,6 +537,7 @@ struct hdfsBuilder {
     const char *kerb5ConfPath;
     const char *keyTabFile;
     const char *userName;
+    const char *kerbPrincipal;
     struct hdfsBuilderConfOpt *opts;
     struct hdfsBuilderConfFileOpt *fileOpts;
 };
@@ -654,6 +655,11 @@ void hdfsBuilderSetNameNodePort(struct hdfsBuilder *bld, tPort port)
 void hdfsBuilderSetUserName(struct hdfsBuilder *bld, const char *userName)
 {
     bld->userName = userName;
+}
+
+void hdfsBuilderSetPrincipal(struct hdfsBuilder *bld, const char *kerbPrincipal)
+{
+    bld->kerbPrincipal = kerbPrincipal;
 }
 
 void hdfsBuilderSetKerbTicketCachePath(struct hdfsBuilder *bld,
@@ -793,7 +799,7 @@ hdfsFS hdfsBuilderConnect(struct hdfsBuilder *bld)
 {
     JNIEnv *env = 0;
     jobject jConfiguration = NULL, jFS = NULL, jURI = NULL, jCachePath = NULL;
-    jstring jURIString = NULL, jUserString = NULL, jKeyTabString = NULL;
+    jstring jURIString = NULL, jUserString = NULL, jKeyTabString = NULL, jKerbPrincipal = NULL;
     jvalue  jVal;
     jthrowable jthr = NULL;
     char *cURI = 0, buf[512];
@@ -915,7 +921,7 @@ hdfsFS hdfsBuilderConnect(struct hdfsBuilder *bld)
                                         hdfsBuilderToStr(bld, buf, sizeof(buf)));
             goto done;
         }
-        if (bld->kerb5ConfPath && bld->keyTabFile) {
+        if (bld->kerb5ConfPath && bld->keyTabFile && bld->kerbPrincipal) {
             jthr = invokeMethod(env, NULL, STATIC, NULL, JC_SECURITY_CONFIGURATION, "setConfiguration", JMETHOD1(JPARAM(HADOOP_CONF),JAVA_VOID), jConfiguration);
             if (jthr) {
                 ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,"hdfsBuilderConnect(%s)", hdfsBuilderToStr(bld, buf, sizeof(buf)));
@@ -926,7 +932,12 @@ hdfsFS hdfsBuilderConnect(struct hdfsBuilder *bld)
                 ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,"hdfsBuilderConnect(%s)", hdfsBuilderToStr(bld, buf, sizeof(buf)));
                 goto done;
             }
-            jthr = invokeMethod(env, NULL, STATIC, NULL, JC_SECURITY_CONFIGURATION, "loginUserFromKeytab", JMETHOD2(JPARAM(JAVA_STRING), JPARAM(JAVA_STRING), JAVA_VOID), jUserString, jKeyTabString);
+            jthr = newJavaStr(env, bld->kerbPrincipal, &jKerbPrincipal);
+            if (jthr) {
+                ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,"hdfsBuilderConnect(%s)", hdfsBuilderToStr(bld, buf, sizeof(buf)));
+                goto done;
+            }
+            jthr = invokeMethod(env, NULL, STATIC, NULL, JC_SECURITY_CONFIGURATION, "loginUserFromKeytab", JMETHOD2(JPARAM(JAVA_STRING), JPARAM(JAVA_STRING), JAVA_VOID), jKerbPrincipal, jKeyTabString);
             if (jthr) {
                 ret = printExceptionAndFree(env, jthr, PRINT_EXC_ALL,"hdfsBuilderConnect(%s)", hdfsBuilderToStr(bld, buf, sizeof(buf)));
                 goto done;
