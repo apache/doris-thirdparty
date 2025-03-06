@@ -227,7 +227,7 @@ void STermInfosWriter<T>::writeTerm(int32_t fieldNumber, const T *termText, int3
         if (enableCorrectTermWrite_) {
             output->writeSChars(termText + start, length);
         } else {
-            output>writeSCharsOrigin(termText + start, length);
+            output->writeSCharsOrigin(termText + start, length);
         }
         output->writeVInt(fieldNumber);
     }

@@ -851,7 +851,7 @@ static void TestSTermInfosWriterUnicode(CuTest* tc) {
         tempTi.freqPointer = currentTi->freqPointer;
         tempTi.proxPointer = currentTi->proxPointer;
         tempTi.skipOffset = currentTi->skipOffset;
-        writer->add(term->field(), term->text(), term->textLength(), &tempTi);
+        writer->add(fieldInfos->fieldNumber(term->field()), term->text(), term->textLength(), &tempTi);
 
         printf("Added Term #%zu: \"", i);
         print_wstring(testTerms[i].str);
@@ -879,7 +879,7 @@ static void TestSTermInfosWriterUnicode(CuTest* tc) {
         TermInfo* originalInfo = termInfos[i];
 
         // Read term info
-        auto readInfo = reader->get(originalTerm, nullptr);
+        auto readInfo = reader->get(originalTerm);
 
         printf("Term #%zu: \"", i);
         print_wstring(testTerms[i].str);
@@ -994,7 +994,7 @@ static void TestSTermInfosWriterUnicodeDisabled(CuTest* tc) {
         tempTi.freqPointer = currentTi->freqPointer;
         tempTi.proxPointer = currentTi->proxPointer;
         tempTi.skipOffset = currentTi->skipOffset;
-        writer->add(term->field(), term->text(), term->textLength(), &tempTi);
+        writer->add(fieldInfos->fieldNumber(term->field()), term->text(), term->textLength(), &tempTi);
 
         printf("Added Term #%zu: \"", i);
         print_wstring(testTerms[i].str);
@@ -1021,7 +1021,7 @@ static void TestSTermInfosWriterUnicodeDisabled(CuTest* tc) {
         TermInfo* originalInfo = termInfos[i];
 
         // Read term info
-        auto readInfo = reader->get(originalTerm, nullptr);
+        auto readInfo = reader->get(originalTerm);
 
         printf("Term #%zu: \"", i);
         print_wstring(testTerms[i].str);
