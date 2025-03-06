@@ -187,6 +187,16 @@ int32_t IndexWriter::getTermIndexInterval() {
     return termIndexInterval;
 }
 
+bool IndexWriter::getEnableCorrectTermWrite() {
+    ensureOpen();
+    return enableCorrectTermWrite;
+}
+
+void IndexWriter::setEnableCorrectTermWrite(bool enableCorrectTermWrite) {
+    ensureOpen();
+    this->enableCorrectTermWrite = enableCorrectTermWrite;
+}
+
 IndexWriter::IndexWriter(const char *path, Analyzer *a, bool create) : bOwnsDirectory(true) {
     init(FSDirectory::getDirectory(path, create), a, create, true, (IndexDeletionPolicy *) NULL, true);
 }

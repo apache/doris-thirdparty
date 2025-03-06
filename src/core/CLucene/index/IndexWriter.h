@@ -259,7 +259,7 @@ class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
   int32_t minMergeDocs;
   int32_t maxMergeDocs;
   int32_t termIndexInterval;
-
+  bool enableCorrectTermWrite;
   int64_t writeLockTimeout;
   int64_t commitLockTimeout;
 
@@ -522,6 +522,9 @@ public:
    * @see #setTermIndexInterval(int)
    */
   int32_t getTermIndexInterval();
+
+  bool getEnableCorrectTermWrite();
+  void setEnableCorrectTermWrite(bool enableCorrectTermWrite);
 
   /**Determines the largest number of documents ever merged by addDocument().
    *  Small values (e.g., less than 10,000) are best for interactive indexing,
