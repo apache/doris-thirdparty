@@ -582,19 +582,6 @@ public abstract class FileSystem extends Configured
     });
   }
 
-  public synchronized static FileSystem newInstanceFromKeytab(final URI uri, final Configuration conf,
-                                                              final String principal, final String keytabPath)
-          throws IOException, InterruptedException {
-    UserGroupInformation.setConfiguration(conf);
-    UserGroupInformation.loginUserFromKeytab(principal, keytabPath);
-    return UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<FileSystem>() {
-      @Override
-      public FileSystem run() throws IOException {
-        return newInstance(uri, conf);
-      }
-    });
-  }
-
   /**
    * Returns the FileSystem for this URI's scheme and authority.
    * The entire URI is passed to the FileSystem instance's initialize method.
