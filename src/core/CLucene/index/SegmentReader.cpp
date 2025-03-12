@@ -445,7 +445,7 @@ void SegmentReader::files(vector<string> &retarray) {
     retarray.insert(retarray.end(), tmp.begin(), tmp.end());
 }
 
-TermEnum *SegmentReader::terms() {
+TermEnum *SegmentReader::terms(const void* io_ctx) {
     //Func - Returns an enumeration of all the Terms and TermInfos in the set.
     //Pre  - tis != NULL
     //Post - An enumeration of all the Terms and TermInfos in the set has been returned
@@ -453,10 +453,10 @@ TermEnum *SegmentReader::terms() {
     CND_PRECONDITION(tis != NULL, "tis is NULL");
 
     ensureOpen();
-    return tis->terms();
+    return tis->terms(nullptr, io_ctx);
 }
 
-TermEnum *SegmentReader::terms(const Term *t) {
+TermEnum *SegmentReader::terms(const Term *t, const void* io_ctx) {
     //Func - Returns an enumeration of terms starting at or after the named term t
     //Pre  - t != NULL
     //       tis != NULL
@@ -466,7 +466,7 @@ TermEnum *SegmentReader::terms(const Term *t) {
     CND_PRECONDITION(tis != NULL, "tis is NULL");
 
     ensureOpen();
-    return tis->terms(t);
+    return tis->terms(t, io_ctx);
 }
 
 bool SegmentReader::document(int32_t n, Document &doc, const FieldSelector *fieldSelector) {

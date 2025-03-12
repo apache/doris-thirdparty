@@ -253,14 +253,18 @@ void MultiReader::doSetNorm(int32_t n, const TCHAR* field, uint8_t value){
 	(*subReaders)[i]->setNorm(n-starts[i], field, value); // dispatch
 }
 
-TermEnum* MultiReader::terms() {
+TermEnum* MultiReader::terms(const void* io_ctx) {
   ensureOpen();
-	return _CLNEW MultiTermEnum(subReaders, starts, NULL);
+	auto* ret = _CLNEW MultiTermEnum(subReaders, starts, NULL);
+  ret->setIoContext(io_ctx);
+  return ret;
 }
 
-TermEnum* MultiReader::terms(const Term* term) {
+TermEnum* MultiReader::terms(const Term* term, const void* io_ctx) {
     ensureOpen();
-	return _CLNEW MultiTermEnum(subReaders, starts, term);
+	auto* ret = _CLNEW MultiTermEnum(subReaders, starts, term);
+  ret->setIoContext(io_ctx);
+  return ret;
 }
 
 int32_t MultiReader::docFreq(const Term* t) {

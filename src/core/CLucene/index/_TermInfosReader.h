@@ -100,7 +100,7 @@ CL_NS_DEF(index)
 		* If no term is specified, an enumeration of all the Terms 
 		* and TermInfos in the set is returned.
 		*/
-		SegmentTermEnum* terms(const Term* term=NULL);
+		SegmentTermEnum* terms(const Term* term=NULL, const void* io_ctx = nullptr);
 		
 		/** Returns the TermInfo for a Term in the set, or null. */
 		TermInfo* get(const Term* term, const void* io_ctx = nullptr);

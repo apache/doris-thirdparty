@@ -95,8 +95,8 @@ public:
 	uint8_t* norms(const TCHAR* field);
 	void norms(const TCHAR* field, uint8_t* result);
     FieldInfos* getFieldInfos();
-	TermEnum* terms();
-	TermEnum* terms(const Term* term);
+	TermEnum* terms(const void* io_ctx = nullptr);
+	TermEnum* terms(const Term* term, const void* io_ctx = nullptr);
 
 	//Returns the document frequency of the current term in the set
 	int32_t docFreq(const Term* t=NULL);

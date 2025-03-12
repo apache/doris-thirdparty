@@ -79,6 +79,8 @@ public:
         virtual void inc_hits(int count) {}
 
         virtual bool only_hits() { return false; }
+
+        virtual const void* get_io_context() { return nullptr; }
     };
     class intersect_state final {
     public:
