@@ -363,6 +363,15 @@ extern  "C" {
     LIBHDFS_EXTERNAL
     void hdfsBuilderSetUserName(struct hdfsBuilder *bld, const char *userName);
 
+	/**
+    * Set the principal to use when connecting to the HDFS cluster.
+    *
+    * @param bld The HDFS builder
+    * @param kerbPrincipal The principal.  The string will be shallow-copied.
+    */
+    LIBHDFS_EXTERNAL
+    void hdfsBuilderSetPrincipal(struct hdfsBuilder *bld, const char *kerbPrincipal);
+
     /**
      * Set the path to the Kerberos ticket cache to use when connecting to
      * the HDFS cluster.
