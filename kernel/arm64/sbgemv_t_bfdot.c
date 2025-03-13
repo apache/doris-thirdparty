@@ -196,7 +196,7 @@ int CNAME(BLASLONG m, BLASLONG n, float alpha, bfloat16 *a, BLASLONG lda, bfloat
       y[iy] = alpha * temp + beta * y[iy];
     }
     iy += incy;
-    a += lda;
+    a_ptr += lda;
   }
   return (0);
 }
