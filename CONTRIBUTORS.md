@@ -238,6 +238,7 @@ In chronological order:
   * [2025-01-21] Optimize gemv_t_sve_v1x3 kernel
   * [2025-02-26] Add sbgemv_t_bfdot kernel
   * [2025-03-12] Fix aarch64 sbgemv_t compilation error for GCC < 13
+  * [2025-03-12] Optimize aarch64 sgemm_ncopy
 
 * Marek Michalowski <marek.michalowski@arm.com>
   * [2025-01-21] Add thread throttling profile for SGEMV on `NEOVERSEV1`
