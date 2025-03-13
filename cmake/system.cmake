@@ -372,6 +372,14 @@ else ()
   endif ()
 endif ()
 
+if (USE_OPENMP)
+  find_package(OpenMP COMPONENTS C REQUIRED)
+  set(CCOMMON_OPT "${CCOMMON_OPT} -DUSE_OPENMP")
+  if (NOT NOFORTRAN)
+    find_package(OpenMP COMPONENTS Fortran REQUIRED)
+  endif ()
+endif ()
+
 if (BINARY64)
   if (INTERFACE64)
     # CCOMMON_OPT += -DUSE64BITINT
@@ -654,15 +662,6 @@ if (LAPACK_STRLEN)
 	set (LAPACK_FFLAGS "${LAPACK_FFLAGS} -DLAPACK_STRLEN=${LAPACK_STRLEN}")
 endif()
 set(LAPACK_FPFLAGS "${LAPACK_FPFLAGS} ${FPFLAGS}")
-
-#Disable -fopenmp for LAPACK Fortran codes on Windows.
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-  set(FILTER_FLAGS "-fopenmp;-mp;-openmp;-xopenmp=parallel")
-  foreach (FILTER_FLAG ${FILTER_FLAGS})
-    string(REPLACE ${FILTER_FLAG} "" LAPACK_FFLAGS ${LAPACK_FFLAGS})
-    string(REPLACE ${FILTER_FLAG} "" LAPACK_FPFLAGS ${LAPACK_FPFLAGS})
-  endforeach ()
-endif ()
 
 if (CMAKE_Fortran_COMPILER)
   if ("${F_COMPILER}" STREQUAL "NAGFOR" OR "${F_COMPILER}" STREQUAL "CRAY" OR CMAKE_Fortran_COMPILER_ID MATCHES "LLVMFlang.*")
