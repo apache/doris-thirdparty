@@ -99,6 +99,7 @@ size_t p4nd1dec32(    unsigned char *__restrict in, size_t n, uint32_t *__restri
 size_t p4nd1dec128v16(unsigned char *__restrict in, size_t n, uint16_t *__restrict out);
 size_t p4nd1dec128v32(unsigned char *__restrict in, size_t n, uint32_t *__restrict out);
 size_t p4nd1dec256v32(unsigned char *__restrict in, size_t n, uint32_t *__restrict out);
+size_t p4nd1dec256scalarv32(unsigned char* __restrict in, size_t n, uint32_t* __restrict out);
 size_t p4nd1dec64(    unsigned char *__restrict in, size_t n, uint64_t *__restrict out);
 //Zigzag
 size_t p4nzdec8(      unsigned char *__restrict in, size_t n, uint8_t  *__restrict out);

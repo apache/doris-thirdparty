@@ -28,6 +28,7 @@
 #include "bitutil.h"
 #include "bitpack.h"
 #include "vint.h"
+#include <string.h> 
 
 #define PAD8(_x_) (((_x_)+7)/8)
 
@@ -689,6 +690,1858 @@ unsigned char *bitunpack256w32( const unsigned char *__restrict in, unsigned n, 
   BITUNPACK128V32(in, b, out, sv); out = _out+128; in=_in+PAD8(128*b);
   BITUNPACK128V32(in, b, out, sv);
   return (unsigned char *)_in+PAD8(256*b);
+}
+static void applyException_8bits(uint8_t xm8, uint32_t **pPEX, int nb, uint32_t ov[8])
+{
+    uint32_t *ex = *pPEX;
+    for(int j=0; j<8; j++){
+        if((xm8>>j) & 1) {
+            ov[j] += (ex[0]<< nb);
+            ex++;
+        }
+    }
+    *pPEX = ex;
+}
+
+static void bitunblk256v32_scalar_template(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    int expansions_count,
+    const uint8_t *SHIFT_HI,
+    const uint8_t *SHIFT_LO,
+    const uint8_t *READ_FLAG,
+    uint32_t mask,
+    int nb
+)
+{
+    const uint32_t *oldp = NULL; // pointer to current block data
+    uint32_t ov[8], tmp[8];
+
+    for (int k = 0; k < expansions_count; k++) {
+        if (k == 0) {
+            // Step 0: Load input block and directly take the lower nb bits
+            oldp = *pIn;
+            *pIn += 8;
+            for (int j = 0; j < 8; j++) {
+                ov[j] = oldp[j] & mask;
+            }
+        } else {
+            // First right shift the current block data by SHIFT_HI[k]
+            for (int j = 0; j < 8; j++) {
+                ov[j] = oldp[j] >> SHIFT_HI[k];
+            }
+            if (READ_FLAG[k]) {
+                // Need to load a new block: left shift the new block data by SHIFT_LO[k], then merge with ov
+                const uint32_t *newp = *pIn;
+                *pIn += 8;
+                for (int j = 0; j < 8; j++) {
+                    uint32_t part_lo = (newp[j] << SHIFT_LO[k]) & mask;
+                    ov[j] |= part_lo;
+                }
+                // Update current block pointer
+                oldp = newp;
+            } else {
+                // No need to load a new block, ensure the result is within mask range
+                for (int j = 0; j < 8; j++) {
+                    ov[j] &= mask;
+                }
+            }
+        }
+        // Write out the current 8 results
+        uint32_t *outp = *pOut;
+        for (int j = 0; j < 8; j++) {
+            outp[j] = ov[j];
+        }
+        *pOut += 8;
+    }
+}
+/**
+ * Generic template: supports "some expansions don't need to read new blocks".
+ *
+ * Parameters:
+ *  - expansions_count: total number of expansions (for 29-bit, it might be 32 times)
+ *  - SHIFT_HI[k], SHIFT_LO[k]: right shift for leftover, left shift for new block in k-th expansion
+ *  - READ_FLAG[k]: whether k-th expansion needs to read a new block (1 means yes, 0 means no)
+ *  - mask: for 29-bit = (1u << 29) - 1
+ *  - nb: base bits (29)
+ */
+static void bitunblk256v32_scalarBlock_ex_template(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB,
+    int expansions_count,
+    const uint8_t *SHIFT_HI,
+    const uint8_t *SHIFT_LO,
+    const uint8_t *READ_FLAG,
+    uint32_t mask,
+    int nb
+)
+{
+    const uint32_t *oldp = NULL; // leftover block (previous batch)
+    
+    for (int k = 0; k < expansions_count; k++) {
+        uint32_t ov[8];
+
+        if (k == 0) {
+            // First time: directly read 8×32-bit and apply mask
+            oldp = *pIn;
+            *pIn += 8;
+            for (int j = 0; j < 8; j++) {
+                ov[j] = oldp[j] & mask;
+            }
+        } 
+        else {
+            // Subsequent expansions
+            uint8_t hi = SHIFT_HI[k];
+            uint8_t lo = SHIFT_LO[k];
+
+            // First shift leftover >> hi
+            for (int j = 0; j < 8; j++) {
+                ov[j] = (oldp[j] >> hi);
+            }
+
+            // If this expansion needs to read a new block, append newp << lo
+            if (READ_FLAG[k]) {
+                const uint32_t *newp = *pIn;
+                *pIn += 8;
+                for (int j = 0; j < 8; j++) {
+                    uint32_t part_lo = (newp[j] << lo) & mask;
+                    ov[j] |= part_lo;
+                }
+                // After reading, newp becomes the leftover for next time
+                oldp = newp;
+            } else {
+                // No need to read new block => just apply mask to leftover >> hi
+                for (int j = 0; j < 8; j++) {
+                    ov[j] &= mask;
+                }
+                // leftover remains unchanged, continue using oldp
+            }
+        }
+
+        // Apply exceptions
+        uint8_t xm8 = **pBB;
+        (*pBB)++;
+        applyException_8bits(xm8, pPEX, nb, ov);
+
+        // Write out this batch of 8 results
+        uint32_t *outp = *pOut;
+        for (int j = 0; j < 8; j++) {
+            outp[j] = ov[j];
+        }
+        *pOut += 8;
+    }
+}
+static void bitunpack256v32_0_scalar(uint32_t **pIn,
+                                     uint32_t **pOut,
+                                     uint32_t **pPEX,
+                                     unsigned char **pBB)
+{
+    uint32_t *op = *pOut;
+    for (int i = 0; i < 32; i++) {
+        // Read bitmap if exists, otherwise default to 0
+        uint8_t xm8 = (pBB != NULL) ? **pBB : 0;
+        if (pBB != NULL) {
+            (*pBB)++;
+        }
+        // Initialize output array (all zeros by default)
+        uint32_t ov[8] = {0};
+        if (xm8 != 0 && pPEX != NULL) {
+            applyException_8bits(xm8, pPEX, 0, ov);
+        }
+        
+        // Directly write 8 values using a loop to avoid repeated memory copy calls
+        for (int j = 0; j < 8; j++) {
+            op[j] = ov[j];
+        }
+        op += 8;
+    }
+    *pOut = op;
+}
+
+static void bitunpack256v32_1_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb1 = 1;
+    const uint32_t mask1 = 1;  // 0x1
+    const int expansions_count_1 = 32;
+    static const uint8_t SHIFT_HI_1[32] = {
+         0,  1,  2,  3,  4,  5,  6,  7,
+         8,  9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23,
+        24, 25, 26, 27, 28, 29, 30, 31
+    };
+    static const uint8_t SHIFT_LO_1[32] = {
+         0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0
+    };
+    static const uint8_t READ_FLAG_1[32] = {
+         1, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0
+    };
+    if (pPEX != NULL && pBB != NULL) {
+      bitunblk256v32_scalarBlock_ex_template(
+         pIn, pOut, pPEX, pBB,
+         expansions_count_1,
+         SHIFT_HI_1,
+         SHIFT_LO_1,
+         READ_FLAG_1,
+         mask1,
+         nb1
+      );
+    } else {
+      bitunblk256v32_scalar_template(
+         pIn, pOut, expansions_count_1,
+         SHIFT_HI_1, SHIFT_LO_1, READ_FLAG_1,
+         mask1, nb1
+      );
+    }
+}
+
+static void bitunpack256v32_2_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb2 = 2;
+    const uint32_t mask2 = (1u << nb2) - 1;  // 0x3
+    const int expansions_count_2 = 16;
+    static const uint8_t SHIFT_HI_2[16] = {
+         0,  2,  4,  6,  8, 10, 12, 14,
+        16, 18, 20, 22, 24, 26, 28, 30
+    };
+    static const uint8_t SHIFT_LO_2[16] = {
+         0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0
+    };
+    static const uint8_t READ_FLAG_2[16] = {
+         1, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0
+    };
+    if(pPEX != NULL && pBB != NULL) {
+      for (int i = 0; i < 2; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+             pIn, pOut, pPEX, pBB,
+             expansions_count_2,
+             SHIFT_HI_2,
+             SHIFT_LO_2,
+             READ_FLAG_2,
+             mask2,
+             nb2
+        );
+      }
+    } else {
+      for (int i = 0; i < 2; i++) {
+        bitunblk256v32_scalar_template(
+            pIn, pOut, expansions_count_2,
+            SHIFT_HI_2, SHIFT_LO_2, READ_FLAG_2,
+            mask2, nb2
+        );
+      }
+    }
+}
+
+static void bitunpack256v32_3_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb3 = 3;
+    const uint32_t mask3 = (1u << nb3) - 1;  // 0x7
+    const int expansions_count_3 = 32;
+    static const uint8_t SHIFT_HI_3[32] = {
+         0,  3,  6,  9, 12, 15, 18, 21,
+        24, 27, 30,  1,  4,  7, 10, 13,
+        16, 19, 22, 25, 28, 31,  2,  5,
+         8, 11, 14, 17, 20, 23, 26, 29
+    };
+    static const uint8_t SHIFT_LO_3[32] = {
+         0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 2, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 1, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0
+    };
+    static const uint8_t READ_FLAG_3[32] = {
+         1, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 1, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 1, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0
+    };
+    if(pPEX != NULL && pBB != NULL) {
+      bitunblk256v32_scalarBlock_ex_template(
+         pIn, pOut, pPEX, pBB,
+         expansions_count_3,
+         SHIFT_HI_3,
+         SHIFT_LO_3,
+         READ_FLAG_3,
+         mask3,
+         nb3
+      );
+    } else {
+      bitunblk256v32_scalar_template(
+        pIn, pOut, expansions_count_3,
+        SHIFT_HI_3, SHIFT_LO_3, READ_FLAG_3,
+        mask3, nb3
+      );
+    }
+}
+
+static void bitunpack256v32_4_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const uint32_t mask4 = (1u << 4) - 1;  // 0xF
+    const int nb = 4; // base bits
+    const int expansions_count = 8;
+    static const uint8_t SHIFT_HI_4[8] = { 0, 4, 8, 12, 16, 20, 24, 28 };
+    static const uint8_t SHIFT_LO_4[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const uint8_t READ_FLAG_4[8] = { 1, 0, 0, 0, 0, 0, 0, 0 };
+
+    if(pPEX != NULL && pBB != NULL) {
+      for (int i = 0; i < 4; i++) {
+         bitunblk256v32_scalarBlock_ex_template(
+              pIn, pOut, pPEX, pBB,
+              expansions_count,
+              SHIFT_HI_4,
+              SHIFT_LO_4,
+              READ_FLAG_4,
+              mask4,
+              nb
+         );
+      }
+    } else {
+      for (int i = 0; i < 4; i++) {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count,
+            SHIFT_HI_4, SHIFT_LO_4, READ_FLAG_4,
+            mask4, nb
+          );
+      }
+    }
+}
+
+static void bitunpack256v32_5_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb5 = 5;
+    const uint32_t mask5 = (1u << nb5) - 1;  // 0x1F
+    const int expansions_count_5 = 32;
+    static const uint8_t SHIFT_HI_5[32] = {
+         0,  5, 10, 15, 20, 25, 30,  3,
+         8, 13, 18, 23, 28,  1,  6, 11,
+        16, 21, 26, 31,  4,  9, 14, 19,
+        24, 29,  2,  7, 12, 17, 22, 27
+    };
+    static const uint8_t SHIFT_LO_5[32] = {
+         0, 0, 0, 0, 0, 0, 2, 0,
+         0, 0, 0, 0, 4, 0, 0, 0,
+         0, 0, 0, 1, 0, 0, 0, 0,
+         0, 3, 0, 0, 0, 0, 0, 0
+    };
+    static const uint8_t READ_FLAG_5[32] = {
+         1, 0, 0, 0, 0, 0, 1, 0,
+         0, 0, 0, 0, 1, 0, 0, 0,
+         0, 0, 0, 1, 0, 0, 0, 0,
+         0, 1, 0, 0, 0, 0, 0, 0
+    };
+    if(pPEX != NULL && pBB != NULL) {
+      bitunblk256v32_scalarBlock_ex_template(
+        pIn, pOut, pPEX, pBB,
+        expansions_count_5,
+        SHIFT_HI_5,
+        SHIFT_LO_5,
+        READ_FLAG_5,
+        mask5,
+        nb5
+      );
+    } else {
+      bitunblk256v32_scalar_template(
+        pIn, pOut, expansions_count_5,
+        SHIFT_HI_5, SHIFT_LO_5, READ_FLAG_5,
+        mask5, nb5
+      );
+    }
+}
+static void bitunpack256v32_6_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb6 = 6;
+    const uint32_t mask6 = (1u << nb6) - 1;  // 0x3F
+    const int expansions_count_6 = 16;
+    static const uint8_t SHIFT_HI_6[16] = { 
+         0,  6, 12, 18, 24, 30,  4, 10,
+        16, 22, 28,  2,  8, 14, 20, 26
+    };
+    static const uint8_t SHIFT_LO_6[16] = { 
+         0, 0, 0, 0, 0, 2, 0, 0,
+         0, 0, 4, 0, 0, 0, 0, 0
+    };
+    static const uint8_t READ_FLAG_6[16] = { 
+         1, 0, 0, 0, 0, 1, 0, 0,
+         0, 0, 1, 0, 0, 0, 0, 0
+    };
+
+    if(pPEX != NULL && pBB != NULL) {
+          for (int i = 0; i < 2; i++) {
+            bitunblk256v32_scalarBlock_ex_template(
+              pIn, pOut, pPEX, pBB,
+              expansions_count_6,
+              SHIFT_HI_6,
+              SHIFT_LO_6,
+              READ_FLAG_6,
+              mask6,
+              nb6
+            );
+          }
+    } else {
+          for (int i = 0; i < 2; i++) {
+            bitunblk256v32_scalar_template(
+              pIn, pOut, expansions_count_6,
+              SHIFT_HI_6, SHIFT_LO_6, READ_FLAG_6,
+              mask6, nb6
+            );
+          }
+    }
+}
+static void bitunpack256v32_7_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb7 = 7;
+    const uint32_t mask7 = (1u << nb7) - 1;  // 0x7F
+    const int expansions_count = 32;
+    static const uint8_t SHIFT_HI_7[32] = {
+         0,  7, 14, 21, 28,  3, 10, 17,
+        24, 31,  6, 13, 20, 27,  2,  9,
+        16, 23, 30,  5, 12, 19, 26,  1,
+         8, 15, 22, 29,  4, 11, 18, 25
+    };
+    static const uint8_t SHIFT_LO_7[32] = {
+         0, 0, 0, 0, 4, 0, 0, 0,
+         0, 1, 0, 0, 0, 5, 0, 0,
+         0, 0, 2, 0, 0, 0, 6, 0,
+         0, 0, 0, 3, 0, 0, 0, 0
+    };
+    static const uint8_t READ_FLAG_7[32] = {
+         1, 0, 0, 0, 1, 0, 0, 0,
+         0, 1, 0, 0, 0, 1, 0, 0,
+         0, 0, 1, 0, 0, 0, 1, 0,
+         0, 0, 0, 1, 0, 0, 0, 0
+    };
+    if(pPEX != NULL && pBB != NULL) {
+        bitunblk256v32_scalarBlock_ex_template(
+            pIn, pOut, pPEX, pBB,
+            expansions_count,
+            SHIFT_HI_7,
+            SHIFT_LO_7,
+            READ_FLAG_7,
+            mask7,
+            nb7
+        );
+    } else {
+        bitunblk256v32_scalar_template(
+            pIn, pOut, expansions_count,
+            SHIFT_HI_7, SHIFT_LO_7, READ_FLAG_7,
+            mask7,
+            nb7
+        );
+    }
+}
+static void bitunpack256v32_8_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb8 = 8;
+    const uint32_t mask8 = (1u << nb8) - 1;  // 0xFF
+    const int expansions_count_8 = 4;
+    static const uint8_t SHIFT_HI_8[4] = { 0, 8, 16, 24 };
+    static const uint8_t SHIFT_LO_8[4] = { 0, 0, 0, 0 };
+    static const uint8_t READ_FLAG_8[4] = { 1, 0, 0, 0 };
+
+    if (pPEX != NULL && pBB != NULL) {
+        for(int i=0; i<8; i++) {
+            bitunblk256v32_scalarBlock_ex_template(
+                pIn, pOut, pPEX, pBB,
+                expansions_count_8,
+                SHIFT_HI_8,
+                SHIFT_LO_8,
+                READ_FLAG_8,
+                mask8,
+                nb8
+            );
+        }
+    } else {
+        for(int i=0; i<8; i++) {
+            bitunblk256v32_scalar_template(
+              pIn, pOut, expansions_count_8,
+              SHIFT_HI_8, SHIFT_LO_8, READ_FLAG_8,
+            mask8,
+            nb8
+        );
+        }
+    }
+}
+
+static void bitunpack256v32_9_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb9 = 9;
+    const uint32_t mask9 = (1u << nb9) - 1;  // 0x1FF
+    const int expansions_count_9 = 32;
+    static const uint8_t SHIFT_HI_9[32] = {
+         0,  9, 18, 27,  4, 13, 22, 31,
+         8, 17, 26,  3, 12, 21, 30,  7,
+        16, 25,  2, 11, 20, 29,  6, 15,
+        24,  1, 10, 19, 28,  5, 14, 23
+    };
+    static const uint8_t SHIFT_LO_9[32] = {
+         0, 0, 0, 5, 0, 0, 0, 1,
+         0, 0, 6, 0, 0, 0, 2, 0,
+         0, 7, 0, 0, 0, 3, 0, 0,
+         8, 0, 0, 0, 4, 0, 0, 0
+    };
+    static const uint8_t READ_FLAG_9[32] = {
+         1, 0, 0, 1, 0, 0, 0, 1,
+         0, 0, 1, 0, 0, 0, 1, 0,
+         0, 1, 0, 0, 0, 1, 0, 0,
+         1, 0, 0, 0, 1, 0, 0, 0
+    };
+
+    if (pPEX != NULL && pBB != NULL) {
+        bitunblk256v32_scalarBlock_ex_template(
+            pIn, pOut, pPEX, pBB,
+            expansions_count_9,
+            SHIFT_HI_9,
+            SHIFT_LO_9,
+            READ_FLAG_9,
+            mask9,
+            nb9
+          );
+    } else {
+        bitunblk256v32_scalar_template(
+            pIn, pOut, expansions_count_9,
+            SHIFT_HI_9, SHIFT_LO_9, READ_FLAG_9,
+            mask9, nb9
+        );
+    }
+}
+static void bitunpack256v32_10_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb10 = 10;
+    const uint32_t mask10 = (1u << nb10) - 1;  // 0x3FF
+    const int expansions_count_10 = 16;
+    static const uint8_t SHIFT_HI_10[16] = {
+         0, 10, 20, 30, 8, 18, 28, 6,
+        16, 26, 4, 14, 24, 2, 12, 22
+    };
+    static const uint8_t SHIFT_LO_10[16] = {
+         0, 0, 0, 2, 0, 0, 4, 0,
+         0, 6, 0, 0, 8, 0, 0, 0
+    };
+    static const uint8_t READ_FLAG_10[16] = {
+         1, 0, 0, 1, 0, 0, 1, 0,
+         0, 1, 0, 0, 1, 0, 0, 0
+    };
+
+    if (pPEX != NULL && pBB != NULL) {
+      for(int i=0; i<2; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+         pIn, pOut, pPEX, pBB,
+         expansions_count_10,
+         SHIFT_HI_10,
+         SHIFT_LO_10,
+         READ_FLAG_10,
+         mask10,
+         nb10
+        );
+      }
+    } else {
+      for(int i=0; i<2; i++) {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count_10,
+          SHIFT_HI_10, SHIFT_LO_10, READ_FLAG_10,
+          mask10, nb10
+        );
+      }
+    }
+}
+
+static void bitunpack256v32_11_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb11 = 11;
+    const uint32_t mask11 = (1u << nb11) - 1;  // 0x7FF
+    const int expansions_count_11 = 32;
+    static const uint8_t SHIFT_HI_11[32] = {
+         0, 11, 22,  1, 12, 23,  2, 13,
+        24,  3, 14, 25,  4, 15, 26,  5,
+        16, 27,  6, 17, 28,  7, 18, 29,
+         8, 19, 30,  9, 20, 31, 10, 21
+    };
+    static const uint8_t SHIFT_LO_11[32] = {
+         0,  0, 10,  0,  0,  9,  0,  0,
+         8,  0,  0,  7,  0,  0,  6,  0,
+         0,  5,  0,  0,  4,  0,  0,  3,
+         0,  0,  2,  0,  0,  1,  0,  0
+    };
+    static const uint8_t READ_FLAG_11[32] = {
+         1, 0, 1, 0, 0, 1, 0, 0,
+         1, 0, 0, 1, 0, 0, 1, 0,
+         0, 1, 0, 0, 1, 0, 0, 1,
+         0, 0, 1, 0, 0, 1, 0, 0
+    };
+
+    if (pPEX != NULL && pBB != NULL) {
+      bitunblk256v32_scalarBlock_ex_template(
+        pIn, pOut, pPEX, pBB,
+        expansions_count_11,
+        SHIFT_HI_11,
+        SHIFT_LO_11,
+        READ_FLAG_11,
+        mask11,
+        nb11
+      );
+    } else {
+      bitunblk256v32_scalar_template(
+        pIn, pOut, expansions_count_11,
+        SHIFT_HI_11, SHIFT_LO_11, READ_FLAG_11,
+        mask11, nb11
+      );
+    }
+}
+
+static void bitunpack256v32_12_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb12 = 12;
+    const uint32_t mask12 = (1u << nb12) - 1;  // 0xFFF
+    const int expansions_count_12 = 8;
+    static const uint8_t SHIFT_HI_12[8] = { 0, 12, 24, 4, 16, 28, 8, 20 };
+    static const uint8_t SHIFT_LO_12[8] = { 0,  0,  8, 0,  0,  4,  0,  0 };
+    static const uint8_t READ_FLAG_12[8] = { 1,  0,  1, 0,  0,  1,  0,  0 };
+
+    if (pPEX != NULL && pBB != NULL) {
+      for(int i=0; i<4; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+          pIn, pOut, pPEX, pBB,
+          expansions_count_12,
+          SHIFT_HI_12,
+          SHIFT_LO_12,
+          READ_FLAG_12,
+          mask12,
+          nb12
+        );
+      }
+    } else {
+      for(int i=0; i<4; i++) {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count_12,
+          SHIFT_HI_12, SHIFT_LO_12, READ_FLAG_12,
+          mask12, nb12
+        );
+      }
+    }
+}
+
+static void bitunpack256v32_13_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb13 = 13;
+    const uint32_t mask13 = (1u << nb13) - 1;  // 0x1FFF
+    const int expansions_count_13 = 32;
+    static const uint8_t SHIFT_HI_13[32] = {
+         0, 13, 26,  7, 20,  1, 14, 27,
+         8, 21,  2, 15, 28,  9, 22,  3,
+        16, 29, 10, 23,  4, 17, 30, 11,
+        24,  5, 18, 31, 12, 25,  6, 19
+    };
+    static const uint8_t SHIFT_LO_13[32] = {
+         0,  0,  6,  0, 12,  0,  0,  5,
+         0, 11,  0,  0,  4,  0, 10,  0,
+         0,  3,  0,  9,  0,  0,  2,  0,
+         8,  0,  0,  1,  0,  7,  0,  0
+    };
+    static const uint8_t READ_FLAG_13[32] = {
+         1, 0, 1, 0, 1, 0, 0, 1,
+         0, 1, 0, 0, 1, 0, 1, 0,
+         0, 1, 0, 1, 0, 0, 1, 0,
+         1, 0, 0, 1, 0, 1, 0, 0
+    };
+    if (pPEX != NULL && pBB != NULL) {
+      bitunblk256v32_scalarBlock_ex_template(
+        pIn, pOut, pPEX, pBB,
+        expansions_count_13,
+        SHIFT_HI_13,
+        SHIFT_LO_13,
+        READ_FLAG_13,
+        mask13,
+        nb13
+      );
+    } else {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count_13,
+          SHIFT_HI_13, SHIFT_LO_13, READ_FLAG_13,
+          mask13, nb13
+        );
+    }
+}
+
+static void bitunpack256v32_14_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb14 = 14;
+    const uint32_t mask14 = (1u << nb14) - 1;  // 0x3FFF
+    const int expansions_count_14 = 16;
+    static const uint8_t SHIFT_HI_14[16] = {
+         0, 14, 28, 10, 24, 6, 20, 2,
+         16, 30, 12, 26, 8, 22, 4, 18
+    };
+    static const uint8_t SHIFT_LO_14[16] = {
+         0, 0, 4, 0, 8, 0, 12, 0,
+         0, 2, 0, 6, 0, 10, 0, 0
+    };
+    static const uint8_t READ_FLAG_14[16] = {
+         1, 0, 1, 0, 1, 0, 1, 0,
+         0, 1, 0, 1, 0, 1, 0, 0
+    };
+    if (pPEX != NULL && pBB != NULL) {
+      for(int i=0; i<2; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+          pIn, pOut, pPEX, pBB,
+          expansions_count_14,
+          SHIFT_HI_14,
+          SHIFT_LO_14,
+          READ_FLAG_14,
+          mask14,
+          nb14
+        );
+      }
+    } else {
+      for(int i=0; i<2; i++) {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count_14,
+          SHIFT_HI_14, SHIFT_LO_14, READ_FLAG_14,
+          mask14, nb14
+        );
+      }
+    }
+}
+
+static void bitunpack256v32_15_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb15 = 15;
+    const uint32_t mask15 = (1u << 15) -1;  // 0x7FFF
+
+    // expansions=32 => unpacks 256 values at once
+    const int expansions_count_15 = 32;
+
+    static const uint8_t SHIFT_HI_15[32] = {
+        0,15,30,13, 28,11,26, 9,
+        24, 7,22, 5, 20, 3,18, 1,
+        16,31,14,29, 12,27,10,25,
+         8,23, 6,21,  4,19, 2,17
+    };
+
+    static const uint8_t SHIFT_LO_15[32] = {
+         0, 0, 2, 0,  4, 0, 6, 0,
+         8, 0,10, 0, 12, 0,14, 0,
+         0, 1, 0, 3,  0, 5, 0, 7,
+         0, 9, 0,11,  0,13, 0, 0
+    };
+
+    static const uint8_t READ_FLAG_15[32] = {
+        1,0,1,0, 1,0,1,0,
+        1,0,1,0, 1,0,1,0,
+        0,1,0,1, 0,1,0,1,
+        0,1,0,1, 0,1,0,0
+    };
+    if (pPEX != NULL && pBB != NULL) {
+      bitunblk256v32_scalarBlock_ex_template(
+        pIn, pOut, pPEX, pBB,
+        expansions_count_15,
+        SHIFT_HI_15,
+        SHIFT_LO_15,
+        READ_FLAG_15,
+        mask15,
+        nb15
+      );
+    } else {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count_15,
+          SHIFT_HI_15, SHIFT_LO_15, READ_FLAG_15,
+          mask15, nb15
+        );
+    }
+}
+
+static void bitunpack256v32_16_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb16 = 16;
+    const uint32_t mask16 = (1u << 16) - 1;  // 0xFFFF
+
+    const int expansions_count = 2;
+    // Iteration 0: directly read 8×32-bit; Iteration 1: only right shift 16 bits, no new data read
+    static const uint8_t SHIFT_HI_16[2] = { 0, 16 };
+    static const uint8_t SHIFT_LO_16[2] = { 0, 0 };
+    static const uint8_t READ_FLAG_16[2] = { 1, 0 };
+
+    if (pPEX != NULL && pBB != NULL) {
+      for(int i=0; i<16; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+          pIn, pOut, pPEX, pBB,
+          expansions_count,
+          SHIFT_HI_16,
+          SHIFT_LO_16,
+          READ_FLAG_16,
+          mask16,
+          nb16
+        );
+      }
+    } else {
+      for(int i=0; i<16; i++) {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count,
+          SHIFT_HI_16, SHIFT_LO_16, READ_FLAG_16,
+          mask16, nb16
+        );
+      }
+    }
+}
+
+static void bitunpack256v32_17_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    const int nb17 = 17;
+    const uint32_t mask17 = (1u << 17) - 1; // 0x1FFFF
+
+    // expansions=32 => unpacks 256 values
+    const int expansions_count_17 = 32;
+
+    static const uint8_t SHIFT_HI_17[32] = {
+       0,17, 2,19, 4,21, 6,23,
+       8,25,10,27,12,29,14,31,
+      16, 1,18, 3,20, 5,22, 7,
+      24, 9,26,11,28,13,30,15
+    };
+
+    static const uint8_t SHIFT_LO_17[32] = {
+       0,15, 0,13, 0,11, 0, 9,
+       0, 7, 0, 5, 0, 3, 0, 1,
+      16, 0,14, 0,12, 0,10, 0,
+       8, 0, 6, 0, 4, 0, 2, 0
+    };
+
+    static const uint8_t READ_FLAG_17[32] = {
+        1,1,0,1, 0,1,0,1,
+        0,1,0,1, 0,1,0,1,
+        1,0,1,0, 1,0,1,0,
+        1,0,1,0, 1,0,1,0
+    };
+    if (pPEX != NULL && pBB != NULL) {
+      bitunblk256v32_scalarBlock_ex_template(
+        pIn,
+        pOut,
+        pPEX,
+        pBB,
+        expansions_count_17,
+        SHIFT_HI_17,
+        SHIFT_LO_17,
+        READ_FLAG_17,
+        mask17,
+        nb17
+      );
+    } else {
+      bitunblk256v32_scalar_template(
+        pIn, pOut, expansions_count_17,
+        SHIFT_HI_17, SHIFT_LO_17, READ_FLAG_17,
+        mask17, nb17
+      );
+    }
+}
+
+static void bitunpack256v32_18_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    // base bits & mask
+    const int nb18 = 18;
+    const uint32_t mask18 = (1u << 18) - 1; // 0x3FFFF
+
+    // expansions=16 => 128 values
+    const int expansions_count_18 = 16;
+
+    static const uint8_t SHIFT_HI_18[16] = {
+         0,18, 4,22,  8,26,12,30,
+        16, 2,20, 6, 24,10,28,14
+    };
+    static const uint8_t SHIFT_LO_18[16] = {
+         0,14, 0,10,  0, 6, 0, 2,
+        16, 0,12, 0,  8, 0, 4, 0
+    };
+    static const uint8_t READ_FLAG_18[16] = {
+        // #0 =>1, #1 =>1, #2=>0, #3=>1,
+        // #4 =>0, #5 =>1, #6=>0, #7=>1,
+        // #8 =>1, #9 =>0, #10=>1, #11=>0,
+        // #12=>1, #13=>0, #14=>1, #15=>0
+         1, 1, 0, 1, 0, 1, 0, 1,
+         1, 0, 1, 0, 1, 0, 1, 0
+    };
+
+    if (pPEX != NULL && pBB != NULL) {
+      for(int i=0; i<2; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+          pIn,
+          pOut,
+          pPEX,
+          pBB,
+          expansions_count_18,
+          SHIFT_HI_18,
+          SHIFT_LO_18,
+          READ_FLAG_18,
+          mask18,
+          nb18
+        );
+      }
+    } else {
+      for(int i=0; i<2; i++) {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count_18,
+          SHIFT_HI_18, SHIFT_LO_18, READ_FLAG_18,
+          mask18, nb18
+        );
+      }
+    }
+}
+
+static void bitunpack256v32_19_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    // base bits & mask
+    const int nb19 = 19;
+    const uint32_t mask19 = (1u << 19) - 1; // 0x7FFFF
+
+    // expansions=32 => unpacks 256 values at once
+    const int expansions_count_19 = 32;
+
+    static const uint8_t SHIFT_HI_19[32] = {
+        0,19, 6,25, 12,31,18, 5,
+        24,11,30,17,  4,23,10,29,
+        16, 3,22, 9, 28,15, 2,21,
+         8,27,14, 1, 20, 7,26,13
+    };
+    static const uint8_t SHIFT_LO_19[32] = {
+         0,13, 0, 7,  0, 1,14, 0,
+         8, 0, 2,15,  0, 9, 0, 3,
+        16, 0,10, 0,  4,17, 0,11,
+         0, 5,18, 0, 12, 0, 6, 0
+    };
+    static const uint8_t READ_FLAG_19[32] = {
+        1,1,0,1, 0,1,1,0,
+        1,0,1,1, 0,1,0,1,
+        1,0,1,0, 1,1,0,1,
+        0,1,1,0, 1,0,1,0
+    };
+    if (pPEX != NULL && pBB != NULL) {
+      bitunblk256v32_scalarBlock_ex_template(
+        pIn,
+        pOut,
+        pPEX,
+        pBB,
+        expansions_count_19,
+        SHIFT_HI_19,
+        SHIFT_LO_19,
+        READ_FLAG_19,
+        mask19,
+        nb19
+      );
+    } else {
+      bitunblk256v32_scalar_template(
+        pIn,
+        pOut,
+        expansions_count_19,
+        SHIFT_HI_19,
+        SHIFT_LO_19,
+        READ_FLAG_19,
+        mask19,
+        nb19
+      );
+    }
+}
+
+static void bitunpack256v32_20_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    // base bits & mask
+    const int nb20 = 20;
+    const uint32_t mask20 = (1u << 20) - 1; // 0xFFFFF
+
+    // expansions=8 => process 64 values at once
+    const int expansions_count_20 = 8;
+
+    // shift tables for k=0..7
+    static const uint8_t SHIFT_HI_20[8] = { 0, 20, 8, 28, 16, 4, 24, 12 };
+    static const uint8_t SHIFT_LO_20[8] = { 0, 12, 0,  4, 16, 0,  8,  0 };
+    static const uint8_t READ_FLAG_20[8] = { 1, 1, 0,  1,  1, 0,  1,  0 };
+
+    if (pPEX != NULL && pBB != NULL) {
+      for(int i=0; i<4; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+          pIn,
+          pOut,
+          pPEX,
+          pBB,
+          expansions_count_20,
+        SHIFT_HI_20,
+          SHIFT_LO_20,
+          READ_FLAG_20,
+          mask20,
+          nb20
+        );
+      }
+    } else {
+      for(int i=0; i<4; i++) {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count_20,
+          SHIFT_HI_20, SHIFT_LO_20, READ_FLAG_20,
+          mask20, nb20
+        );
+      }
+    }
+}
+
+static void bitunpack256v32_21_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    // base bits & mask
+    const uint32_t mask21 = (1u << 21) - 1; // 0x1FFFFF
+    const int nb21 = 21;
+
+    // expansions=32 => unpacks 256 values at once
+    const int expansions_count_21 = 32;
+
+    static const uint8_t SHIFT_HI_21[32] = {
+        0,21,10,31, 20, 9,30,19,
+        8,29,18, 7, 28,17, 6,27,
+        16, 5,26,15, 4,25,14, 3,
+        24,13, 2,23, 12, 1,22,11
+    };
+    static const uint8_t SHIFT_LO_21[32] = {
+         0,11, 0, 1, 12, 0, 2,13,
+         0, 3,14, 0,  4,15, 0, 5,
+        16, 0, 6,17,  0, 7,18, 0,
+         8,19, 0, 9, 20, 0,10, 0
+    };
+    static const uint8_t READ_FLAG_21[32] = {
+        // Check original expansions #k if there's a "load #X" => 1 if yes, 0 if no
+        1,1,0,1, 1,0,1,1,
+        0,1,1,0, 1,1,0,1,
+        1,0,1,1, 0,1,1,0,
+        1,1,0,1, 1,0,1,0
+    };
+
+    if (pPEX != NULL && pBB != NULL) {
+      bitunblk256v32_scalarBlock_ex_template(
+        pIn, pOut, pPEX, pBB,
+        expansions_count_21,
+        SHIFT_HI_21,
+        SHIFT_LO_21,
+        READ_FLAG_21,
+        mask21,
+        nb21
+      );
+    } else {
+      bitunblk256v32_scalar_template(
+        pIn, pOut, expansions_count_21,
+        SHIFT_HI_21, SHIFT_LO_21, READ_FLAG_21,
+        mask21, nb21
+      );
+    }
+}
+
+static void bitunpack256v32_22_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    // base bits & mask
+    const uint32_t mask22 = (1u << 22) - 1; // 0x3FFFFF
+    const int nb22 = 22;
+
+    // b=22 => one block function with expansions=16 => outputs 128 values
+    // need to call it twice to get 256 values
+    const int expansions_count_22 = 16;
+
+    static const uint8_t SHIFT_HI_22[16] = {
+        /* 0 */ 0,  /* 1 */22, /* 2 */12, /* 3 */ 2,
+        /* 4 */24,  /* 5 */14, /* 6 */ 4, /* 7 */26,
+        /* 8 */16,  /* 9 */ 6, /*10 */28, /*11 */18,
+        /*12 */ 8,  /*13 */30, /*14 */20, /*15 */10
+    };
+
+    static const uint8_t SHIFT_LO_22[16] = {
+        /* 0 */ 0,  /* 1 */10, /* 2 */20, /* 3 */ 0,
+        /* 4 */ 8,  /* 5 */18, /* 6 */ 0,  /* 7 */ 6,
+        /* 8 */16,  /* 9 */ 0, /*10 */ 4,  /*11 */14,
+        /*12 */ 0,  /*13 */ 2, /*14 */12, /*15 */ 0
+    };
+
+    static const uint8_t READ_FLAG_22[16] = {
+        // From original code: expansions #3, #6, #9, #12, #15 don't read, others do
+        1,1,1,0, 1,1,0,1, 1,0,1,1, 0,1,1,0
+    };
+
+    if (pPEX != NULL && pBB != NULL) {
+      for(int i=0; i<2; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+          pIn,
+          pOut,
+          pPEX,
+          pBB,
+          expansions_count_22,
+          SHIFT_HI_22,
+          SHIFT_LO_22,
+          READ_FLAG_22,
+          mask22,
+          nb22
+        );
+      }
+    } else {
+      for(int i=0; i<2; i++) {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count_22,
+          SHIFT_HI_22, SHIFT_LO_22, READ_FLAG_22,
+          mask22, nb22
+        );
+      }
+    }
+}
+
+static void bitunpack256v32_23_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    // base bits & mask
+    const int nb23 = 23;
+    const uint32_t mask23 = (1u << 23) - 1; // 0x7FFFFF
+
+    // expansions_count=32
+    const int expansions_count_23 = 32;
+
+    // Predefined SHIFT_HI_23, SHIFT_LO_23, READ_FLAG_23
+    static const uint8_t SHIFT_HI_23[32] = {
+        0, 23,14, 5, 28,19,10, 1,
+        24,15, 6,29, 20,11, 2,25,
+        16, 7,30,21, 12, 3,26,17,
+         8,31,22,13,  4,27,18, 9
+    };
+
+    static const uint8_t SHIFT_LO_23[32] = {
+         0,  9,18, 0,  4,13,22, 0,
+         8,17, 0, 3, 12,21, 0, 7,
+        16,  0, 2,11, 20, 0, 6,15,
+         0,  1,10,19,  0, 5,14, 0
+    };
+
+    static const uint8_t READ_FLAG_23[32] = {
+        1,1,1,0, 1,1,1,0, 1,1,0,1, 1,1,0,1,
+        1,0,1,1, 1,0,1,1, 0,1,1,1, 0,1,1,0
+    };
+
+    if (pPEX != NULL && pBB != NULL) {
+        bitunblk256v32_scalarBlock_ex_template(
+            pIn, pOut, pPEX, pBB,
+            expansions_count_23,
+            SHIFT_HI_23,
+            SHIFT_LO_23,
+            READ_FLAG_23,
+            mask23,
+            nb23
+        );
+    } else {
+      bitunblk256v32_scalar_template(
+        pIn, pOut, expansions_count_23,
+        SHIFT_HI_23, SHIFT_LO_23, READ_FLAG_23,
+        mask23, nb23
+      );
+    }
+}
+static void bitunpack256v32_24_scalar(
+    uint32_t **pIn,
+    uint32_t **pOut,
+    uint32_t **pPEX,
+    unsigned char **pBB
+)
+{
+    // base bits & mask
+    const int nb24 = 24;
+    const uint32_t mask24 = (1u << 24) - 1;  // 0xFFFFFF
+
+    // expansions_count=4 (corresponds to 4 expansions => outputs 32 values)
+    const int expansions_count_24 = 4;
+
+    // k=0 => leftover>>0, new<<0
+    // k=1 => leftover>>24, new<<8
+    // k=2 => leftover>>16, new<<16
+    // k=3 => leftover>>8,  no new block read
+    static const uint8_t SHIFT_HI_24[4] = {0, 24, 16, 8};
+    static const uint8_t SHIFT_LO_24[4] = {0,  8, 16, 0};
+
+    // Only read new blocks for steps 0,1,2, not for step 3
+    static const uint8_t READ_FLAG_24[4] = {1, 1, 1, 0};
+
+    if (pPEX != NULL && pBB != NULL) {
+          for(int i=0; i<8; i++) {
+            bitunblk256v32_scalarBlock_ex_template(
+                pIn, pOut, pPEX, pBB,
+                expansions_count_24,
+                SHIFT_HI_24,
+                SHIFT_LO_24,
+                READ_FLAG_24,
+            mask24,
+            nb24
+        );
+      }
+    } else {
+      for(int i=0; i<8; i++) {
+        bitunblk256v32_scalar_template(
+          pIn, pOut, expansions_count_24, 
+          SHIFT_HI_24, SHIFT_LO_24, READ_FLAG_24,
+          mask24, nb24
+        );
+      }
+    }
+}
+
+static void bitunpack256v32_25_scalar(uint32_t **pIn,
+                                             uint32_t **pOut,
+                                             uint32_t **pPEX,
+                                             unsigned char **pBB)
+{
+    // mask & base bits
+    const uint32_t mask25 = (1u<<25) -1;  // 0x1FFFFFF
+    const int nb25 = 25;
+
+    // 32 expansions total
+    const int expansions_count_25 = 32;
+
+    // Extract high and low shift amounts from original implementation
+    static const uint8_t SHIFT_HI_25[32] = {
+        /* #0  */  0, /* #1  */ 25, /* #2  */ 18, /* #3  */ 11, 
+        /* #4  */  4, /* #5  */ 29, /* #6  */ 22, /* #7  */ 15, 
+        /* #8  */  8, /* #9  */  1, /* #10 */ 26, /* #11 */ 19, 
+        /* #12 */ 12, /* #13 */  5, /* #14 */ 30, /* #15 */ 23, 
+        /* #16 */ 16, /* #17 */  9, /* #18 */  2, /* #19 */ 27, 
+        /* #20 */ 20, /* #21 */ 13, /* #22 */  6, /* #23 */ 31, 
+        /* #24 */ 24, /* #25 */ 17, /* #26 */ 10, /* #27 */  3, 
+        /* #28 */ 28, /* #29 */ 21, /* #30 */ 14, /* #31 */  7
+    };
+
+    static const uint8_t SHIFT_LO_25[32] = {
+        /* #0  */  0, /* #1  */  7, /* #2  */ 14, /* #3  */ 21, 
+        /* #4  */  0, /* #5  */  3, /* #6  */ 10, /* #7  */ 17, 
+        /* #8  */ 24, /* #9  */  0, /* #10 */  6, /* #11 */ 13, 
+        /* #12 */ 20, /* #13 */  0, /* #14 */  2, /* #15 */  9, 
+        /* #16 */ 16, /* #17 */ 23, /* #18 */  0, /* #19 */  5, 
+        /* #20 */ 12, /* #21 */ 19, /* #22 */  0, /* #23 */  1, 
+        /* #24 */  8, /* #25 */ 15, /* #26 */ 22, /* #27 */  0, 
+        /* #28 */  4, /* #29 */ 11, /* #30 */ 18, /* #31 */  0
+    };
+
+    // Mark which steps don't need to read new data
+    // Based on original code, expansions #4, #9, #13, #18, #22, #27, #31 don't need to read new data
+    static const uint8_t READ_FLAG_25[32] = {
+        /* #0  */ 1, /* #1  */ 1, /* #2  */ 1, /* #3  */ 1, 
+        /* #4  */ 0, /* #5  */ 1, /* #6  */ 1, /* #7  */ 1, 
+        /* #8  */ 1, /* #9  */ 0, /* #10 */ 1, /* #11 */ 1, 
+        /* #12 */ 1, /* #13 */ 0, /* #14 */ 1, /* #15 */ 1, 
+        /* #16 */ 1, /* #17 */ 1, /* #18 */ 0, /* #19 */ 1, 
+        /* #20 */ 1, /* #21 */ 1, /* #22 */ 0, /* #23 */ 1, 
+        /* #24 */ 1, /* #25 */ 1, /* #26 */ 1, /* #27 */ 0, 
+        /* #28 */ 1, /* #29 */ 1, /* #30 */ 1, /* #31 */ 0
+    };
+    if (pPEX != NULL && pBB != NULL) {
+      for (int i=0; i<2; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+            pIn, pOut, pPEX, pBB,
+            expansions_count_25,
+            SHIFT_HI_25,
+            SHIFT_LO_25,
+            READ_FLAG_25,
+            mask25,
+            nb25
+        );
+      }
+    } else {
+      bitunblk256v32_scalar_template(
+        pIn, pOut, expansions_count_25,
+        SHIFT_HI_25, SHIFT_LO_25, READ_FLAG_25,
+        mask25, nb25
+      );
+    }
+}
+
+static void bitunpack256v32_26_scalar(uint32_t **pIn,
+                                             uint32_t **pOut,
+                                             uint32_t **pPEX,
+                                             unsigned char **pBB)
+{
+    // mask & base bits
+    const uint32_t mask26 = (1u<<26) -1;  // 0x3FFFFFF
+    const int nb26 = 26;
+
+    // 16 expansions total
+    const int expansions_count_26 = 16;
+
+    // Extract high and low shift amounts from original implementation
+    static const uint8_t SHIFT_HI_26[16] = {
+        /* #0  */  0, /* #1  */ 26, /* #2  */ 20, /* #3  */ 14, 
+        /* #4  */  8, /* #5  */  2, /* #6  */ 28, /* #7  */ 22, 
+        /* #8  */ 16, /* #9  */ 10, /* #10 */  4, /* #11 */ 30, 
+        /* #12 */ 24, /* #13 */ 18, /* #14 */ 12, /* #15 */  6
+    };
+
+    static const uint8_t SHIFT_LO_26[16] = {
+        /* #0  */  0, /* #1  */  6, /* #2  */ 12, /* #3  */ 18, 
+        /* #4  */ 24, /* #5  */  0, /* #6  */  4, /* #7  */ 10, 
+        /* #8  */ 16, /* #9  */ 22, /* #10 */  0, /* #11 */  2, 
+        /* #12 */  8, /* #13 */ 14, /* #14 */ 20, /* #15 */  0
+    };
+
+    // Mark which steps don't need to read new data
+    // Based on original code, expansions #5, #10, #15 don't need to read new data
+    static const uint8_t READ_FLAG_26[16] = {
+        /* #0  */ 1, /* #1  */ 1, /* #2  */ 1, /* #3  */ 1, 
+        /* #4  */ 1, /* #5  */ 0, /* #6  */ 1, /* #7  */ 1, 
+        /* #8  */ 1, /* #9  */ 1, /* #10 */ 0, /* #11 */ 1, 
+        /* #12 */ 1, /* #13 */ 1, /* #14 */ 1, /* #15 */ 0
+    };
+
+    if (pPEX != NULL && pBB != NULL) {
+      for (int i=0; i<2; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+            pIn, pOut, pPEX, pBB,
+            expansions_count_26,
+            SHIFT_HI_26,
+            SHIFT_LO_26,
+            READ_FLAG_26,
+            mask26,
+            nb26
+        );
+      }
+    } else {
+      for (int i=0; i<2; i++) {
+        bitunblk256v32_scalar_template(
+            pIn, pOut, expansions_count_26,
+            SHIFT_HI_26, SHIFT_LO_26, READ_FLAG_26,
+            mask26, nb26
+        );
+      }
+    }
+}
+
+static void bitunpack256v32_27_scalar(uint32_t **pIn,
+                                             uint32_t **pOut,
+                                             uint32_t **pPEX,
+                                             unsigned char **pBB)
+{
+    // mask & base bits
+    const uint32_t mask27 = (1u<<27) -1;  // 0x7FFFFFF
+    const int nb27 = 27;
+
+    // 32 expansions total
+    const int expansions_count_27 = 32;
+
+    // Extract high and low shift amounts from original implementation
+    static const uint8_t SHIFT_HI_27[32] = {
+        /* #0  */  0, /* #1  */ 27, /* #2  */ 22, /* #3  */ 17,
+        /* #4  */ 12, /* #5  */  7, /* #6  */  2, /* #7  */ 29,
+        /* #8  */ 24, /* #9  */ 19, /* #10 */ 14, /* #11 */  9,
+        /* #12 */  4, /* #13 */ 31, /* #14 */ 26, /* #15 */ 21,
+        /* #16 */ 16, /* #17 */ 11, /* #18 */  6, /* #19 */  1,
+        /* #20 */ 28, /* #21 */ 23, /* #22 */ 18, /* #23 */ 13,
+        /* #24 */  8, /* #25 */  3, /* #26 */ 30, /* #27 */ 25,
+        /* #28 */ 20, /* #29 */ 15, /* #30 */ 10, /* #31 */  5
+    };
+
+    static const uint8_t SHIFT_LO_27[32] = {
+        /* #0  */  0, /* #1  */  5, /* #2  */ 10, /* #3  */ 15,
+        /* #4  */ 20, /* #5  */ 25, /* #6  */  0, /* #7  */  3,
+        /* #8  */  8, /* #9  */ 13, /* #10 */ 18, /* #11 */ 23,
+        /* #12 */  0, /* #13 */  1, /* #14 */  6, /* #15 */ 11,
+        /* #16 */ 16, /* #17 */ 21, /* #18 */ 26, /* #19 */  0,
+        /* #20 */  4, /* #21 */  9, /* #22 */ 14, /* #23 */ 19,
+        /* #24 */ 24, /* #25 */  0, /* #26 */  2, /* #27 */  7,
+        /* #28 */ 12, /* #29 */ 17, /* #30 */ 22, /* #31 */  0
+    };
+
+    // Mark which steps don't need to read new data
+    // From original code, steps #6, #12, #19, #25, #31 don't have CPY8(iv, *pIn)
+    static const uint8_t READ_FLAG_27[32] = {
+        /* #0  */ 1, /* #1  */ 1, /* #2  */ 1, /* #3  */ 1,
+        /* #4  */ 1, /* #5  */ 1, /* #6  */ 0, /* #7  */ 1,
+        /* #8  */ 1, /* #9  */ 1, /* #10 */ 1, /* #11 */ 1,
+        /* #12 */ 0, /* #13 */ 1, /* #14 */ 1, /* #15 */ 1,
+        /* #16 */ 1, /* #17 */ 1, /* #18 */ 1, /* #19 */ 0,
+        /* #20 */ 1, /* #21 */ 1, /* #22 */ 1, /* #23 */ 1,
+        /* #24 */ 1, /* #25 */ 0, /* #26 */ 1, /* #27 */ 1,
+        /* #28 */ 1, /* #29 */ 1, /* #30 */ 1, /* #31 */ 0
+    };
+    if (pPEX != NULL && pBB != NULL) {
+        bitunblk256v32_scalarBlock_ex_template(
+            pIn, pOut, pPEX, pBB,
+            expansions_count_27,
+            SHIFT_HI_27,
+            SHIFT_LO_27,
+            READ_FLAG_27,
+        mask27,
+            nb27
+        );
+    } else {
+        bitunblk256v32_scalar_template(
+            pIn, pOut, expansions_count_27,
+            SHIFT_HI_27, SHIFT_LO_27, READ_FLAG_27,
+            mask27, nb27
+        );
+    }
+}
+static void bitunpack256v32_28_scalar(uint32_t **pIn,
+                               uint32_t **pOut,
+                               uint32_t **pPEX,      // Optional parameter, non-NULL for extended version
+                               unsigned char **pBB)  // Optional parameter, non-NULL for extended version
+{
+    // Common constant definitions
+    static const uint32_t BITUN_MASK_28      = (1u << 28) - 1;  // 0xFFFFFFF
+    static const int      BITUN_NB_28        = 28;
+    static const int      EXPANSIONS_COUNT_28 = 8;
+    static const uint8_t  SHIFT_HI_28[EXPANSIONS_COUNT_28] = { 0, 28, 24, 20, 16, 12, 8, 4 };
+    static const uint8_t  SHIFT_LO_28[EXPANSIONS_COUNT_28] = { 0, 4, 8, 12, 16, 20, 24, 0 };
+    static const uint8_t  READ_FLAG_28[EXPANSIONS_COUNT_28] = { 1, 1, 1, 1, 1, 1, 1, 0 };
+
+    // Choose template based on whether extension parameters are provided
+    if (pPEX != NULL && pBB != NULL) {
+        // Call extended template, each call outputs 64 values, loop 4 times to get 256
+        for (int i = 0; i < 4; i++) {
+            bitunblk256v32_scalarBlock_ex_template(
+                pIn, pOut, pPEX, pBB,
+                EXPANSIONS_COUNT_28,
+                SHIFT_HI_28,
+                SHIFT_LO_28,
+                READ_FLAG_28,
+                BITUN_MASK_28,
+                BITUN_NB_28
+            );
+        }
+    } else {
+        // Call non-extended template, also each call outputs 64 values, loop 4 times to get 256
+        for (int i = 0; i < 4; i++) {
+            bitunblk256v32_scalar_template(
+                pIn, pOut,
+                EXPANSIONS_COUNT_28,
+                SHIFT_HI_28,
+                SHIFT_LO_28,
+                READ_FLAG_28,
+                BITUN_MASK_28,
+                BITUN_NB_28
+            );
+        }
+    }
+}
+
+
+static void bitunpack256v32_29_scalar(uint32_t **pIn, uint32_t **pOut,
+                                      uint32_t **pPEX,
+                                      unsigned char **pBB)
+{
+    const uint32_t mask29 = (1U << 29) - 1;  // 0x1FFFFFFF
+    const int expansions_count = 32;
+    static const uint8_t SHIFT_HI_29[32] = {
+         0, 29, 26, 23, 20, 17, 14, 11,
+         8,  5,  2, 31, 28, 25, 22, 19,
+        16, 13, 10,  7,  4,  1, 30, 27,
+        24, 21, 18, 15, 12,  9,  6,  3
+    };
+    static const uint8_t SHIFT_LO_29[32] = {
+         0,  3,  6,  9, 12, 15, 18, 21,
+        24, 27,  0,  1,  4,  7, 10, 13,
+        16, 19, 22, 25, 28,  0,  2,  5,
+         8, 11, 14, 17, 20, 23, 26,  0
+    };
+    static const uint8_t READ_FLAG_29[32] = {
+         1, 1, 1, 1, 1, 1, 1, 1,
+         1, 1, 0, 1, 1, 1, 1, 1,
+         1, 1, 1, 1, 1, 0, 1, 1,
+         1, 1, 1, 1, 1, 1, 1, 0
+    };
+    if (pPEX != NULL && pBB != NULL) {
+        bitunblk256v32_scalarBlock_ex_template(
+            pIn, pOut, pPEX, pBB,
+            expansions_count,
+            SHIFT_HI_29,
+            SHIFT_LO_29,
+            READ_FLAG_29,
+            mask29,
+            29
+        );
+    } else {
+        bitunblk256v32_scalar_template(
+            pIn, pOut,
+            expansions_count,
+            SHIFT_HI_29,
+            SHIFT_LO_29,
+            READ_FLAG_29,
+            mask29,
+            29
+        );
+    }
+}
+
+static void bitunpack256v32_30_scalar(uint32_t **pIn, uint32_t **pOut,
+                                      uint32_t **pPEX,
+                                      unsigned char **pBB)
+{
+    const uint32_t mask30 = (1U << 30) - 1;  // 0x3FFFFFFF
+    const int expansions_count = 16;
+    static const uint8_t SHIFT_HI_30[16] = {
+         0, 30, 28, 26, 24, 22, 20, 18,
+        16, 14, 12, 10,  8,  6,  4,  2
+    };
+    static const uint8_t SHIFT_LO_30[16] = {
+         0,  2,  4,  6,  8, 10, 12, 14,
+        16, 18, 20, 22, 24, 26, 28,  0
+    };
+    static const uint8_t READ_FLAG_30[16] = {
+         1, 1, 1, 1, 1, 1, 1, 1,
+         1, 1, 1, 1, 1, 1, 1, 0
+    };
+
+    if (pPEX != NULL && pBB != NULL) {
+      for (int i = 0; i < 2; i++) {
+        bitunblk256v32_scalarBlock_ex_template(
+            pIn, pOut, pPEX, pBB,
+            expansions_count,
+            SHIFT_HI_30, SHIFT_LO_30, READ_FLAG_30,
+            mask30, 30
+        );
+      }
+    } else {
+        for (int i = 0; i < 2; i++) {
+            bitunblk256v32_scalar_template(
+                pIn, pOut, expansions_count,
+                SHIFT_HI_30, SHIFT_LO_30, READ_FLAG_30,
+                mask30, 30
+            );
+        }
+    }
+}
+
+// 31 位非异常 PFOR 解压函数，采用模板函数优化
+static void bitunpack256v32_31_scalar(uint32_t **pIn, uint32_t **pOut,
+                                      uint32_t **pPEX,
+                                      unsigned char **pBB)
+{
+    // 31 位掩码
+    const uint32_t mask31 = (1U << 31) - 1;  // 0x7FFFFFFF
+    const int expansions_count = 32;
+    // 构造参数数组：
+    // 对于 k==0: SHIFT_HI = 0, SHIFT_LO = 0, READ_FLAG = 1
+    // 对于 k = 1 .. 30: SHIFT_HI = 32 - k, SHIFT_LO = k, READ_FLAG = 1
+    // 对于 k==31: SHIFT_HI = 1, SHIFT_LO = 0, READ_FLAG = 0
+    static const uint8_t SHIFT_HI[32] = {
+         0,
+        31, 30, 29, 28, 27, 26, 25, 24,
+        23, 22, 21, 20, 19, 18, 17, 16,
+        15, 14, 13, 12, 11, 10, 9, 8,
+         7, 6, 5, 4, 3, 2, 1
+    };
+    static const uint8_t SHIFT_LO[32] = {
+         0,
+         1,  2,  3,  4,  5,  6,  7,  8,
+         9, 10, 11, 12, 13, 14, 15, 16,
+        17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 31, 0
+    };
+    static const uint8_t READ_FLAG[32] = {
+         1,
+         1, 1, 1, 1, 1, 1, 1, 1,
+         1, 1, 1, 1, 1, 1, 1, 1,
+         1, 1, 1, 1, 1, 1, 1, 1,
+         1, 1, 1, 1, 1, 1, 1, 0
+    };
+    if (pPEX != NULL && pBB != NULL) {
+        bitunblk256v32_scalarBlock_ex_template(
+            pIn, pOut, pPEX, pBB,
+            expansions_count,
+            SHIFT_HI, SHIFT_LO, READ_FLAG,
+            mask31, 31
+        );
+    } else {
+        bitunblk256v32_scalar_template(
+            pIn, pOut,
+            expansions_count,
+            SHIFT_HI,
+            SHIFT_LO,
+         READ_FLAG,
+         mask31,
+         31
+        );
+    }
+}
+
+static void bitunpack256v32_32_scalar(uint32_t **pIn,
+                               uint32_t **pOut,
+                               uint32_t **pPEX,      // Optional parameter, non-NULL for extended version
+                               unsigned char **pBB)  // Optional parameter, non-NULL for extended version
+{
+    uint32_t *ip = *pIn;
+    uint32_t *op = *pOut;
+    const int nb = 32;  // When b=32, each 32-bit integer stores a value directly
+
+    // There are 32 groups, each group has 8 numbers, totaling 256 numbers
+    for (int i = 0; i < 32; i++) {
+        // Copy 8 input values directly to output (avoid calling CPY8)
+        for (int j = 0; j < 8; j++) {
+            op[j] = ip[j];
+        }
+        ip += 8;
+
+        if (pPEX != NULL && pBB != NULL) {
+            uint8_t xm8 = **pBB;
+            (*pBB)++;
+            if (xm8 != 0) {
+                applyException_8bits(xm8, pPEX, nb, op);
+            }
+        }
+        op += 8;
+    }
+    *pIn = ip;
+    *pOut = op;
+}
+
+// Define function pointer type for unpacking functions
+typedef void (*unpack_func_t)(uint32_t**, uint32_t**, unsigned**, unsigned char**);
+
+// Array of function pointers for each bit width (0 to 32)
+static unpack_func_t unpack_funcs[33] = {
+    bitunpack256v32_0_scalar,
+    bitunpack256v32_1_scalar,
+    bitunpack256v32_2_scalar,
+    bitunpack256v32_3_scalar,
+    bitunpack256v32_4_scalar,
+    bitunpack256v32_5_scalar,
+    bitunpack256v32_6_scalar,
+    bitunpack256v32_7_scalar,
+    bitunpack256v32_8_scalar,
+    bitunpack256v32_9_scalar,
+    bitunpack256v32_10_scalar,
+    bitunpack256v32_11_scalar,
+    bitunpack256v32_12_scalar,
+    bitunpack256v32_13_scalar,
+    bitunpack256v32_14_scalar,
+    bitunpack256v32_15_scalar,
+    bitunpack256v32_16_scalar,
+    bitunpack256v32_17_scalar,
+    bitunpack256v32_18_scalar,
+    bitunpack256v32_19_scalar,
+    bitunpack256v32_20_scalar,
+    bitunpack256v32_21_scalar,
+    bitunpack256v32_22_scalar,
+    bitunpack256v32_23_scalar,
+    bitunpack256v32_24_scalar,
+    bitunpack256v32_25_scalar,
+    bitunpack256v32_26_scalar,
+    bitunpack256v32_27_scalar,
+    bitunpack256v32_28_scalar,
+    bitunpack256v32_29_scalar,
+    bitunpack256v32_30_scalar,
+    bitunpack256v32_31_scalar,
+    bitunpack256v32_32_scalar
+};
+/**
+ *
+ * @param in   Compressed data input stream
+ * @param n    Currently unused, can be processed according to actual needs
+ * @param out  Output buffer for decompressed 32-bit integers (must accommodate at least 256 32-bit integers)
+ * @param b    Bit width for each integer, this example only demonstrates the b=8 branch
+ * @return     Returns the next readable input position after decompression (consistent with original logic)
+ */
+unsigned char *bitunpack256scalarv32(const unsigned char *__restrict in, 
+                               unsigned n, 
+                               unsigned *__restrict out, 
+                               unsigned b)
+{
+    // Debug output (optional, can be removed in production)
+    printf("bitunpack256scalarv32 b=%d bits=%d\n", b, b&0x3f);
+
+    // Calculate input pointer offset
+    unsigned char *ip = (unsigned char *)(in + PAD8(256 * b));
+    
+    // Initialize pointers
+    uint32_t *pIn32  = (uint32_t *)in;
+    uint32_t *pOut32 = (uint32_t *)out;
+
+    unsigned bits = b & 0x3f;
+    // Execute unpacking if b is in valid range
+    if (bits <= 32) {
+        unpack_funcs[bits](&pIn32, &pOut32, NULL, NULL);
+    }
+
+    return ip;
+}
+
+unsigned char *_bitd1unpack256scalarv32(const unsigned char *__restrict in, unsigned n,
+                                  unsigned *__restrict out, unsigned start, unsigned b,
+                                  unsigned *__restrict pex, unsigned char *bb) {
+printf("_bitd1unpack256scalarv32, b=%d\n", b);
+unsigned* deltas = (unsigned*)malloc(n * sizeof(unsigned));
+    if (!deltas) return NULL;
+
+    const unsigned char *orig_in = in;
+    in = _bitunpack256scalarv32(in, n, deltas, b, pex, bb);
+
+    unsigned running_sum = start;
+    for (unsigned i = 0; i < n; ++i) {
+        running_sum += deltas[i] + 1;
+        out[i] = running_sum;
+    }
+
+    free(deltas);
+    return (unsigned char*)in;
+}
+
+// Add this after the definition of _bitunpack256w32 in the SSE2/SSSE3 section
+
+// Delta1 unpacking for 256 32-bit integers (no exceptions)
+unsigned char *bitd1unpack256scalarv32(const unsigned char *__restrict in, unsigned n, unsigned *__restrict out, unsigned start, unsigned b) {
+    printf("bitd1unpack256scalarv32, b=%d\n", b);
+    const unsigned char *_in = in;
+    unsigned deltas[n];
+
+    in = bitunpack256scalarv32(in, n, deltas, b);
+
+    unsigned running_sum = start;
+    for (unsigned i = 0; i < n; ++i) {
+        running_sum += deltas[i] + 1;
+        out[i] = running_sum;
+    }
+
+    return (unsigned char*)in;
+}
+
+unsigned char *_bitunpack256scalarv32(const unsigned char *__restrict in,
+                                unsigned n,
+                                unsigned *__restrict out,
+                                unsigned b,
+                                unsigned *__restrict pex,
+                                unsigned char *bb)
+{
+    // Debug output (optional, can be removed in production)
+    printf("_bitunpack256scalarv32 bits=%d\n", b & 0x3f);
+
+    // Calculate input pointer offset
+    unsigned char *ip = (unsigned char *)(in + PAD8(256 * b));
+    
+    // Initialize pointers
+    unsigned *pPEX = pex;
+    unsigned char *pBB = bb;
+    uint32_t *pIn32 = (uint32_t *)in;
+    uint32_t *pOut32 = (uint32_t *)out;
+
+    unsigned bits = b & 0x3f;
+    // Execute unpacking if b is in valid range
+    if (bits <= 32) {
+        unpack_funcs[bits](&pIn32, &pOut32, &pPEX, &pBB);
+    }
+
+    return ip;
 }
 
 #define STOZ64(_op_, _ov_) _mm_storeu_si128(_op_++, _ov_); _mm_storeu_si128(_op_++, _ov_)
