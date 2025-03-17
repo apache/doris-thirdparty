@@ -28,7 +28,8 @@
 #include "bitutil.h"
 #include "bitpack.h"
 #include "vint.h"
-#include <string.h> 
+#include <string.h>
+#include <stdlib.h>
 
 #define PAD8(_x_) (((_x_)+7)/8)
 
