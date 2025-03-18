@@ -205,6 +205,10 @@ MultiSegmentReader::~MultiSegmentReader() {
 const char* MultiTermEnum::getObjectName() const{ return getClassName(); }
 const char* MultiTermEnum::getClassName(){ return "MultiTermEnum"; }
 
+void MultiTermEnum::setIoContext(const void* io_ctx) {
+  io_ctx_ = io_ctx;
+}
+
  DirectoryIndexReader* MultiSegmentReader::doReopen(SegmentInfos* infos){
    SCOPED_LOCK_MUTEX(THIS_LOCK)
     if (infos->size() == 1) {
@@ -337,14 +341,18 @@ void MultiSegmentReader::doSetNorm(int32_t n, const TCHAR* field, uint8_t value)
 	(*subReaders)[i]->setNorm(n-starts[i], field, value); // dispatch
 }
 
-TermEnum* MultiSegmentReader::terms() {
+TermEnum* MultiSegmentReader::terms(const void* io_ctx) {
   ensureOpen();
-	return _CLNEW MultiTermEnum(subReaders, starts, NULL);
+	auto* ret = _CLNEW MultiTermEnum(subReaders, starts, NULL);
+	ret->setIoContext(io_ctx);
+	return ret;
 }
 
-TermEnum* MultiSegmentReader::terms(const Term* term) {
+TermEnum* MultiSegmentReader::terms(const Term* term, const void* io_ctx) {
     ensureOpen();
-	return _CLNEW MultiTermEnum(subReaders, starts, term);
+	auto* ret = _CLNEW MultiTermEnum(subReaders, starts, term);
+	ret->setIoContext(io_ctx);
+	return ret;
 }
 
 int32_t MultiSegmentReader::docFreq(const Term* t) {
@@ -781,10 +789,10 @@ MultiTermEnum::MultiTermEnum(ArrayBase<IndexReader*>* subReaders, const int32_t 
 		//Check if the enumeration must start from term t
 		if (t != NULL) {
 			//termEnum is an enumeration of terms starting at or after the named term t
-			termEnum = reader->terms(t);
+			termEnum = reader->terms(t, io_ctx_);
 		}else{
 			//termEnum is an enumeration of all the Terms and TermInfos in the set.
-			termEnum = reader->terms();
+			termEnum = reader->terms(io_ctx_);
 		}
 
 		//Instantiate an new SegmentMerginfo

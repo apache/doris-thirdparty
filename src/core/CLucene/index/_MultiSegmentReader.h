@@ -99,8 +99,8 @@ public:
 	void norms(const TCHAR* field, uint8_t* result);
     FieldInfos* getFieldInfos();
 
-	TermEnum* terms();
-	TermEnum* terms(const Term* term);
+	TermEnum* terms(const void* io_ctx = nullptr);
+	TermEnum* terms(const Term* term, const void* io_ctx = nullptr);
 
 	//Returns the document frequency of the current term in the set
 	int32_t docFreq(const Term* t=NULL);
@@ -211,6 +211,11 @@ public:
 
   const char* getObjectName() const;
   static const char* getClassName();
+
+  void setIoContext(const void*) override;
+
+private:
+  const void* io_ctx_ = nullptr;
 };
 
 

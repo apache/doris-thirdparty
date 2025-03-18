@@ -130,6 +130,8 @@ public:
 	* Some implementations are considerably more efficient than that.
 	*/
 	virtual bool skipTo(Term* target);
+
+	virtual void setIoContext(const void*) {}
 };
 
 
