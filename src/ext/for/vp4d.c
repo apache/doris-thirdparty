@@ -274,6 +274,16 @@ extern char _shuffle_16[256][16];
 #define  _BITUNPACKD  _bitd1unpack256scalarv
 #define  BITUNDD       bitd1dec
 #include "vp4d.c"
+
+#define _P4DEC        _p4zdec256scalarv
+#define  P4DEC         p4zdec256scalarv
+#define  P4NDEC        p4nzdec256scalarv
+#define  P4NDECS       p4zdec
+#define  BITUNPACKD    bitzunpack256scalarv
+#define  _BITUNPACKD  _bitzunpack256scalarv
+#define  BITUNDD       bitzdec
+#define USIZE 32
+#include "vp4d.c"
   #endif
 #undef  DELTA
 

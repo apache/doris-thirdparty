@@ -411,6 +411,122 @@ void generate_raw_data_for_bitwidth(unsigned* values, unsigned n,
     }
 }
 
+/**
+ * 生成 n 个有符号数:
+ *   - b<3: 范围很小(±(1<<b) 之类)
+ *   - b>=3: 直接从 ±(10^(floor(b/3))) 随机, 并包含一定的负值
+ *
+ * with_exception=0 => 生成一个“有序/有限范围”
+ * with_exception=1 => 生成一个“更大随机范围” (你可自定义)
+ */
+static void generate_raw_signed_data_for_zigzag(unsigned *values,
+                                                unsigned n,
+                                                unsigned b,
+                                                int with_exception)
+{
+    if (n == 0) return;
+
+    // srand(...) 在外部一次初始化
+    uint64_t val_range = 1;
+    if (b < 3) {
+        // 例如 b=0 =>±1, b=1=>±2, b=2=>±4
+        val_range = (1ULL << b);
+    } else {
+        // b>=3 => use get_pow10_for_b(b) => 10^(floor(b/3))
+        val_range = get_pow10_for_b(b); // 参考你贴的 delta pfor
+        if(val_range > 0x7fffffffULL) {
+            val_range = 0x7fffffffULL; // 避免溢出 32-bit
+        }
+    }
+
+    for(unsigned i=0; i<n; i++){
+        // 先产生 0..val_range-1
+        int32_t x = (int32_t)(rand() % (unsigned)val_range);
+        // 随机决定正负
+        if(with_exception) {
+            // 例如 50% 概率取反
+            if((rand() & 1) == 1) x = -x;
+        } else {
+            // 不带异常 => 大部分正, 也可以小概率负
+            if((rand()%10)==0) x = -x; 
+        }
+        values[i] = x;
+    }
+}
+/**
+ * 对 b=0..32, with_exception=0 or 1:
+ *   1) 生成 n=256(或512) 个 int32_t
+ *   2) zigzag encode => store => bitpack => (similar to "encoded_data")
+ *   3) zigzag decode => compare => check mismatch
+ */
+void run_testZigzag(unsigned b,
+                    int with_exception,
+                    unsigned TEST_SIZE,
+                    unsigned *raw_values,
+                    unsigned char *encoded_data,
+                    unsigned *decoded1,
+                    unsigned *decoded2)
+{
+    printf("Zigzag 测试: 位宽 b=%u, with_exception=%d\n", b, with_exception);
+
+    // 1) 生成带正负 raw data
+    generate_raw_signed_data_for_zigzag(raw_values, TEST_SIZE, b, with_exception);
+    unsigned encoded_size = p4nzenc256v32(raw_values, TEST_SIZE, encoded_data);
+
+    // 获取编码头部信息（例如起始值等）
+    unsigned start;
+    unsigned char* copy = encoded_data;
+    xvbxget32(copy, start);
+    unsigned char encoded_b = copy[0];  // 编码后的第一个字节为位宽
+    if((encoded_b & 0x40)) {
+        encoded_b &= 0x3f;
+    } else {
+        if(encoded_b & 0x80) {
+            encoded_b &= 0x7f;
+        }
+    }
+    printf("  编码参数: 位宽 b=%u, 起始值 start=%u, 编码大小=%u字节\n", encoded_b, start, encoded_size);
+
+    // 3) decode => two versions for cross-check 
+    //   (here we define "decoded1" from "bitzunpack256v32...??" and "decoded2" from "bitzunpack256scalarv32Zigzag"??)
+    memset(decoded1,0,TEST_SIZE*sizeof(unsigned));
+    memset(decoded2,0,TEST_SIZE*sizeof(unsigned));
+
+    // "decoded1" => maybe  vector version if you have it? e.g. "bitzunpack256v32(in,b, out,??)" 
+    // "decoded2" => scalar version ?
+
+    // for demonstration, we do the same decode to compare:
+    p4nzdec256v32(encoded_data, TEST_SIZE, decoded1);
+    p4nzdec256scalarv32(encoded_data, TEST_SIZE, decoded2);
+
+    // 4) compare mismatch
+    int mismatch=0;
+    for(unsigned i=0;i<TEST_SIZE;i++){
+        if(decoded1[i] != decoded2[i]){
+            if(mismatch<10)
+                printf(" mismatch at i=%u: dec1=%d, dec2=%d\n", i, decoded1[i], decoded2[i]);
+            mismatch++;
+        }
+    }
+    if(mismatch==0){
+        printf(" decode1 & decode2 match!\n");
+        // verify with original
+        int error=0;
+        for(unsigned i=0;i<TEST_SIZE;i++){
+            if(decoded1[i] != raw_values[i]){
+                if(error<10)
+                  printf(" raw mismatch at i=%u: raw=%d, dec=%d\n", i,raw_values[i], decoded1[i]);
+                error++;
+            }
+        }
+        if(error==0) printf(" and match raw data!\n");
+        else printf(" total %d raw mismatch\n", error);
+    } else {
+        printf(" total mismatch=%d\n", mismatch);
+    }
+    printf("\n");
+}
+
 /*
  * 执行一次测试案例：传入位宽 b 和是否产生异常，
  * 生成原始数据、编码、解码，并比较 p4nd1dec256v32 与 p4nd1dec256w32 两个版本的解码结果。
@@ -431,6 +547,13 @@ void run_test(unsigned b, int with_exception, unsigned TEST_SIZE,
     unsigned char* copy = encoded_data;
     xvbxget32(copy, start);
     unsigned char encoded_b = copy[0];  // 编码后的第一个字节为位宽
+    if((encoded_b & 0x40)) {
+        encoded_b &= 0x3f;
+    } else {
+        if(encoded_b & 0x80) {
+            encoded_b &= 0x7f;
+        }
+    }
     printf("  编码参数: 位宽 b=%u, 起始值 start=%u, 编码大小=%u字节\n", encoded_b, start, encoded_size);
 
     // 清空解码缓冲区
@@ -480,6 +603,27 @@ void run_test(unsigned b, int with_exception, unsigned TEST_SIZE,
         printf("...\n");
     }
     printf("\n");
+}
+void testZigZag()
+{
+    const unsigned TEST_SIZE=512; //or512
+    unsigned *raw_values= (unsigned*) malloc(TEST_SIZE*sizeof(unsigned));
+    unsigned *decoded1=  (unsigned*) malloc(TEST_SIZE*sizeof(unsigned));
+    unsigned *decoded2=  (unsigned*) malloc(TEST_SIZE*sizeof(unsigned));
+    unsigned char* encoded_data= (unsigned char*) malloc(TEST_SIZE*4+ 10); //maybe
+
+    srand((unsigned)time(NULL));
+    printf("开始测试 p4nzdec256v32...\n");
+
+    for(unsigned b=0; b<=32; b++){
+        run_testZigzag(b,0, TEST_SIZE, raw_values, encoded_data, decoded1, decoded2);
+        run_testZigzag(b,1, TEST_SIZE, raw_values, encoded_data, decoded1, decoded2);
+    }
+
+    free(raw_values);
+    free(decoded1);
+    free(decoded2);
+    free(encoded_data);
 }
 
 /*
@@ -772,6 +916,7 @@ bool test_until_b1_achieved_improved() {
 
 int main() {
     test_p4nd1dec256v32();
+    testZigZag();
     //test_until_b1_achieved_improved();
     return 0;
 }

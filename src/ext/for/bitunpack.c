@@ -30,6 +30,7 @@
 #include "vint.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #define PAD8(_x_) (((_x_)+7)/8)
 
@@ -702,10 +703,14 @@ static void applyException_8bits(uint8_t xm8, uint32_t** pPEX, int nb, uint32_t 
   }
   *pPEX = ex;
 }
-
+static inline uint32_t zigzagDecode_scalar(uint32_t x) {
+  // (x>>1) ^ -((x & 1) )
+  return (x >> 1) ^ -(x & 1);
+}
 static void bitunblk256v32_scalar_template(uint32_t** pIn, uint32_t** pOut, int expansions_count,
                                            const uint8_t* SHIFT_HI, const uint8_t* SHIFT_LO,
-                                           const uint8_t* READ_FLAG, uint32_t mask, int nb) {
+                                           const uint8_t* READ_FLAG, uint32_t mask, int nb,
+                                           bool isZigZag) {
   const uint32_t* oldp = NULL; // pointer to current block data
   uint32_t ov[8], tmp[8];
 
@@ -742,7 +747,11 @@ static void bitunblk256v32_scalar_template(uint32_t** pIn, uint32_t** pOut, int 
       // Write out the current 8 results
       uint32_t* outp = *pOut;
       for (int j = 0; j < 8; j++) {
-          outp[j] = ov[j];
+          if (isZigZag) {
+              outp[j] = zigzagDecode_scalar(ov[j]);
+          } else {
+              outp[j] = ov[j];
+          }
       }
       *pOut += 8;
   }
@@ -760,8 +769,8 @@ static void bitunblk256v32_scalar_template(uint32_t** pIn, uint32_t** pOut, int 
 static void bitunblk256v32_scalarBlock_ex_template(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
                                                    unsigned char** pBB, int expansions_count,
                                                    const uint8_t* SHIFT_HI, const uint8_t* SHIFT_LO,
-                                                   const uint8_t* READ_FLAG, uint32_t mask,
-                                                   int nb) {
+                                                   const uint8_t* READ_FLAG, uint32_t mask, int nb,
+                                                   bool isZigZag) {
   const uint32_t* oldp = NULL; // leftover block (previous batch)
 
   for (int k = 0; k < expansions_count; k++) {
@@ -811,13 +820,17 @@ static void bitunblk256v32_scalarBlock_ex_template(uint32_t** pIn, uint32_t** pO
       // Write out this batch of 8 results
       uint32_t* outp = *pOut;
       for (int j = 0; j < 8; j++) {
-          outp[j] = ov[j];
+          if (isZigZag) {
+              outp[j] = zigzagDecode_scalar(ov[j]);
+          } else {
+              outp[j] = ov[j];
+          }
       }
       *pOut += 8;
   }
 }
 static void bitunpack256v32_0_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                     unsigned char** pBB) {
+                                     unsigned char** pBB, bool isZigZag) {
   uint32_t* op = *pOut;
   for (int i = 0; i < 32; i++) {
       // Read bitmap if exists, otherwise default to 0
@@ -833,7 +846,11 @@ static void bitunpack256v32_0_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
 
       // Directly write 8 values using a loop to avoid repeated memory copy calls
       for (int j = 0; j < 8; j++) {
-          op[j] = ov[j];
+          if (isZigZag) {
+              op[j] = zigzagDecode_scalar(ov[j]);
+          } else {
+              op[j] = ov[j];
+          }
       }
       op += 8;
   }
@@ -841,7 +858,7 @@ static void bitunpack256v32_0_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
 }
 
 static void bitunpack256v32_1_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                     unsigned char** pBB) {
+                                     unsigned char** pBB, bool isZigZag) {
   const int nb1 = 1;
   const uint32_t mask1 = 1; // 0x1
   const int expansions_count_1 = 32;
@@ -854,15 +871,15 @@ static void bitunpack256v32_1_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
                                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_1, SHIFT_HI_1,
-                                             SHIFT_LO_1, READ_FLAG_1, mask1, nb1);
+                                             SHIFT_LO_1, READ_FLAG_1, mask1, nb1, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_1, SHIFT_HI_1, SHIFT_LO_1,
-                                     READ_FLAG_1, mask1, nb1);
+                                     READ_FLAG_1, mask1, nb1, isZigZag);
   }
 }
 
 static void bitunpack256v32_2_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                     unsigned char** pBB) {
+                                     unsigned char** pBB, bool isZigZag) {
   const int nb2 = 2;
   const uint32_t mask2 = (1u << nb2) - 1; // 0x3
   const int expansions_count_2 = 16;
@@ -872,18 +889,19 @@ static void bitunpack256v32_2_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
   if (pPEX != NULL && pBB != NULL) {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_2,
-                                                 SHIFT_HI_2, SHIFT_LO_2, READ_FLAG_2, mask2, nb2);
+                                                 SHIFT_HI_2, SHIFT_LO_2, READ_FLAG_2, mask2, nb2,
+                                                 isZigZag);
       }
   } else {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_2, SHIFT_HI_2, SHIFT_LO_2,
-                                         READ_FLAG_2, mask2, nb2);
+                                         READ_FLAG_2, mask2, nb2, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_3_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                     unsigned char** pBB) {
+                                     unsigned char** pBB, bool isZigZag) {
   const int nb3 = 3;
   const uint32_t mask3 = (1u << nb3) - 1; // 0x7
   const int expansions_count_3 = 32;
@@ -896,15 +914,15 @@ static void bitunpack256v32_3_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
                                           0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_3, SHIFT_HI_3,
-                                             SHIFT_LO_3, READ_FLAG_3, mask3, nb3);
+                                             SHIFT_LO_3, READ_FLAG_3, mask3, nb3, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_3, SHIFT_HI_3, SHIFT_LO_3,
-                                     READ_FLAG_3, mask3, nb3);
+                                     READ_FLAG_3, mask3, nb3, isZigZag);
   }
 }
 
 static void bitunpack256v32_4_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                     unsigned char** pBB) {
+                                     unsigned char** pBB, bool isZigZag) {
   const uint32_t mask4 = (1u << 4) - 1; // 0xF
   const int nb = 4;                     // base bits
   const int expansions_count = 8;
@@ -915,18 +933,18 @@ static void bitunpack256v32_4_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
   if (pPEX != NULL && pBB != NULL) {
       for (int i = 0; i < 4; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count, SHIFT_HI_4,
-                                                 SHIFT_LO_4, READ_FLAG_4, mask4, nb);
+                                                 SHIFT_LO_4, READ_FLAG_4, mask4, nb, isZigZag);
       }
   } else {
       for (int i = 0; i < 4; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count, SHIFT_HI_4, SHIFT_LO_4,
-                                         READ_FLAG_4, mask4, nb);
+                                         READ_FLAG_4, mask4, nb, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_5_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                     unsigned char** pBB) {
+                                     unsigned char** pBB, bool isZigZag) {
   const int nb5 = 5;
   const uint32_t mask5 = (1u << nb5) - 1; // 0x1F
   const int expansions_count_5 = 32;
@@ -939,14 +957,14 @@ static void bitunpack256v32_5_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
                                           0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_5, SHIFT_HI_5,
-                                             SHIFT_LO_5, READ_FLAG_5, mask5, nb5);
+                                             SHIFT_LO_5, READ_FLAG_5, mask5, nb5, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_5, SHIFT_HI_5, SHIFT_LO_5,
-                                     READ_FLAG_5, mask5, nb5);
+                                     READ_FLAG_5, mask5, nb5, isZigZag);
   }
 }
 static void bitunpack256v32_6_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                     unsigned char** pBB) {
+                                     unsigned char** pBB, bool isZigZag) {
   const int nb6 = 6;
   const uint32_t mask6 = (1u << nb6) - 1; // 0x3F
   const int expansions_count_6 = 16;
@@ -957,17 +975,18 @@ static void bitunpack256v32_6_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
   if (pPEX != NULL && pBB != NULL) {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_6,
-                                                 SHIFT_HI_6, SHIFT_LO_6, READ_FLAG_6, mask6, nb6);
+                                                 SHIFT_HI_6, SHIFT_LO_6, READ_FLAG_6, mask6, nb6,
+                                                 isZigZag);
       }
   } else {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_6, SHIFT_HI_6, SHIFT_LO_6,
-                                         READ_FLAG_6, mask6, nb6);
+                                         READ_FLAG_6, mask6, nb6, isZigZag);
       }
   }
 }
 static void bitunpack256v32_7_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                     unsigned char** pBB) {
+                                     unsigned char** pBB, bool isZigZag) {
   const int nb7 = 7;
   const uint32_t mask7 = (1u << nb7) - 1; // 0x7F
   const int expansions_count = 32;
@@ -980,14 +999,14 @@ static void bitunpack256v32_7_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
                                           0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count, SHIFT_HI_7,
-                                             SHIFT_LO_7, READ_FLAG_7, mask7, nb7);
+                                             SHIFT_LO_7, READ_FLAG_7, mask7, nb7, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count, SHIFT_HI_7, SHIFT_LO_7,
-                                     READ_FLAG_7, mask7, nb7);
+                                     READ_FLAG_7, mask7, nb7, isZigZag);
   }
 }
 static void bitunpack256v32_8_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                     unsigned char** pBB) {
+                                     unsigned char** pBB, bool isZigZag) {
   const int nb8 = 8;
   const uint32_t mask8 = (1u << nb8) - 1; // 0xFF
   const int expansions_count_8 = 4;
@@ -998,18 +1017,19 @@ static void bitunpack256v32_8_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
   if (pPEX != NULL && pBB != NULL) {
       for (int i = 0; i < 8; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_8,
-                                                 SHIFT_HI_8, SHIFT_LO_8, READ_FLAG_8, mask8, nb8);
+                                                 SHIFT_HI_8, SHIFT_LO_8, READ_FLAG_8, mask8, nb8,
+                                                 isZigZag);
       }
   } else {
       for (int i = 0; i < 8; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_8, SHIFT_HI_8, SHIFT_LO_8,
-                                         READ_FLAG_8, mask8, nb8);
+                                         READ_FLAG_8, mask8, nb8, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_9_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                     unsigned char** pBB) {
+                                     unsigned char** pBB, bool isZigZag) {
   const int nb9 = 9;
   const uint32_t mask9 = (1u << nb9) - 1; // 0x1FF
   const int expansions_count_9 = 32;
@@ -1023,14 +1043,14 @@ static void bitunpack256v32_9_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t**
 
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_9, SHIFT_HI_9,
-                                             SHIFT_LO_9, READ_FLAG_9, mask9, nb9);
+                                             SHIFT_LO_9, READ_FLAG_9, mask9, nb9, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_9, SHIFT_HI_9, SHIFT_LO_9,
-                                     READ_FLAG_9, mask9, nb9);
+                                     READ_FLAG_9, mask9, nb9, isZigZag);
   }
 }
 static void bitunpack256v32_10_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const int nb10 = 10;
   const uint32_t mask10 = (1u << nb10) - 1; // 0x3FF
   const int expansions_count_10 = 16;
@@ -1043,18 +1063,18 @@ static void bitunpack256v32_10_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_10,
                                                  SHIFT_HI_10, SHIFT_LO_10, READ_FLAG_10, mask10,
-                                                 nb10);
+                                                 nb10, isZigZag);
       }
   } else {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_10, SHIFT_HI_10, SHIFT_LO_10,
-                                         READ_FLAG_10, mask10, nb10);
+                                         READ_FLAG_10, mask10, nb10, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_11_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const int nb11 = 11;
   const uint32_t mask11 = (1u << nb11) - 1; // 0x7FF
   const int expansions_count_11 = 32;
@@ -1068,15 +1088,15 @@ static void bitunpack256v32_11_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
 
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_11, SHIFT_HI_11,
-                                             SHIFT_LO_11, READ_FLAG_11, mask11, nb11);
+                                             SHIFT_LO_11, READ_FLAG_11, mask11, nb11, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_11, SHIFT_HI_11, SHIFT_LO_11,
-                                     READ_FLAG_11, mask11, nb11);
+                                     READ_FLAG_11, mask11, nb11, isZigZag);
   }
 }
 
 static void bitunpack256v32_12_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const int nb12 = 12;
   const uint32_t mask12 = (1u << nb12) - 1; // 0xFFF
   const int expansions_count_12 = 8;
@@ -1088,18 +1108,18 @@ static void bitunpack256v32_12_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
       for (int i = 0; i < 4; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_12,
                                                  SHIFT_HI_12, SHIFT_LO_12, READ_FLAG_12, mask12,
-                                                 nb12);
+                                                 nb12, isZigZag);
       }
   } else {
       for (int i = 0; i < 4; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_12, SHIFT_HI_12, SHIFT_LO_12,
-                                         READ_FLAG_12, mask12, nb12);
+                                         READ_FLAG_12, mask12, nb12, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_13_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const int nb13 = 13;
   const uint32_t mask13 = (1u << nb13) - 1; // 0x1FFF
   const int expansions_count_13 = 32;
@@ -1112,15 +1132,15 @@ static void bitunpack256v32_13_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
                                            0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_13, SHIFT_HI_13,
-                                             SHIFT_LO_13, READ_FLAG_13, mask13, nb13);
+                                             SHIFT_LO_13, READ_FLAG_13, mask13, nb13, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_13, SHIFT_HI_13, SHIFT_LO_13,
-                                     READ_FLAG_13, mask13, nb13);
+                                     READ_FLAG_13, mask13, nb13, isZigZag);
   }
 }
 
 static void bitunpack256v32_14_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const int nb14 = 14;
   const uint32_t mask14 = (1u << nb14) - 1; // 0x3FFF
   const int expansions_count_14 = 16;
@@ -1132,18 +1152,18 @@ static void bitunpack256v32_14_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_14,
                                                  SHIFT_HI_14, SHIFT_LO_14, READ_FLAG_14, mask14,
-                                                 nb14);
+                                                 nb14, isZigZag);
       }
   } else {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_14, SHIFT_HI_14, SHIFT_LO_14,
-                                         READ_FLAG_14, mask14, nb14);
+                                         READ_FLAG_14, mask14, nb14, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_15_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const int nb15 = 15;
   const uint32_t mask15 = (1u << 15) - 1; // 0x7FFF
 
@@ -1161,15 +1181,15 @@ static void bitunpack256v32_15_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
                                            0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_15, SHIFT_HI_15,
-                                             SHIFT_LO_15, READ_FLAG_15, mask15, nb15);
+                                             SHIFT_LO_15, READ_FLAG_15, mask15, nb15, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_15, SHIFT_HI_15, SHIFT_LO_15,
-                                     READ_FLAG_15, mask15, nb15);
+                                     READ_FLAG_15, mask15, nb15, isZigZag);
   }
 }
 
 static void bitunpack256v32_16_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const int nb16 = 16;
   const uint32_t mask16 = (1u << 16) - 1; // 0xFFFF
 
@@ -1183,18 +1203,18 @@ static void bitunpack256v32_16_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
       for (int i = 0; i < 16; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count,
                                                  SHIFT_HI_16, SHIFT_LO_16, READ_FLAG_16, mask16,
-                                                 nb16);
+                                                 nb16, isZigZag);
       }
   } else {
       for (int i = 0; i < 16; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count, SHIFT_HI_16, SHIFT_LO_16,
-                                         READ_FLAG_16, mask16, nb16);
+                                         READ_FLAG_16, mask16, nb16, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_17_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const int nb17 = 17;
   const uint32_t mask17 = (1u << 17) - 1; // 0x1FFFF
 
@@ -1212,15 +1232,15 @@ static void bitunpack256v32_17_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
                                            1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_17, SHIFT_HI_17,
-                                             SHIFT_LO_17, READ_FLAG_17, mask17, nb17);
+                                             SHIFT_LO_17, READ_FLAG_17, mask17, nb17, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_17, SHIFT_HI_17, SHIFT_LO_17,
-                                     READ_FLAG_17, mask17, nb17);
+                                     READ_FLAG_17, mask17, nb17, isZigZag);
   }
 }
 
 static void bitunpack256v32_18_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   // base bits & mask
   const int nb18 = 18;
   const uint32_t mask18 = (1u << 18) - 1; // 0x3FFFF
@@ -1241,18 +1261,18 @@ static void bitunpack256v32_18_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_18,
                                                  SHIFT_HI_18, SHIFT_LO_18, READ_FLAG_18, mask18,
-                                                 nb18);
+                                                 nb18, isZigZag);
       }
   } else {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_18, SHIFT_HI_18, SHIFT_LO_18,
-                                         READ_FLAG_18, mask18, nb18);
+                                         READ_FLAG_18, mask18, nb18, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_19_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   // base bits & mask
   const int nb19 = 19;
   const uint32_t mask19 = (1u << 19) - 1; // 0x7FFFF
@@ -1269,15 +1289,15 @@ static void bitunpack256v32_19_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
                                            1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_19, SHIFT_HI_19,
-                                             SHIFT_LO_19, READ_FLAG_19, mask19, nb19);
+                                             SHIFT_LO_19, READ_FLAG_19, mask19, nb19, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_19, SHIFT_HI_19, SHIFT_LO_19,
-                                     READ_FLAG_19, mask19, nb19);
+                                     READ_FLAG_19, mask19, nb19, isZigZag);
   }
 }
 
 static void bitunpack256v32_20_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   // base bits & mask
   const int nb20 = 20;
   const uint32_t mask20 = (1u << 20) - 1; // 0xFFFFF
@@ -1294,18 +1314,18 @@ static void bitunpack256v32_20_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
       for (int i = 0; i < 4; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_20,
                                                  SHIFT_HI_20, SHIFT_LO_20, READ_FLAG_20, mask20,
-                                                 nb20);
+                                                 nb20, isZigZag);
       }
   } else {
       for (int i = 0; i < 4; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_20, SHIFT_HI_20, SHIFT_LO_20,
-                                         READ_FLAG_20, mask20, nb20);
+                                         READ_FLAG_20, mask20, nb20, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_21_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   // base bits & mask
   const uint32_t mask21 = (1u << 21) - 1; // 0x1FFFFF
   const int nb21 = 21;
@@ -1326,15 +1346,15 @@ static void bitunpack256v32_21_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
 
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_21, SHIFT_HI_21,
-                                             SHIFT_LO_21, READ_FLAG_21, mask21, nb21);
+                                             SHIFT_LO_21, READ_FLAG_21, mask21, nb21, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_21, SHIFT_HI_21, SHIFT_LO_21,
-                                     READ_FLAG_21, mask21, nb21);
+                                     READ_FLAG_21, mask21, nb21, isZigZag);
   }
 }
 
 static void bitunpack256v32_22_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   // base bits & mask
   const uint32_t mask22 = (1u << 22) - 1; // 0x3FFFFF
   const int nb22 = 22;
@@ -1361,18 +1381,18 @@ static void bitunpack256v32_22_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_22,
                                                  SHIFT_HI_22, SHIFT_LO_22, READ_FLAG_22, mask22,
-                                                 nb22);
+                                                 nb22, isZigZag);
       }
   } else {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_22, SHIFT_HI_22, SHIFT_LO_22,
-                                         READ_FLAG_22, mask22, nb22);
+                                         READ_FLAG_22, mask22, nb22, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_23_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   // base bits & mask
   const int nb23 = 23;
   const uint32_t mask23 = (1u << 23) - 1; // 0x7FFFFF
@@ -1394,14 +1414,14 @@ static void bitunpack256v32_23_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
 
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_23, SHIFT_HI_23,
-                                             SHIFT_LO_23, READ_FLAG_23, mask23, nb23);
+                                             SHIFT_LO_23, READ_FLAG_23, mask23, nb23, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_23, SHIFT_HI_23, SHIFT_LO_23,
-                                     READ_FLAG_23, mask23, nb23);
+                                     READ_FLAG_23, mask23, nb23, isZigZag);
   }
 }
 static void bitunpack256v32_24_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   // base bits & mask
   const int nb24 = 24;
   const uint32_t mask24 = (1u << 24) - 1; // 0xFFFFFF
@@ -1423,18 +1443,18 @@ static void bitunpack256v32_24_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
       for (int i = 0; i < 8; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_24,
                                                  SHIFT_HI_24, SHIFT_LO_24, READ_FLAG_24, mask24,
-                                                 nb24);
+                                                 nb24, isZigZag);
       }
   } else {
       for (int i = 0; i < 8; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_24, SHIFT_HI_24, SHIFT_LO_24,
-                                         READ_FLAG_24, mask24, nb24);
+                                         READ_FLAG_24, mask24, nb24, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_25_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   // mask & base bits
   const uint32_t mask25 = (1u << 25) - 1; // 0x1FFFFFF
   const int nb25 = 25;
@@ -1478,16 +1498,16 @@ static void bitunpack256v32_25_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_25,
                                                  SHIFT_HI_25, SHIFT_LO_25, READ_FLAG_25, mask25,
-                                                 nb25);
+                                                 nb25, isZigZag);
       }
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_25, SHIFT_HI_25, SHIFT_LO_25,
-                                     READ_FLAG_25, mask25, nb25);
+                                     READ_FLAG_25, mask25, nb25, isZigZag);
   }
 }
 
 static void bitunpack256v32_26_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   // mask & base bits
   const uint32_t mask26 = (1u << 26) - 1; // 0x3FFFFFF
   const int nb26 = 26;
@@ -1520,18 +1540,18 @@ static void bitunpack256v32_26_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_26,
                                                  SHIFT_HI_26, SHIFT_LO_26, READ_FLAG_26, mask26,
-                                                 nb26);
+                                                 nb26, isZigZag);
       }
   } else {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_26, SHIFT_HI_26, SHIFT_LO_26,
-                                         READ_FLAG_26, mask26, nb26);
+                                         READ_FLAG_26, mask26, nb26, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_27_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   // mask & base bits
   const uint32_t mask27 = (1u << 27) - 1; // 0x7FFFFFF
   const int nb27 = 27;
@@ -1573,16 +1593,16 @@ static void bitunpack256v32_27_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
           /* #28 */ 1, /* #29 */ 1, /* #30 */ 1, /* #31 */ 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_27, SHIFT_HI_27,
-                                             SHIFT_LO_27, READ_FLAG_27, mask27, nb27);
+                                             SHIFT_LO_27, READ_FLAG_27, mask27, nb27, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count_27, SHIFT_HI_27, SHIFT_LO_27,
-                                     READ_FLAG_27, mask27, nb27);
+                                     READ_FLAG_27, mask27, nb27, isZigZag);
   }
 }
 static void bitunpack256v32_28_scalar(
         uint32_t** pIn, uint32_t** pOut,
-        uint32_t** pPEX,     // Optional parameter, non-NULL for extended version
-        unsigned char** pBB) // Optional parameter, non-NULL for extended version
+        uint32_t** pPEX,                    // Optional parameter, non-NULL for extended version
+        unsigned char** pBB, bool isZigZag) // Optional parameter, non-NULL for extended version
 {
   // Common constant definitions
   const uint32_t mask28 = (1u << 28) - 1; // 0xFFFFFFF
@@ -1598,19 +1618,19 @@ static void bitunpack256v32_28_scalar(
       for (int i = 0; i < 4; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count_28,
                                                  SHIFT_HI_28, SHIFT_LO_28, READ_FLAG_28, mask28,
-                                                 nb28);
+                                                 nb28, isZigZag);
       }
   } else {
       // Call non-extended template, also each call outputs 64 values, loop 4 times to get 256
       for (int i = 0; i < 4; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count_28, SHIFT_HI_28, SHIFT_LO_28,
-                                         READ_FLAG_28, mask28, nb28);
+                                         READ_FLAG_28, mask28, nb28, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_29_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const uint32_t mask29 = (1U << 29) - 1; // 0x1FFFFFFF
   const int expansions_count = 32;
   static const uint8_t SHIFT_HI_29[32] = {0,  29, 26, 23, 20, 17, 14, 11, 8, 5, 2,
@@ -1623,15 +1643,15 @@ static void bitunpack256v32_29_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
                                            1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count, SHIFT_HI_29,
-                                             SHIFT_LO_29, READ_FLAG_29, mask29, 29);
+                                             SHIFT_LO_29, READ_FLAG_29, mask29, 29, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count, SHIFT_HI_29, SHIFT_LO_29,
-                                     READ_FLAG_29, mask29, 29);
+                                     READ_FLAG_29, mask29, 29, isZigZag);
   }
 }
 
 static void bitunpack256v32_30_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const uint32_t mask30 = (1U << 30) - 1; // 0x3FFFFFFF
   const int expansions_count = 16;
   static const uint8_t SHIFT_HI_30[16] = {0,  30, 28, 26, 24, 22, 20, 18,
@@ -1642,19 +1662,19 @@ static void bitunpack256v32_30_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
   if (pPEX != NULL && pBB != NULL) {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count,
-                                                 SHIFT_HI_30, SHIFT_LO_30, READ_FLAG_30, mask30,
-                                                 30);
+                                                 SHIFT_HI_30, SHIFT_LO_30, READ_FLAG_30, mask30, 30,
+                                                 isZigZag);
       }
   } else {
       for (int i = 0; i < 2; i++) {
           bitunblk256v32_scalar_template(pIn, pOut, expansions_count, SHIFT_HI_30, SHIFT_LO_30,
-                                         READ_FLAG_30, mask30, 30);
+                                         READ_FLAG_30, mask30, 30, isZigZag);
       }
   }
 }
 
 static void bitunpack256v32_31_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t** pPEX,
-                                      unsigned char** pBB) {
+                                      unsigned char** pBB, bool isZigZag) {
   const uint32_t mask31 = (1U << 31) - 1; // 0x7FFFFFFF
   const int expansions_count = 32;
   // Construct parameter arrays:
@@ -1671,17 +1691,17 @@ static void bitunpack256v32_31_scalar(uint32_t** pIn, uint32_t** pOut, uint32_t*
                                         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0};
   if (pPEX != NULL && pBB != NULL) {
       bitunblk256v32_scalarBlock_ex_template(pIn, pOut, pPEX, pBB, expansions_count, SHIFT_HI,
-                                             SHIFT_LO, READ_FLAG, mask31, 31);
+                                             SHIFT_LO, READ_FLAG, mask31, 31, isZigZag);
   } else {
       bitunblk256v32_scalar_template(pIn, pOut, expansions_count, SHIFT_HI, SHIFT_LO, READ_FLAG,
-                                     mask31, 31);
+                                     mask31, 31, isZigZag);
   }
 }
 
 static void bitunpack256v32_32_scalar(
         uint32_t** pIn, uint32_t** pOut,
-        uint32_t** pPEX,     // Optional parameter, non-NULL for extended version
-        unsigned char** pBB) // Optional parameter, non-NULL for extended version
+        uint32_t** pPEX,                    // Optional parameter, non-NULL for extended version
+        unsigned char** pBB, bool isZigZag) // Optional parameter, non-NULL for extended version
 {
   uint32_t* ip = *pIn;
   uint32_t* op = *pOut;
@@ -1702,6 +1722,11 @@ static void bitunpack256v32_32_scalar(
               applyException_8bits(xm8, pPEX, nb, op);
           }
       }
+      if (isZigZag) {
+          for (int j = 0; j < 8; j++) {
+              op[j] = zigzagDecode_scalar(op[j]);
+          }
+      }
       op += 8;
   }
   *pIn = ip;
@@ -1709,7 +1734,7 @@ static void bitunpack256v32_32_scalar(
 }
 
 // Define function pointer type for unpacking functions
-typedef void (*unpack_func_t)(uint32_t**, uint32_t**, unsigned**, unsigned char**);
+typedef void (*unpack_func_t)(uint32_t**, uint32_t**, unsigned**, unsigned char**, bool);
 
 // Array of function pointers for each bit width (0 to 32)
 static unpack_func_t unpack_funcs[33] = {
@@ -1732,10 +1757,11 @@ static unpack_func_t unpack_funcs[33] = {
  * @param b    Bit width for each integer, this example only demonstrates the b=8 branch
  * @return     Returns the next readable input position after decompression (consistent with original logic)
  */
-unsigned char* bitunpack256scalarv32(const unsigned char* __restrict in, unsigned n,
-                                     unsigned* __restrict out, unsigned b) {
+unsigned char* bitunpack256scalarv32_withzigzag(const unsigned char* __restrict in, unsigned n,
+                                                unsigned* __restrict out, unsigned b,
+                                                bool isZigZag) {
   // Debug output (optional, can be removed in production)
-  //printf("bitunpack256scalarv32 b=%d bits=%d\n", b, b & 0x3f);
+  //printf("bitunpack256scalarv32_withzigzag b=%d bits=%d isZigZag=%d\n", b, b & 0x3f, isZigZag);
 
   // Calculate input pointer offset
   unsigned char* ip = (unsigned char*)(in + PAD8(256 * b));
@@ -1747,12 +1773,23 @@ unsigned char* bitunpack256scalarv32(const unsigned char* __restrict in, unsigne
   unsigned bits = b & 0x3f;
   // Execute unpacking if b is in valid range
   if (bits <= 32) {
-      unpack_funcs[bits](&pIn32, &pOut32, NULL, NULL);
+      unpack_funcs[bits](&pIn32, &pOut32, NULL, NULL, isZigZag);
   }
 
   return ip;
 }
+unsigned char* bitunpack256scalarv32(const unsigned char* __restrict in, unsigned n,
+                                     unsigned* __restrict out, unsigned b) {
+  // Debug output (optional, can be removed in production)
+  //printf("bitunpack256scalarv32 b=%d bits=%d\n", b, b & 0x3f);
 
+  // Calculate input pointer offset
+  unsigned char* ip = (unsigned char*)(in + PAD8(256 * b));
+
+  bitunpack256scalarv32_withzigzag(in, n, out, b, false);
+
+  return ip;
+}
 unsigned char* _bitd1unpack256scalarv32(const unsigned char* __restrict in, unsigned n,
                                         unsigned* __restrict out, unsigned start, unsigned b,
                                         unsigned* __restrict pex, unsigned char* bb) {
@@ -1761,7 +1798,7 @@ unsigned char* _bitd1unpack256scalarv32(const unsigned char* __restrict in, unsi
   if (!deltas) return NULL;
 
   const unsigned char* orig_in = in;
-  in = _bitunpack256scalarv32(in, n, deltas, b, pex, bb);
+  in = _bitunpack256scalarv32(in, n, deltas, b, pex, bb, false);
 
   unsigned running_sum = start;
   for (unsigned i = 0; i < n; ++i) {
@@ -1795,9 +1832,9 @@ unsigned char* bitd1unpack256scalarv32(const unsigned char* __restrict in, unsig
 
 unsigned char* _bitunpack256scalarv32(const unsigned char* __restrict in, unsigned n,
                                       unsigned* __restrict out, unsigned b,
-                                      unsigned* __restrict pex, unsigned char* bb) {
+                                      unsigned* __restrict pex, unsigned char* bb, bool isZigZag) {
   // Debug output (optional, can be removed in production)
-  //printf("_bitunpack256scalarv32 bits=%d\n", b & 0x3f);
+  //printf("_bitunpack256scalarv32 bits=%d isZigZag=%d\n", b & 0x3f, isZigZag);
 
   // Calculate input pointer offset
   unsigned char* ip = (unsigned char*)(in + PAD8(256 * b));
@@ -1811,10 +1848,49 @@ unsigned char* _bitunpack256scalarv32(const unsigned char* __restrict in, unsign
   unsigned bits = b & 0x3f;
   // Execute unpacking if b is in valid range
   if (bits <= 32) {
-      unpack_funcs[bits](&pIn32, &pOut32, &pPEX, &pBB);
+      unpack_funcs[bits](&pIn32, &pOut32, &pPEX, &pBB, isZigZag);
   }
 
   return ip;
+}
+
+unsigned char* bitzunpack256scalarv32(const unsigned char* __restrict in, unsigned n,
+                                      unsigned* __restrict out, unsigned start, unsigned b) {
+  // Debug output (optional, can be removed in production)
+  //printf("bitzunpack256scalarv32 b=%d bits=%d\n", b, b & 0x3f);
+  const unsigned char* _in = in;
+  unsigned deltas[n];
+
+  in = bitunpack256scalarv32_withzigzag(in, n, deltas, b, true);
+
+  unsigned running_sum = start;
+  for (unsigned i = 0; i < n; ++i) {
+      running_sum += deltas[i];
+      out[i] = running_sum;
+  }
+
+  return (unsigned char*)in;
+}
+unsigned char* _bitzunpack256scalarv32(const unsigned char* __restrict in, unsigned n,
+                                       unsigned* __restrict out, unsigned start, unsigned b,
+                                       unsigned* __restrict pex, unsigned char* bb) {
+  // Debug output (optional, can be removed in production)
+  //printf("_bitzunpack256scalarv32 bits=%d\n", b & 0x3f);
+
+  unsigned* deltas = (unsigned*)malloc(n * sizeof(unsigned));
+  if (!deltas) return NULL;
+
+  const unsigned char* orig_in = in;
+  in = _bitunpack256scalarv32(in, n, deltas, b, pex, bb, true);
+
+  unsigned running_sum = start;
+  for (unsigned i = 0; i < n; ++i) {
+      running_sum += deltas[i];
+      out[i] = running_sum;
+  }
+
+  free(deltas);
+  return (unsigned char*)in;
 }
 
 #define STOZ64(_op_, _ov_) _mm_storeu_si128(_op_++, _ov_); _mm_storeu_si128(_op_++, _ov_)
