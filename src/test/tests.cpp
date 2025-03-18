@@ -26,4 +26,5 @@ unittest tests[] = {{"analysis", testanalysis},
 #ifdef TEST_CONTRIB_LIBS
                     {"chinese", testchinese},
 #endif
+                    {"TestIndexReader2", testIndexReader2},
                     {"LastTest", NULL}};

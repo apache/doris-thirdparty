@@ -543,7 +543,7 @@ public:
   * @throws IOException if there is a low-level IO error
 	* @memory Caller must clean up
 	*/
-	virtual TermEnum* terms() = 0;
+	virtual TermEnum* terms(const void* io_ctx = nullptr) = 0;
 
 /** Returns an enumeration of all terms starting at a given term. If
   * the given term does not exist, the enumeration is positioned at the
@@ -553,7 +553,7 @@ public:
   * @throws IOException if there is a low-level IO error
 	* @memory Caller must clean up
 	*/
-	virtual TermEnum* terms(const Term* t) = 0;
+	virtual TermEnum* terms(const Term* t, const void* io_ctx = nullptr) = 0;
 
   /** Returns the number of documents containing the term <code>t</code>.
    * @throws IOException if there is a low-level IO error

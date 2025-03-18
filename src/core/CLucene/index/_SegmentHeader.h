@@ -467,9 +467,9 @@ public:
   ///Returns all file names managed by this SegmentReader
   void files(std::vector<std::string>& retarray);
   ///Returns an enumeration of all the Terms and TermInfos in the set.
-  TermEnum* terms();
+  TermEnum* terms(const void* io_ctx = nullptr);
   ///Returns an enumeration of terms starting at or after the named term t
-  TermEnum* terms(const Term* t);
+  TermEnum* terms(const Term* t, const void* io_ctx = nullptr);
 
   ///Gets the document identified by n
   bool document(int32_t n, CL_NS(document)::Document& doc, const CL_NS(document)::FieldSelector* fieldSelector);
