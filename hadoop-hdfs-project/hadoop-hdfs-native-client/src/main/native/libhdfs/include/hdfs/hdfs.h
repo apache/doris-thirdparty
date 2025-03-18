@@ -362,7 +362,7 @@ extern  "C" {
      */
     LIBHDFS_EXTERNAL
     void hdfsBuilderSetUserName(struct hdfsBuilder *bld, const char *userName);
-    
+
     /**
     * Set the principal to use when connecting to the HDFS cluster.
     *
