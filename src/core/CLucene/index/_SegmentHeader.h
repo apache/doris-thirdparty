@@ -32,12 +32,13 @@ class SegmentReader;
 
 class TermDocsBuffer {
 public:
-  TermDocsBuffer(CL_NS(store)::IndexInput* freqStream, bool hasProx, IndexVersion indexVersion)
+  TermDocsBuffer(CL_NS(store)::IndexInput* freqStream, bool hasProx, IndexVersion indexVersion, bool compatibleRead)
       : docs_(PFOR_BLOCK_SIZE + 3),
         freqs_(PFOR_BLOCK_SIZE + 3),
         freqStream_(freqStream),
         hasProx_(hasProx),
-        indexVersion_(indexVersion) {
+        indexVersion_(indexVersion),
+        compatibleRead_(compatibleRead) {
   }
 
   ~TermDocsBuffer() {
@@ -83,6 +84,7 @@ private:
   CL_NS(store)::IndexInput* freqStream_ = nullptr;
 
   bool hasProx_ = false;
+  bool compatibleRead_ = false;
   IndexVersion indexVersion_ = IndexVersion::kV0; 
 };
 

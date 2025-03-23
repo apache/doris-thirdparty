@@ -18,9 +18,17 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "CLucene/SharedHeader.h"
+#include "CLucene/CLConfig.h"
+#include "CLucene/store/IndexOutput.h"
+#include "CLucene/store/IndexInput.h"
+#include <vector>
+CL_NS_DEF(util)
 
 size_t P4DEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict out);
 size_t P4NZDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict out);
 size_t P4ENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out);
 size_t P4NZENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out);
-
+void pfor_encode(store::IndexOutput* out, std::vector<uint32_t>& docDeltaBuffer, std::vector<uint32_t>& freqBuffer, bool has_prox);
+uint32_t pfor_decode(store::IndexInput* in, std::vector<uint32_t>& docs, std::vector<uint32_t>& freqs, bool has_prox, bool compatibleRead);
+CL_NS_END
