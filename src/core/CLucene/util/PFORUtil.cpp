@@ -132,7 +132,6 @@ size_t P4NZENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out)
 }
 void pfor_encode(store::IndexOutput* out, std::vector<uint32_t>& docDeltaBuffer, std::vector<uint32_t>& freqBuffer, bool has_prox) {
 #ifdef __AVX2__
-    printf("1\n");
     out->writeByte((char)index::CodeMode::kPfor256);
     out->writeVInt(docDeltaBuffer.size());
     std::vector<uint8_t> compress(4 * docDeltaBuffer.size() + PFOR_BLOCK_SIZE);
@@ -146,7 +145,6 @@ void pfor_encode(store::IndexOutput* out, std::vector<uint32_t>& docDeltaBuffer,
         out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
     }
 #elif (defined(__SSSE3__) || defined(__ARM_NEON))
-    printf("2\n");
     out->writeByte((char)index::CodeMode::kPfor128);
     out->writeVInt(docDeltaBuffer.size());
     std::vector<uint8_t> compress(4 * docDeltaBuffer.size() + PFOR_BLOCK_SIZE);
@@ -160,7 +158,6 @@ void pfor_encode(store::IndexOutput* out, std::vector<uint32_t>& docDeltaBuffer,
         out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
     }
 #else
-    printf("3\n");
     out->writeByte((char)index::CodeMode::kDefault);
     out->writeVInt(docDeltaBuffer.size());
     uint32_t lastDoc = 0;
@@ -205,7 +202,6 @@ uint32_t pfor_decode(store::IndexInput* in, std::vector<uint32_t>& docs, std::ve
 #elif (defined(__ARM_NEON))
             // if compatibleRead is true, means we are reading old version x86_64 index in arm64 platform.
             if (compatibleRead) {
-                printf("compatibleRead in ARM\n");
                 p4nd1dec256scalarv32(buf.data(), arraySize, docs.data());
             } else {
                 p4nd1dec32(buf.data(), arraySize, docs.data());
