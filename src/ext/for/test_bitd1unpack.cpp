@@ -196,12 +196,7 @@ static void generate_raw_signed_data_for_zigzag(unsigned *values,
         values[i] = x;
     }
 }
-/**
- * 对 b=0..32, with_exception=0 or 1:
- *   1) 生成 n=256(或512) 个 int32_t
- *   2) zigzag encode => store => bitpack => (similar to "encoded_data")
- *   3) zigzag decode => compare => check mismatch
- */
+#ifdef __AVX2__
 void run_testZigzag(unsigned b,
                     int with_exception,
                     unsigned TEST_SIZE,
@@ -270,7 +265,6 @@ void run_testZigzag(unsigned b,
     printf("\n");
 }
 
-#ifdef __AVX2__
 void run_test(unsigned b, int with_exception, unsigned TEST_SIZE,
               unsigned* raw_values, unsigned char* encoded_data,
               unsigned* decoded1, unsigned* decoded2) {
@@ -344,7 +338,6 @@ void run_test(unsigned b, int with_exception, unsigned TEST_SIZE,
     }
     printf("\n");
 }
-#endif
 
 void testZigZag()
 {
@@ -368,7 +361,6 @@ void testZigZag()
     free(encoded_data);
 }
 
-#ifdef __AVX2__
 void test_p4nd1dec256v32() {
     const unsigned TEST_SIZE = 512;
 
@@ -400,8 +392,8 @@ void test_p4nd1dec256v32() {
 int main() {
 #ifdef __AVX2__
     test_p4nd1dec256v32();
-#endif
     testZigZag();
     //test_until_b1_achieved_improved();
+#endif
     return 0;
 }
