@@ -915,7 +915,9 @@ bool test_until_b1_achieved_improved() {
 }
 
 int main() {
+#ifdef __AVX2__
     test_p4nd1dec256v32();
+#endif
     testZigZag();
     //test_until_b1_achieved_improved();
     return 0;
