@@ -488,7 +488,7 @@ message(STATUS "adding postbuild instruction to rename syms")
 	COMMAND ${CMAKE_C_COMPILER} ${CMAKE_C_FLAGS} -I${PROJECT_SOURCE_DIR} -I${PROJECT_BINARY_DIR} -c -o ${PROJECT_BINARY_DIR}/dllinit.o ${PROJECT_SOURCE_DIR}/exports/dllinit.c
 	COMMAND lld-link -nodefaultlib:libcmt -defaultlib:msvcrt ${CMAKE_LINKER_FLAGS} -errorlimit:0 -def:${PROJECT_BINARY_DIR}/renamesyms.def ${PROJECT_BINARY_DIR}/dllinit.o $<TARGET_FILE:${OpenBLAS_LIBNAME}_static> -wholearchive:$<TARGET_FILE:${OpenBLAS_LIBNAME}_static> -dll -out:$<TARGET_FILE_DIR:${OpenBLAS_LIBNAME}_static>/${OpenBLAS_LIBNAME}.dll -implib:$<TARGET_FILE_DIR:${OpenBLAS_LIBNAME}_static>/${OpenBLAS_LIBNAME}.dll.a
 	#if (${REMOVE_STATIC_LIB})
-		#file (REMOVE ${PROJECT_BINARY_DIR}/lib/${OpenBLAS_LIBNAME}.lib)
+		#file (REMOVE $<TARGET_FILE_DIR:${OpenBLAS_LIBNAME}_static>/${OpenBLAS_LIBNAME}.lib)
 	#endif ()
   )
   #endif ()
