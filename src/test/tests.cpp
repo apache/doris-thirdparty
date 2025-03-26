@@ -23,6 +23,7 @@ unittest tests[] = {{"analysis", testanalysis},
                     {"ByteArrayDataInput", testByteArrayDataInputSuite},
                     {"GrowableByteArrayDataOutput", testGrowableByteArrayDataOutputSuite},
                     {"TestUTF8Chars", testUTF8CharsSuite},
+                    {"testPFOR", testPFORSuite},
 #ifdef TEST_CONTRIB_LIBS
                     {"chinese", testchinese},
 #endif

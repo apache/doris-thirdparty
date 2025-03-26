@@ -92,7 +92,7 @@ CuSuite *testGrowableByteArrayDataOutputSuite(void);
 CuSuite *testICU(void);
 CuSuite *testUTF8CharsSuite(void);
 CuSuite *testIndexReader2(void);
-
+CuSuite *testPFORSuite(void);
 #ifdef TEST_CONTRIB_LIBS
 //CuSuite *testGermanAnalyzer(void);
 CuSuite *testchinese(void);
