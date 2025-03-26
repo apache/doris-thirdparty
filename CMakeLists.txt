@@ -77,6 +77,16 @@ set(SYMBOLPREFIX "" CACHE STRING  "Add a prefix to all exported symbol names in 
 
 set(SYMBOLSUFFIX "" CACHE STRING  "Add a suffix to all exported symbol names in the shared library, e.g. _64 for INTERFACE64 builds" )
 
+if (CMAKE_SYSTEM_NAME MATCHES "Windows" AND BUILD_SHARED_LIBS AND NOT ("${SYMBOLPREFIX}${SYMBOLSUFFIX}" STREQUAL ""))
+if (NOT BUILD_STATIC_LIBS)
+	message (STATUS "forcing build of a temporary static library for symbol renaming")
+	set (BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared library" FORCE)
+	set (BUILD_STATIC_LIBS ON CACHE BOOL "Build static library" FORCE)
+	set (DELETE_STATIC_LIBS 1)
+endif ()
+endif()
+
+
 #######
 if(BUILD_WITHOUT_LAPACK)
   set(NO_LAPACK 1)
@@ -379,7 +389,7 @@ if (BUILD_SHARED_LIBS AND BUILD_RELAPACK)
   endif()
 endif()
 
-if (BUILD_SHARED_LIBS AND NOT ${SYMBOLPREFIX}${SYMBOLSUFFIX} STREQUAL "")
+if (BUILD_SHARED_LIBS OR DELETE_STATIC_LIBS AND NOT ${SYMBOLPREFIX}${SYMBOLSUFFIX} STREQUAL "")
   if (NOT DEFINED ARCH)
     set(ARCH_IN "x86_64")
   else()
@@ -467,10 +477,26 @@ if (BUILD_SHARED_LIBS AND NOT ${SYMBOLPREFIX}${SYMBOLSUFFIX} STREQUAL "")
   else ()
 	  set (BZ 0)
   endif()
+
+  if (CMAKE_SYSTEM_NAME MATCHES "Windows")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+  #if (USE_PERL)
+message(STATUS "adding postbuild instruction to rename syms")
+  add_custom_command(TARGET ${OpenBLAS_LIBNAME}_static POST_BUILD
+	COMMAND perl ${PROJECT_SOURCE_DIR}/exports/gensymbol.pl "win2k" "${ARCH}" "${BU}" "${EXPRECISION_IN}" "${NO_CBLAS_IN}" "${NO_LAPACK_IN}" "${NO_LAPACKE_IN}" "${NEED2UNDERSCORES_IN}" "${ONLY_CBLAS_IN}" \"${SYMBOLPREFIX}\" \"${SYMBOLSUFFIX}\" "${BLD}" "${BBF16}" "${BS}" "${BD}" "${BC}" "${BZ}" > ${PROJECT_BINARY_DIR}/renamesyms.def
+	COMMAND ${CMAKE_C_COMPILER} ${CMAKE_C_FLAGS} -I${PROJECT_SOURCE_DIR} -I${PROJECT_BINARY_DIR} -c -o ${PROJECT_BINARY_DIR}/dllinit.o ${PROJECT_SOURCE_DIR}/exports/dllinit.c
+	COMMAND lld-link -nodefaultlib:libcmt -defaultlib:msvcrt ${CMAKE_LINKER_FLAGS} -errorlimit:0 -def:${PROJECT_BINARY_DIR}/renamesyms.def ${PROJECT_BINARY_DIR}/dllinit.o $<TARGET_FILE:${OpenBLAS_LIBNAME}_static> -wholearchive:$<TARGET_FILE:${OpenBLAS_LIBNAME}_static> -dll -out:$<TARGET_FILE_DIR:${OpenBLAS_LIBNAME}_static>/${OpenBLAS_LIBNAME}.dll -implib:$<TARGET_FILE_DIR:${OpenBLAS_LIBNAME}_static>/${OpenBLAS_LIBNAME}.dll.a
+	#if (${REMOVE_STATIC_LIB})
+		#file (REMOVE $<TARGET_FILE_DIR:${OpenBLAS_LIBNAME}_static>/${OpenBLAS_LIBNAME}.lib)
+	#endif ()
+  )
+  #endif ()
+  else ()
   if (NOT USE_PERL)
   add_custom_command(TARGET ${OpenBLAS_LIBNAME}_shared POST_BUILD
-	  COMMAND  ${PROJECT_SOURCE_DIR}/exports/gensymbol "objcopy" "${ARCH}" "${BU}" "${EXPRECISION_IN}" "${NO_CBLAS_IN}" "${NO_LAPACK_IN}" "${NO_LAPACKE_IN}" "${NEED2UNDERSCORES_IN}" "${ONLY_CBLAS_IN}" \"${SYMBOLPREFIX}\" \"${SYMBOLSUFFIX}\" "${BLD}" "${BBF16}" "${BS}" "${BD}" "${BC}" "${BZ}" > ${PROJECT_BINARY_DIR}/objcopy.def
-    COMMAND objcopy -v --redefine-syms ${PROJECT_BINARY_DIR}/objcopy.def  ${PROJECT_BINARY_DIR}/lib/lib${OpenBLAS_LIBNAME}.so
+	  COMMAND sh ${PROJECT_SOURCE_DIR}/exports/gensymbol "objcopy" "${ARCH}" "${BU}" "${EXPRECISION_IN}" "${NO_CBLAS_IN}" "${NO_LAPACK_IN}" "${NO_LAPACKE_IN}" "${NEED2UNDERSCORES_IN}" "${ONLY_CBLAS_IN}" \"${SYMBOLPREFIX}\" \"${SYMBOLSUFFIX}\" "${BLD}" "${BBF16}" "${BS}" "${BD}" "${BC}" "${BZ}" > ${PROJECT_BINARY_DIR}/objcopy.def
+    COMMAND objcopy -v --redefine-syms ${PROJECT_BINARY_DIR}/objcopy.def  ${PROJECT_BINARY_DIR}/lib/${OpenBLAS_LIBNAME}.so
     COMMENT "renaming symbols"
     )
   else()
@@ -480,6 +506,7 @@ if (BUILD_SHARED_LIBS AND NOT ${SYMBOLPREFIX}${SYMBOLSUFFIX} STREQUAL "")
     COMMENT "renaming symbols"
     )
   endif()
+endif()
 endif()
 
 if (BUILD_BENCHMARKS)
