@@ -22,8 +22,8 @@ unittest tests[] = {{"analysis", testanalysis},
                     {"IndexCompressV3", testIndexCompressV3},
                     {"ByteArrayDataInput", testByteArrayDataInputSuite},
                     {"GrowableByteArrayDataOutput", testGrowableByteArrayDataOutputSuite},
-                    {"testICU", testICU},
                     {"TestUTF8Chars", testUTF8CharsSuite},
+                    {"testPFOR", testPFORSuite},
 #ifdef TEST_CONTRIB_LIBS
                     {"chinese", testchinese},
 #endif

@@ -16,7 +16,7 @@ SOURCE_GROUP("search" ./search/*)
 SOURCE_GROUP("search-spans" ./search/spans/*)
 SOURCE_GROUP("store" ./store/*)
 SOURCE_GROUP("util" ./util/*)
-
+INCLUDE_DIRECTORIES( ${clucene_SOURCE_DIR}/src/ext/* )
 IF (BUILD_CONTRIBS_LIB)
     SET(test_contribs_lib_files ./contribs-lib/analysis/testChinese.cpp)
     SET(EXTRA_LIBS ${EXTRA_LIBS} clucene-contribs-lib)
@@ -111,6 +111,7 @@ SET(test_files ./tests.cpp
         ./util/TestStrConvert.cpp
         ./query/TestMultiPhraseQuery.cpp
         ./store/TestUTF8Chars.cpp
+        ./store/testPFOR.cpp
         ${test_HEADERS})
 IF (USE_SHARED_OBJECT_FILES)
     GET_SHARED_FILES(clucene_shared_Files)
