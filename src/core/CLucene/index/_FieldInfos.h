@@ -38,6 +38,7 @@ class FieldInfo :LUCENE_BASE{
 	IndexVersion indexVersion_ = IndexVersion::kV1;
 
 	bool storePayloads; // whether this field stores payloads together with term positions
+	bool compatibleRead; // whether index docid list is read cross platform(eg x86 and arm64)
 
 	//Func - Constructor
 	//       Initialises FieldInfo.
@@ -59,7 +60,8 @@ class FieldInfo :LUCENE_BASE{
 		const bool storePositionWithTermVector,
 		const bool omitNorms,
 		const bool hasProx,
-		const bool storePayloads);
+		const bool storePayloads,
+		const bool compatibleRead);
 
     //Func - Destructor
 	//Pre  - true
@@ -133,6 +135,7 @@ public:
 	void addIndexed(const TCHAR** names, const bool storeTermVectors, const bool storePositionWithTermVector, const bool storeOffsetWithTermVector);
 
 	bool hasProx();
+	bool compatibleRead();
 	IndexVersion getIndexVersion();
 
 	/**
@@ -169,14 +172,14 @@ public:
 									const bool storePositionWithTermVector = false,
 									const bool storeOffsetWithTermVector = false, const bool omitNorms = false,
 									const bool hasProx = false, const bool storePayloads = false,
-									IndexVersion indexVersion = IndexVersion::kV1);
+									IndexVersion indexVersion = IndexVersion::kV1, const bool compatibleRead = false);
 
   // was void
 	FieldInfo* addInternal(const TCHAR* name, const bool isIndexed, const bool storeTermVector,
 													const bool storePositionWithTermVector,
 													const bool storeOffsetWithTermVector, const bool omitNorms,
 													const bool hasProx, const bool storePayloads,
-													IndexVersion indexVersion = IndexVersion::kV1);
+													IndexVersion indexVersion = IndexVersion::kV1, const bool compatibleRead = false);
 
 	int32_t fieldNumber(const TCHAR* fieldName)const;
 	

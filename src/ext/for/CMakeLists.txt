@@ -84,8 +84,24 @@ foreach(SRC_FILE ${SRC_FILES})
     endif()
 endforeach()
 
+add_executable(test_bitd1unpack test_bitd1unpack.cpp)
+
+target_link_libraries(test_bitd1unpack ic)
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+    target_compile_options(test_bitd1unpack PRIVATE ${AVX2} -DAVX2_ON ${DEBUG})
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+    target_compile_options(test_bitd1unpack PRIVATE -march=armv8-a ${DEBUG})
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le")
+    target_compile_options(test_bitd1unpack PRIVATE -mcpu=power9 -mtune=power9 -D__SSSE3__ ${DEBUG})
+endif()
+
 set(LIB_DESTINATION ../)
 
 install(TARGETS ic
       DESTINATION ${LIB_DESTINATION}
       COMPONENT ext)
+
+install(TARGETS test_bitd1unpack
+      DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+      COMPONENT tests)

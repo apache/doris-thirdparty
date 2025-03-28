@@ -1198,33 +1198,15 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
 
         skipListWriter->resetSkip();
 
-        auto encode = [](IndexOutput* out, std::vector<uint32_t>& buffer, bool isDoc) {
-            std::vector<uint8_t> compress(4 * buffer.size() + PFOR_BLOCK_SIZE);
-            size_t size = 0;
-            if (isDoc) {
-                size = P4ENC(buffer.data(), buffer.size(), compress.data());
-            } else {
-                size = P4NZENC(buffer.data(), buffer.size(), compress.data());
-            }
-            out->writeVInt(size);
-            out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
-            buffer.resize(0);
-        };
-
         // Now termStates has numToMerge FieldMergeStates
         // which all share the same term.  Now we must
         // interleave the docID streams.
         while (numToMerge > 0) {
 
             if ((++df % skipInterval) == 0) {
-                freqOut->writeByte((char)CodeMode::kPfor);
-                freqOut->writeVInt(docDeltaBuffer.size());
-                encode(freqOut, docDeltaBuffer, true);
-                if (hasProx_) {
-                    encode(freqOut, freqBuffer, false);
-                    if (indexVersion_ >= IndexVersion::kV2) {
-                        PforUtil::encodePos(proxOut, posBuffer);
-                    }
+                PforUtil::pfor_encode(freqOut, docDeltaBuffer, freqBuffer, hasProx_);
+                if (hasProx_ && indexVersion_ >= IndexVersion::kV2) {
+                    PforUtil::encodePos(proxOut, posBuffer);
                 }
 
                 skipListWriter->setSkipData(lastDoc, currentFieldStorePayloads, lastPayloadLength);

@@ -22,7 +22,7 @@ SegmentTermDocs::SegmentTermDocs(const SegmentReader *_parent) : parent(_parent)
                                                                  count(0), df(0), deletedDocs(_parent->deletedDocs), _doc(-1), _freq(0), skipInterval(_parent->tis->getSkipInterval()),
                                                                  maxSkipLevels(_parent->tis->getMaxSkipLevels()), skipListReader(NULL), freqBasePointer(0), proxBasePointer(0),
                                                                  skipPointer(0), haveSkipped(false), pointer(0), pointerMax(0), indexVersion_(_parent->_fieldInfos->getIndexVersion()),
-                                                                 hasProx(_parent->_fieldInfos->hasProx()), buffer_(freqStream, hasProx, indexVersion_) {
+                                                                 hasProx(_parent->_fieldInfos->hasProx()), buffer_(freqStream, hasProx, indexVersion_, _parent->_fieldInfos->compatibleRead()) {
     CND_CONDITION(_parent != NULL, "Parent is NULL");
     memset(docs,0,PFOR_BLOCK_SIZE*sizeof(int32_t));
     memset(freqs,0,PFOR_BLOCK_SIZE*sizeof(int32_t));
@@ -275,40 +275,7 @@ int32_t TermDocsBuffer::refillV0() {
 }
 
 int32_t TermDocsBuffer::refillV1() {
-    char mode = freqStream_->readByte();
-    uint32_t arraySize = freqStream_->readVInt();
-    if (mode == (char)CodeMode::kPfor) {
-        {
-            uint32_t SerializedSize = freqStream_->readVInt();
-            std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
-            freqStream_->readBytes(buf.data(), SerializedSize);
-            P4DEC(buf.data(), arraySize, docs_.data());
-        }
-        if (hasProx_) {
-            uint32_t SerializedSize = freqStream_->readVInt();
-            std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
-            freqStream_->readBytes(buf.data(), SerializedSize);
-            P4NZDEC(buf.data(), arraySize, freqs_.data());
-        }
-    } else if (mode == (char)CodeMode::kDefault) {
-        uint32_t docDelta = 0;
-        for (uint32_t i = 0; i < arraySize; i++) {
-            uint32_t docCode = freqStream_->readVInt();
-            if (hasProx_) {
-                docDelta += (docCode >> 1);
-                docs_[i] = docDelta;
-                if ((docCode & 1) != 0) {
-                    freqs_[i] = 1;
-                } else {
-                    freqs_[i] = freqStream_->readVInt();
-                }
-            } else {
-                docDelta += docCode;
-                docs_[i] = docDelta;
-            }            
-        }
-    }
-    return arraySize;
+    return PforUtil::pfor_decode(freqStream_, docs_, freqs_, hasProx_, compatibleRead_);
 }
 
 CL_NS_END
