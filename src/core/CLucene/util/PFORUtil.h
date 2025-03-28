@@ -22,7 +22,7 @@
 
 #include "CLucene.h"
 #include "CLucene/store/IndexOutput.h"
-
+#include "CLucene/store/IndexInput.h"
 CL_NS_USE(store)
 
 size_t P4DEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict out);
@@ -36,4 +36,7 @@ public:
 
     static void encodePos(IndexOutput* out, std::vector<uint32_t>& buffer);
     static uint32_t decodePos(IndexInput* out, std::vector<uint32_t>& buffer);
+    static void pfor_encode(IndexOutput* out, std::vector<uint32_t>& docDeltaBuffer, std::vector<uint32_t>& freqBuffer, bool has_prox);
+    static uint32_t pfor_decode(IndexInput* in, std::vector<uint32_t>& docs, std::vector<uint32_t>& freqs, bool has_prox, bool compatibleRead);
 };
+
