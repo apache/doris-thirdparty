@@ -26,7 +26,7 @@ FieldInfo::FieldInfo(const TCHAR* _fieldName, const bool _isIndexed, const int32
                      const bool _storeTermVector, const bool _storeOffsetWithTermVector,
                      const bool _storePositionWithTermVector, const bool _omitNorms,
                      const bool _hasProx, const bool _storePayloads, IndexVersion indexVersion,
-										 uint32_t flags, const bool _compatibleRead)
+										 uint32_t flags)
         : name(CLStringIntern::intern(_fieldName)),
           isIndexed(_isIndexed),
           number(_fieldNumber),
@@ -37,8 +37,7 @@ FieldInfo::FieldInfo(const TCHAR* _fieldName, const bool _isIndexed, const int32
           hasProx(_hasProx),
           storePayloads(_storePayloads),
 		  indexVersion_(indexVersion), 
-		  flags_(flags),
-          compatibleRead(_compatibleRead) {}
+		  flags_(flags) {}
 
 FieldInfo::~FieldInfo(){
 	CL_NS(util)::CLStringIntern::unintern(name);
@@ -46,7 +45,7 @@ FieldInfo::~FieldInfo(){
 
 FieldInfo* FieldInfo::clone() {
 	return _CLNEW FieldInfo(name, isIndexed, number, storeTermVector, storePositionWithTermVector,
-		storeOffsetWithTermVector, omitNorms, hasProx, storePayloads, indexVersion_, flags_, compatibleRead);
+		storeOffsetWithTermVector, omitNorms, hasProx, storePayloads, indexVersion_, flags_);
 }
 
 FieldInfos::FieldInfos():
@@ -103,17 +102,6 @@ bool FieldInfos::hasProx() {
 	return false;
 }
 
-bool FieldInfos::compatibleRead() {
-	int numFields = byNumber.size();
-	for (int i = 0; i < numFields; i++) {
-		FieldInfo* fi = fieldInfo(i);
-		if (fi->compatibleRead) {
-			return true;
-		}
-	}
-	return false;
-}
-
 IndexVersion FieldInfos::getIndexVersion() {
 	int numFields = byNumber.size();
 	for (int i = 0; i < numFields; i++) {
@@ -160,12 +148,12 @@ FieldInfo* FieldInfos::add(const TCHAR* name, const bool isIndexed, const bool s
                            const bool storePositionWithTermVector,
                            const bool storeOffsetWithTermVector, const bool omitNorms,
                            const bool hasProx, const bool storePayloads,
-						   						 IndexVersion indexVersion, uint32_t flags, const bool compatibleRead) {
+						   						 IndexVersion indexVersion, uint32_t flags) {
   FieldInfo* fi = fieldInfo(name);
 	if (fi == NULL) {
 		return addInternal(name, isIndexed, storeTermVector, storePositionWithTermVector,
 												storeOffsetWithTermVector, omitNorms, hasProx, storePayloads,
-												indexVersion, flags, compatibleRead);
+												indexVersion, flags);
   } else {
 		if (fi->isIndexed != isIndexed) {
 			fi->isIndexed = true;                      // once indexed, always index
@@ -194,9 +182,6 @@ FieldInfo* FieldInfos::add(const TCHAR* name, const bool isIndexed, const bool s
 		if (fi->flags_ != flags) {
 			fi->flags_ = flags;
 		}
-		if (fi->compatibleRead != compatibleRead) {
-			fi->compatibleRead = compatibleRead;
-		}
 	}
 	return fi;
 }
@@ -206,12 +191,11 @@ FieldInfo* FieldInfos::addInternal(const TCHAR* name, const bool isIndexed,
                                    const bool storePositionWithTermVector,
                                    const bool storeOffsetWithTermVector, const bool omitNorms,
                                    const bool hasProx, const bool storePayloads,
-                                   IndexVersion indexVersion, uint32_t flags,
-                                   const bool compatibleRead) {
+                                   IndexVersion indexVersion, uint32_t flags) {
         FieldInfo* fi =
                 _CLNEW FieldInfo(name, isIndexed, byNumber.size(), storeTermVector,
                                  storePositionWithTermVector, storeOffsetWithTermVector, omitNorms,
-                                 hasProx, storePayloads, indexVersion, flags, compatibleRead);
+                                 hasProx, storePayloads, indexVersion, flags);
         byNumber.push_back(fi);
 	byName.put( fi->name, fi);
 	return fi;
