@@ -225,7 +225,6 @@ CL_NS_DEF(index)
   void IndexReader::setCompatibleRead(bool compatibleRead) {
     SCOPED_LOCK_MUTEX(THIS_LOCK)
     this->ensureOpen();
-    this->acquireWriteLock();
     this->compatibleRead = compatibleRead;
   }
 
