@@ -1237,8 +1237,10 @@ namespace orc {
           continue;
         }
       } else {
-        // read row group statistics and bloom filters of current stripe
-        loadStripeIndex();
+        if (filter) {
+          // read row group statistics and bloom filters of current stripe
+          loadStripeIndex();
+        }
       }
 
       // get writer timezone info from stripe footer to help understand timestamp values.
