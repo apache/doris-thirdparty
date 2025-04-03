@@ -93,6 +93,11 @@ ifeq ($(NOFORTRAN), $(filter 0,$(NOFORTRAN)))
 	   echo "  Fortran compiler ... $(F_COMPILER)  (command line : $(FC))";\
 	fi
 endif
+
+ifeq ($(OSNAME), WINNT)
+	@-$(LNCMD) $(LIBNAME) $(LIBPREFIX).$(LIBSUFFIX)
+endif
+
 ifneq ($(OSNAME), AIX)
 	@echo -n "  Library Name     ... $(LIBNAME)"
 else
