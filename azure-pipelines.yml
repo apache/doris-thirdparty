@@ -175,7 +175,7 @@ jobs:
   - script: |
       brew update
       brew install llvm flang
-      make TARGET=NEHALEM CC=/usr/local/opt/llvm/bin/clang FC=/usr/local/Cellar/flang/19.1.7_1/bin/flang-new NO_SHARED=1
+      make TARGET=NEHALEM CC=/usr/local/opt/llvm/bin/clang FC=/usr/local/opt/flang/bin/flang NO_SHARED=1
 
 - job: OSX_OpenMP_Clang
   pool:
