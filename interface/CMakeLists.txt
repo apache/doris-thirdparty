@@ -250,3 +250,7 @@ if ( BUILD_COMPLEX16 AND NOT  BUILD_DOUBLE)
 endif ()
 
 add_library(interface OBJECT ${OPENBLAS_SRC})
+
+if (USE_OPENMP)
+  target_link_libraries(interface OpenMP::OpenMP_C)
+endif()
