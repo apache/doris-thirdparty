@@ -1301,7 +1301,7 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
             }
             docDeltaBuffer.resize(0);
             freqBuffer.resize(0);
-            if (indexVersion_ >= IndexVersion::kV2) {
+            if (hasProx_ && indexVersion_ >= IndexVersion::kV2) {
                 PforUtil::encodePos(proxOut, posBuffer);
             }
         }
