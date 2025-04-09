@@ -263,9 +263,9 @@ public:
     int64_t position() override {
         return pos;
     }
-    int64_t reset(int64_t){
-        if ( pos >= 0 && pos < this->m_size )
-            this->pos = pos;
+    int64_t reset(int64_t new_pos){
+        if ( new_pos >= 0 && new_pos < this->m_size )
+            this->pos = new_pos;
         return this->pos;
     }
     int64_t skip(int64_t ntoskip) override{
