@@ -22,7 +22,7 @@ SegmentTermDocs::SegmentTermDocs(const SegmentReader *_parent) : parent(_parent)
                                                                  count(0), df(0), deletedDocs(_parent->deletedDocs), _doc(-1), _freq(0), skipInterval(_parent->tis->getSkipInterval()),
                                                                  maxSkipLevels(_parent->tis->getMaxSkipLevels()), skipListReader(NULL), freqBasePointer(0), proxBasePointer(0),
                                                                  skipPointer(0), haveSkipped(false), pointer(0), pointerMax(0), indexVersion_(_parent->_fieldInfos->getIndexVersion()),
-                                                                 hasProx(_parent->_fieldInfos->hasProx()), buffer_(freqStream, hasProx, indexVersion_, _parent->_fieldInfos->compatibleRead()) {
+                                                                 hasProx(_parent->_fieldInfos->hasProx()), buffer_(freqStream, hasProx, indexVersion_, _parent->getCompatibleRead()) {
     CND_CONDITION(_parent != NULL, "Parent is NULL");
     memset(docs,0,PFOR_BLOCK_SIZE*sizeof(int32_t));
     memset(freqs,0,PFOR_BLOCK_SIZE*sizeof(int32_t));

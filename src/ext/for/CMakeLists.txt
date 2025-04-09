@@ -12,8 +12,8 @@ set(DEBUG "-DNDEBUG -g -O3")
 set(OPT "-w -Wall -fstrict-aliasing -falign-loops -Wno-int-conversion")
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    set(SSE "-march=corei7-avx -mtune=corei7-avx")
-    set(AVX2 "-march=haswell")
+    set(SSE "-msse4.2")
+    set(AVX2 "-mavx2")
     set(CMAKE_C_FLAGS ${SSE})
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     set(SSE "-march=armv8-a")
@@ -67,7 +67,7 @@ foreach(SRC_FILE ${SRC_FILES})
 
     add_custom_command(
         OUTPUT ${SSE_OUTPUT}
-        COMMAND ${CMAKE_C_COMPILER} -DSSE2_ON ${c_flags_list} -c -o ${SSE_OUTPUT} ${SRC_FILE}
+        COMMAND ${CMAKE_C_COMPILER} ${c_flags_list} -c -o ${SSE_OUTPUT} ${SRC_FILE}
         DEPENDS ${SRC_FILE}
     )
 

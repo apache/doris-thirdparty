@@ -43,7 +43,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunsequenced"
 
-#if !defined(SSE2_ON) && !defined(AVX2_ON) //----------------------------------- Plain -------------------------------------------------------------------------------------------
+#ifndef __AVX2__ //----------------------------------- Plain -------------------------------------------------------------------------------------------
 typedef unsigned char *(*BITUNPACK_F8)( const unsigned char *__restrict in, unsigned n, uint8_t  *__restrict out);
 typedef unsigned char *(*BITUNPACK_D8)( const unsigned char *__restrict in, unsigned n, uint8_t  *__restrict out, uint8_t start);
 typedef unsigned char *(*BITUNPACK_F16)(const unsigned char *__restrict in, unsigned n, uint16_t *__restrict out);
@@ -133,7 +133,8 @@ size_t bitnfunpack16( unsigned char *__restrict in, size_t n, uint16_t *__restri
 size_t bitnfunpack32( unsigned char *__restrict in, size_t n, uint32_t *__restrict out) { uint32_t *op,start; BITNDUNPACK(in, n, out, 128, 32, bitfunpacka); }
 size_t bitnfunpack64( unsigned char *__restrict in, size_t n, uint64_t *__restrict out) { uint64_t *op,start; BITNDUNPACK(in, n, out, 128, 64, bitfunpacka); }
 
-#else //-------------------------------------------- SSE/AVX2 ---------------------------------------------------------------------------------------
+#endif
+//-------------------------------------------- SSE/AVX2 ---------------------------------------------------------------------------------------
 
 #define _BITNUNPACKV(in, n, out, _csize_, _usize_, _bitunpackv_) {\
   unsigned char *ip = in;\
@@ -2426,7 +2427,6 @@ size_t bitnzunpack128v32( unsigned char *__restrict in, size_t n, uint32_t *__re
 size_t bitnfunpack128v16( unsigned char *__restrict in, size_t n, uint16_t *__restrict out) { uint16_t *op,start; _BITNDUNPACKV(in, n, out, 128, 16, bitfunpack128v, bitfunpack); }
 size_t bitnfunpack128v32( unsigned char *__restrict in, size_t n, uint32_t *__restrict out) { uint32_t *op,start; _BITNDUNPACKV(in, n, out, 128, 32, bitfunpack128v, bitfunpack); }
 
-#endif
 #endif
 
 #pragma clang diagnostic pop

@@ -112,6 +112,8 @@ public:
   /** Internal use. */
 	Internal* _internal;
 
+  bool compatibleRead = false;
+
 
   /**
    * Constants describing field properties, for example used for
@@ -688,6 +690,9 @@ public:
 	void addCloseCallback(CloseCallback callback, void* parameter);
 
   virtual IndexVersion getIndexVersion();
+
+  void setCompatibleRead(bool compatibleRead);
+  bool getCompatibleRead() const;
 
   friend class SegmentReader;
   friend class MultiReader;

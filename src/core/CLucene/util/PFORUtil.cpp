@@ -146,7 +146,7 @@ void PforUtil::encodePos(IndexOutput* out, std::vector<uint32_t>& buffer) {
     size_t compressSize = p4nzenc256v32(buffer.data(), buffer.size(), compress.data());
     out->writeVInt(compressSize);
     out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), compressSize);
-#elif (defined(__SSSE3__) || defined(__ARM_NEON))
+#elif defined(__ARM_NEON)
     out->writeByte((char)CodeMode::kPfor128);
     out->writeVInt(buffer.size());
     std::vector<uint8_t> compress(4 * buffer.size() + PFOR_BLOCK_SIZE);
@@ -184,7 +184,7 @@ uint32_t PforUtil::decodePos(IndexInput* in, std::vector<uint32_t>& buffer) {
         in->readBytes(buf.data(), serializedSize);
 #if defined(USE_AVX2) && defined(__AVX2__)
         p4nzdec32(buf.data(), size, buffer.data());
-#elif (defined(__SSSE3__) || defined(__ARM_NEON))
+#elif defined(__ARM_NEON)
         p4nzdec32(buf.data(), size, buffer.data());
 #else
         _CLTHROWA(CL_ERR_CorruptIndex, "PFOR128 is not supported on this platform");
@@ -212,7 +212,7 @@ void PforUtil::pfor_encode(IndexOutput* out, std::vector<uint32_t>& docDeltaBuff
         out->writeVInt(size);
         out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
     }
-#elif (defined(__SSSE3__) || defined(__ARM_NEON))
+#elif defined(__ARM_NEON)
     out->writeByte((char)CodeMode::kPfor128);
     out->writeVInt(docDeltaBuffer.size());
     std::vector<uint8_t> compress(4 * docDeltaBuffer.size() + PFOR_BLOCK_SIZE);
@@ -333,13 +333,15 @@ uint32_t PforUtil::pfor_decode(IndexInput* in, std::vector<uint32_t>& docs,
             }
         }
     } else if (mode == (char)CodeMode::kPfor256) {
-        // new version, read based on compatibleRead
         {
             uint32_t SerializedSize = in->readVInt();
             std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
             in->readBytes(buf.data(), SerializedSize);
 #if defined(USE_AVX2) && defined(__AVX2__)
+            // new version, read cross platform, x86_64 read arm64 index
             p4nd1dec256v32(buf.data(), arraySize, docs.data());
+#elif (defined(__SSSE3__) || defined(__ARM_NEON))
+            p4nd1dec256scalarv32(buf.data(), arraySize, docs.data());
 #else
             _CLTHROWA(CL_ERR_CorruptIndex, "PFOR256 is not supported on this platform");
 #endif
@@ -350,17 +352,20 @@ uint32_t PforUtil::pfor_decode(IndexInput* in, std::vector<uint32_t>& docs,
             in->readBytes(buf.data(), SerializedSize);
 #if defined(USE_AVX2) && defined(__AVX2__)
             p4nzdec256v32(buf.data(), arraySize, freqs.data());
+#elif (defined(__SSSE3__) || defined(__ARM_NEON))
+            // new version, read cross platform, arm64 read x86_64 index
+            p4nzdec256scalarv32(buf.data(), arraySize, freqs.data());
 #else
             _CLTHROWA(CL_ERR_CorruptIndex, "PFOR256 is not supported on this platform");
 #endif
         }
     } else if (mode == (char)CodeMode::kPfor128) {
-        // new version, read based on compatibleRead
         {
             uint32_t SerializedSize = in->readVInt();
             std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
             in->readBytes(buf.data(), SerializedSize);
 #if defined(USE_AVX2) && defined(__AVX2__)
+            // new version, read cross platform, x86_64 read arm64 index
             p4nd1dec32(buf.data(), arraySize, docs.data());
 #elif (defined(__SSSE3__) || defined(__ARM_NEON))
             p4nd1dec32(buf.data(), arraySize, docs.data());
