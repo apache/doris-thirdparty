@@ -222,6 +222,16 @@ CL_NS_DEF(index)
     this->doSetNorm(doc, field, value);
   }
 
+  void IndexReader::setCompatibleRead(bool compatibleRead) {
+    SCOPED_LOCK_MUTEX(THIS_LOCK)
+    this->ensureOpen();
+    this->compatibleRead = compatibleRead;
+  }
+
+  bool IndexReader::getCompatibleRead() const {
+    return this->compatibleRead;
+  }
+
 
   void IndexReader::setNorm(int32_t doc, const TCHAR* field, float_t value){
      ensureOpen();

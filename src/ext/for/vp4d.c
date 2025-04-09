@@ -95,7 +95,7 @@ extern char _shuffle_16[256][16];
 #include "vp4d.c"
 
 #undef  BITUNDD
-  #elif !defined(SSE2_ON) && !defined(AVX2_ON)
+  #elif defined(__SSSE3__) || defined(__ARM_NEON)
 
 #define _P4DEC      _p4dec
 #define  P4DEC       p4dec
@@ -177,7 +177,6 @@ extern char _shuffle_16[256][16];
 #undef USIZE
 #undef DELTA
 
-  #elif defined(__SSSE3__) || defined(__ARM_NEON)
 #define VSIZE 128
 #define P4DELTA(a)
 #define P4DELTA_(a)
