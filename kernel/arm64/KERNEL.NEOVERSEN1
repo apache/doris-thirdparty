@@ -60,7 +60,7 @@ DSCALKERNEL  = scal.S
 CSCALKERNEL  = zscal.S
 ZSCALKERNEL  = zscal.S
 
-SGEMVNKERNEL = gemv_n.S
+SGEMVNKERNEL = sgemv_n_neon.c
 DGEMVNKERNEL = gemv_n.S
 CGEMVNKERNEL = zgemv_n.S
 ZGEMVNKERNEL = zgemv_n.S
