@@ -67,7 +67,7 @@ foreach(SRC_FILE ${SRC_FILES})
 
     add_custom_command(
         OUTPUT ${SSE_OUTPUT}
-        COMMAND ${CMAKE_C_COMPILER} -DSSE2_ON ${c_flags_list} -c -o ${SSE_OUTPUT} ${SRC_FILE}
+        COMMAND ${CMAKE_C_COMPILER} ${c_flags_list} -c -o ${SSE_OUTPUT} ${SRC_FILE}
         DEPENDS ${SRC_FILE}
     )
 
