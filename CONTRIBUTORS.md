@@ -26,6 +26,9 @@
 * Chris Sidebottom <chris.sidebottom@arm.com>
   * Optimizations and other improvements targeting AArch64
 
+* Annop Wongwathanarat <annop.wongwathanarat@arm.com>
+  * Optimizations and other improvements targeting AArch64
+
 ## Previous Developers
 
 * Zaheer Chothia <zaheer.chothia@gmail.com>
