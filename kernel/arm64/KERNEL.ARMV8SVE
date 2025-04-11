@@ -84,6 +84,11 @@ DGEMVTKERNEL = gemv_t_sve_v1x3.c
 CGEMVTKERNEL = zgemv_t.S
 ZGEMVTKERNEL = zgemv_t.S
 
+SSYMV_L_KERNEL = symv_L_sve_v1x4.c
+SSYMV_U_KERNEL = symv_U_sve_v1x4.c
+DSYMV_L_KERNEL = symv_L_sve_v1x4.c
+DSYMV_U_KERNEL = symv_U_sve_v1x4.c
+
 SASUMKERNEL    = sasum_thunderx2t99.c
 DASUMKERNEL    = dasum_thunderx2t99.c
 CASUMKERNEL    = casum_thunderx2t99.c
