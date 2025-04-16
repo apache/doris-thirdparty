@@ -702,6 +702,7 @@ void get_cpuconfig(void)
 		printf("#define L1_CODE_SIZE	     %lld       \n",value64);
 		sysctlbyname("hw.cachelinesize",&value64,&length64,NULL,0);
 		printf("#define L1_CODE_LINESIZE     %lld       \n",value64);
+		printf("#define L1_DATA_LINESIZE     %lld       \n",value64);
 		sysctlbyname("hw.l1dcachesize",&value64,&length64,NULL,0);
 		printf("#define L1_DATA_SIZE	     %lld       \n",value64);
 		sysctlbyname("hw.l2cachesize",&value64,&length64,NULL,0);
