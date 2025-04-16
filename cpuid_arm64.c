@@ -378,9 +378,9 @@ int detect(void)
 	cpulowperf=value64;
 	sysctlbyname("hw.nperflevels",&value64,&length64,NULL,0);
 	if (value64 > 1) {
-	sysctlbyname("hw.perflevel0.cpusperl",&value64,&length64,NULL,0);
+	sysctlbyname("hw.perflevel0.cpusperl2",&value64,&length64,NULL,0);
 	cpuhiperf=value64;
-	sysctlbyname("hw.perflevel1.cpusperl",&value64,&length64,NULL,0);
+	sysctlbyname("hw.perflevel1.cpusperl2",&value64,&length64,NULL,0);
 	cpulowperf=value64;
 	}
 	sysctlbyname("hw.cpufamily",&value64,&length64,NULL,0);
