@@ -134,37 +134,39 @@ void FieldInfos::add(const TCHAR** names, const bool isIndexed, const bool store
 FieldInfo* FieldInfos::add(const TCHAR* name, const bool isIndexed, const bool storeTermVector,
                            const bool storePositionWithTermVector,
                            const bool storeOffsetWithTermVector, const bool omitNorms,
-                           const bool hasProx, const bool storePayloads, IndexVersion indexVersion) {
+                           const bool hasProx, const bool storePayloads,
+                           IndexVersion indexVersion) {
         FieldInfo* fi = fieldInfo(name);
         if (fi == NULL) {
-            return addInternal(name, isIndexed, storeTermVector, storePositionWithTermVector,
-                                storeOffsetWithTermVector, omitNorms, hasProx, storePayloads,
-                                indexVersion);
+                return addInternal(name, isIndexed, storeTermVector, storePositionWithTermVector,
+                                   storeOffsetWithTermVector, omitNorms, hasProx, storePayloads,
+                                   indexVersion);
         } else {
-                if (fi->isIndexed != isIndexed) {
-			fi->isIndexed = true;                      // once indexed, always index
-		}
-		if (fi->storeTermVector != storeTermVector) {
-			fi->storeTermVector = true;                // once vector, always vector
-		}
-		if (fi->storePositionWithTermVector != storePositionWithTermVector) {
-	        fi->storePositionWithTermVector = true;                // once vector, always vector
-	    }
-	    if (fi->storeOffsetWithTermVector != storeOffsetWithTermVector) {
-	        fi->storeOffsetWithTermVector = true;                // once vector, always vector
-	    }
-	    if (fi->omitNorms != omitNorms) {
-	        fi->omitNorms = false;                // once norms are stored, always store
-	    }
-			if (fi->hasProx != hasProx) {
-				fi->hasProx = true;
-			}
-		if (fi->storePayloads != storePayloads) {
-			fi->storePayloads = true;
-		}
-		if (fi->indexVersion_ != indexVersion) {
-			fi->indexVersion_ = indexVersion;
-		}
+            if (fi->isIndexed != isIndexed) {
+                fi->isIndexed = true; // once indexed, always index
+            }
+            if (fi->storeTermVector != storeTermVector) {
+                fi->storeTermVector = true; // once vector, always vector
+            }
+            if (fi->storePositionWithTermVector != storePositionWithTermVector) {
+                fi->storePositionWithTermVector = true; // once vector, always vector
+            }
+            if (fi->storeOffsetWithTermVector != storeOffsetWithTermVector) {
+                fi->storeOffsetWithTermVector = true; // once vector, always vector
+            }
+            if (fi->omitNorms != omitNorms) {
+                fi->omitNorms = false; // once norms are stored, always store
+            }
+            if (fi->hasProx != hasProx) {
+                fi->hasProx = true;
+            }
+            if (fi->storePayloads != storePayloads) {
+                fi->storePayloads = true;
+            }
+            if (fi->indexVersion_ != indexVersion) {
+                fi->indexVersion_ = indexVersion;
+            }
+        }
         return fi;
 }
 
