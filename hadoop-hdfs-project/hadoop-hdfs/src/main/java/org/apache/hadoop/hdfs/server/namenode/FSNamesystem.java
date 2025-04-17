@@ -4284,11 +4284,22 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
           if (dirListing == null) {
             throw new FileNotFoundException("Path " + src + " does not exist");
           }
+          if (needLocation && isObserver()) {
+            for (HdfsFileStatus fs : dirListing.getPartialListing()) {
+              if (fs instanceof HdfsLocatedFileStatus) {
+                LocatedBlocks lbs = ((HdfsLocatedFileStatus) fs).getLocatedBlocks();
+                checkBlockLocationsWhenObserver(lbs, fs.toString());
+              }
+            }
+          }
           listing = new HdfsPartialListing(
               srcsIndex, Lists.newArrayList(dirListing.getPartialListing()));
           numEntries += listing.getPartialListing().size();
           lastListing = dirListing;
         } catch (Exception e) {
+          if (e instanceof ObserverRetryOnActiveException) {
+            throw (ObserverRetryOnActiveException) e;
+          }
           if (e instanceof AccessControlException) {
             logAuditEvent(false, operationName, src);
           }
@@ -4351,6 +4362,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
             true,
             returnedStartAfter);
       }
+    } catch(ObserverRetryOnActiveException e){
+      throw e;
     } finally {
       readUnlock(operationName,
           getLockReportInfoSupplier(Arrays.toString(srcs)));
