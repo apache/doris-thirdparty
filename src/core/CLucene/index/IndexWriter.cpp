@@ -1730,19 +1730,6 @@ void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
             processPostings(postings, &destDocs[i], i);
         }
 
-        auto encode = [](IndexOutput* out, std::vector<uint32_t>& buffer, bool isDoc) {
-            std::vector<uint8_t> compress(4 * buffer.size() + PFOR_BLOCK_SIZE);
-            size_t size = 0;
-            if (isDoc) {
-                size = P4ENC(buffer.data(), buffer.size(), compress.data());
-            } else {
-                size = P4NZENC(buffer.data(), buffer.size(), compress.data());
-            }
-            out->writeVInt(size);
-            out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
-            buffer.resize(0);
-        };
-
         std::vector<int32_t> dfs(numDestIndexes, 0);
         std::vector<int32_t> lastDocs(numDestIndexes, 0);
         while (destPostingQueues->size()) {
@@ -1790,14 +1777,9 @@ void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
                 }
 
                 if ((++df % skipInterval) == 0) {
-                    freqOut->writeByte((char)CodeMode::kPfor);
-                    freqOut->writeVInt(docDeltaBuffer.size());
-                    encode(freqOut, docDeltaBuffer, true);
-                    if (hasProx) {
-                        encode(freqOut, freqBuffer, false);
-                        if (indexVersion >= IndexVersion::kV2) {
-                            PforUtil::encodePos(proxOut, posBuffer);
-                        }
+                    PforUtil::pfor_encode(freqOut, docDeltaBuffer, freqBuffer, hasProx);
+                    if (hasProx && indexVersion >= IndexVersion::kV2) {
+                        PforUtil::encodePos(proxOut, posBuffer);
                     }
 
                     skipWriter->setSkipData(lastDoc, false, -1);

@@ -1,5 +1,4 @@
 PROJECT (clucene)
-
 #Rules for version:
 #MAJOR and MINOR versions are purely political (tracks JLucene compatibility)
 #REVISION version MUST be revised if the headers or compatibility change
@@ -17,9 +16,7 @@ MATH(EXPR CLUCENE_INT_VERSION "(${CLUCENE_VERSION_MAJOR} * 1000000) + (${CLUCENE
 SET(CLUCENE_VERSION "${CLUCENE_VERSION_MAJOR}.${CLUCENE_VERSION_MINOR}.${CLUCENE_VERSION_REVISION}.${CLUCENE_VERSION_PATCH}")
 
 #CMake 2.6+ is recommended to an improved Boost module
-CMAKE_MINIMUM_REQUIRED(VERSION 2.4.0 FATAL_ERROR)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+CMAKE_MINIMUM_REQUIRED(VERSION 3.5 FATAL_ERROR)
 
 if(COMMAND cmake_policy)
   cmake_policy(SET CMP0003 NEW)
@@ -135,9 +132,29 @@ elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_FLAGS_LSAN}")
 endif()
 
-if (USE_AVX2)
-	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_AVX2")
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
+    set (ARCH_AMD64 1)
+endif ()
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*|arm64.*)")
+    set (ARCH_AARCH64 1)
+endif ()
+if (ARCH_AARCH64 OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
+    set (ARCH_ARM 1)
+endif ()
+if (ARCH_AMD64)
+    add_compile_options(-msse4.2)
+    if (USE_AVX2)
+        add_compile_options(-mavx2)
+        add_definitions(-DUSE_AVX2)
+    endif()
+    message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
 endif()
+
+if (ARCH_ARM)
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8-a+crc")
+endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+
 if (__COMPILER_CLANG)
 	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-c++11-narrowing -g -fno-omit-frame-pointer")
 else ()

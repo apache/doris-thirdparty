@@ -87,7 +87,7 @@ CuSuite *testIndexCompaction(void);
 CuSuite *testStringReader(void);
 CuSuite *testIndexCompress(void);
 CuSuite *testUTF8CharsSuite(void);
-
+CuSuite *testPFORSuite(void);
 #ifdef TEST_CONTRIB_LIBS
 //CuSuite *testGermanAnalyzer(void);
 CuSuite *testchinese(void);

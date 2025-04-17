@@ -15,6 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 #include "PFORUtil.h"
+
+#include "CLucene/debug/error.h"
+#include "CLucene/index/CodeMode.h"
 #include "vp4.h"
 #if (defined(__i386) || defined(__x86_64__))
 #include <cpuid.h>
@@ -26,15 +29,15 @@
 CL_NS_USE(index)
 
 namespace {
-using DEC_FUNC = size_t (*)(unsigned char *__restrict, size_t, uint32_t *__restrict);
-using ENC_FUNC = size_t (*)(uint32_t *__restrict in, size_t n, unsigned char *__restrict out);
+using DEC_FUNC = size_t (*)(unsigned char* __restrict, size_t, uint32_t* __restrict);
+using ENC_FUNC = size_t (*)(uint32_t* __restrict in, size_t n, unsigned char* __restrict out);
 DEC_FUNC g_p4nd1dec;
 DEC_FUNC g_p4nzdec;
 ENC_FUNC g_p4nd1enc;
 ENC_FUNC g_p4nzenc;
-} // anonymous namespace
+} // namespace
 
-size_t DefaultDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict out) {
+size_t DefaultDEC(unsigned char* __restrict in, size_t n, uint32_t* __restrict out) {
     size_t bufferSize = 0;
     for (uint32_t i = 0; i < n; i++) {
         uint8_t b = in[bufferSize++];
@@ -48,7 +51,7 @@ size_t DefaultDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict o
     return n;
 }
 
-size_t DefaultDDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict out) {
+size_t DefaultDDEC(unsigned char* __restrict in, size_t n, uint32_t* __restrict out) {
     uint32_t docDelta = 0;
     size_t bufferSize = 0;
     for (uint32_t i = 0; i < n; i++) {
@@ -58,13 +61,13 @@ size_t DefaultDDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict 
             b = in[bufferSize++];
             docCode |= (b & 0x7F) << shift;
         }
-        docDelta += docCode;  // Corrected line: Removed right shift
+        docDelta += docCode; // Corrected line: Removed right shift
         out[i] = docDelta;
     }
     return n;
 }
 
-size_t DefaultDENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out) {
+size_t DefaultDENC(uint32_t* __restrict in, size_t n, unsigned char* __restrict out) {
     int outIndex = 0;
     uint32_t lastDoc = 0;
     for (int32_t i = 0; i < n; i++) {
@@ -80,7 +83,7 @@ size_t DefaultDENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict 
     return outIndex;
 }
 
-size_t DefaultENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out) {
+size_t DefaultENC(uint32_t* __restrict in, size_t n, unsigned char* __restrict out) {
     int outIndex = 0;
     for (int32_t i = 0; i < n; i++) {
         uint32_t curDoc = in[i];
@@ -119,66 +122,269 @@ __attribute__((constructor)) void SelectPFORFunctions() {
 #endif
 }
 
-size_t P4DEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict out) {
+size_t P4DEC(unsigned char* __restrict in, size_t n, uint32_t* __restrict out) {
     return g_p4nd1dec(in, n, out);
 }
 
-size_t P4NZDEC(unsigned char *__restrict in, size_t n, uint32_t *__restrict out) {
+size_t P4NZDEC(unsigned char* __restrict in, size_t n, uint32_t* __restrict out) {
     return g_p4nzdec(in, n, out);
 }
 
-size_t P4ENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out) {
+size_t P4ENC(uint32_t* __restrict in, size_t n, unsigned char* __restrict out) {
     return g_p4nd1enc(in, n, out);
 }
 
-size_t P4NZENC(uint32_t *__restrict in, size_t n, unsigned char *__restrict out) {
+size_t P4NZENC(uint32_t* __restrict in, size_t n, unsigned char* __restrict out) {
     return g_p4nzenc(in, n, out);
 }
 
 void PforUtil::encodePos(IndexOutput* out, std::vector<uint32_t>& buffer) {
-    auto encode = [&out, &buffer](size_t offset, size_t size, CodeMode mode) {
-        out->writeByte((char)mode);
-        out->writeVInt(size);
-        if (mode == CodeMode::kPfor) {
-            std::vector<uint8_t> compress(4 * size + PFOR_BLOCK_SIZE);
-            size_t compressSize = P4NZENC(buffer.data() + offset, size, compress.data());
-            out->writeVInt(compressSize);
-            out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), compressSize);
-        } else if (mode == CodeMode::kDefault) {
-            for (size_t i = 0; i < size; i++) {
-                out->writeVInt(buffer[offset + i]);
-            }
-        }
-    };
-
-    size_t i = 0;
-    size_t totalSize = buffer.size();
-    while (i < totalSize) {
-        size_t remainingElements = totalSize - i;
-        if (remainingElements >= blockSize) {
-            encode(i, blockSize, CodeMode::kPfor);
-            i += blockSize;
-        } else {
-            encode(i, remainingElements, CodeMode::kDefault);
-            break;
-        }
+#ifdef __AVX2__
+    out->writeByte((char)CodeMode::kPfor256);
+    out->writeVInt(buffer.size());
+    std::vector<uint8_t> compress(4 * buffer.size() + PFOR_BLOCK_SIZE);
+    size_t compressSize = p4nzenc256v32(buffer.data(), buffer.size(), compress.data());
+    out->writeVInt(compressSize);
+    out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), compressSize);
+#elif defined(__ARM_NEON)
+    out->writeByte((char)CodeMode::kPfor128);
+    out->writeVInt(buffer.size());
+    std::vector<uint8_t> compress(4 * buffer.size() + PFOR_BLOCK_SIZE);
+    size_t compressSize = p4nzenc32(buffer.data(), buffer.size(), compress.data());
+    out->writeVInt(compressSize);
+    out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), compressSize);
+#else
+    out->writeByte((char)CodeMode::kDefault);
+    out->writeVInt(buffer.size());
+    for (size_t i = 0; i < buffer.size(); i++) {
+        out->writeVInt(buffer[i]);
     }
-
+#endif
     buffer.resize(0);
 }
 
 uint32_t PforUtil::decodePos(IndexInput* in, std::vector<uint32_t>& buffer) {
     CodeMode mode = static_cast<CodeMode>(in->readByte());
     uint32_t size = in->readVInt();
+    buffer.resize((size + PforUtil::blockSize - 1) / PforUtil::blockSize * PforUtil::blockSize + 3);
     if (mode == CodeMode::kPfor) {
+        _CLTHROWA(CL_ERR_CorruptIndex, "PFOR old version is not supported for decodePos");
+    } else if (mode == CodeMode::kPfor256) {
         uint32_t serializedSize = in->readVInt();
         std::vector<uint8_t> buf(serializedSize + PFOR_BLOCK_SIZE);
         in->readBytes(buf.data(), serializedSize);
-        P4NZDEC(buf.data(), size, buffer.data());
-    } else {
+#if defined(USE_AVX2) && defined(__AVX2__)
+        p4nzdec256v32(buf.data(), size, buffer.data());
+#else
+        _CLTHROWA(CL_ERR_CorruptIndex, "PFOR256 is not supported on this platform");
+#endif
+    } else if (mode == CodeMode::kPfor128) {
+        uint32_t serializedSize = in->readVInt();
+        std::vector<uint8_t> buf(serializedSize + PFOR_BLOCK_SIZE);
+        in->readBytes(buf.data(), serializedSize);
+#if defined(USE_AVX2) && defined(__AVX2__)
+        p4nzdec32(buf.data(), size, buffer.data());
+#elif defined(__ARM_NEON)
+        p4nzdec32(buf.data(), size, buffer.data());
+#else
+        _CLTHROWA(CL_ERR_CorruptIndex, "PFOR128 is not supported on this platform");
+#endif
+    } else if (mode == CodeMode::kDefault) {
         for (uint32_t i = 0; i < size; i++) {
             buffer[i] = in->readVInt();
         }
     }
     return size;
+}
+
+void PforUtil::pfor_encode(IndexOutput* out, std::vector<uint32_t>& docDeltaBuffer,
+                           std::vector<uint32_t>& freqBuffer, bool has_prox) {
+#ifdef __AVX2__
+    out->writeByte((char)CodeMode::kPfor256);
+    out->writeVInt(docDeltaBuffer.size());
+    std::vector<uint8_t> compress(4 * docDeltaBuffer.size() + PFOR_BLOCK_SIZE);
+    size_t size = 0;
+    size = p4nd1enc256v32(docDeltaBuffer.data(), docDeltaBuffer.size(), compress.data());
+    out->writeVInt(size);
+    out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
+    if (has_prox) {
+        size = p4nzenc256v32(freqBuffer.data(), freqBuffer.size(), compress.data());
+        out->writeVInt(size);
+        out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
+    }
+#elif defined(__ARM_NEON)
+    out->writeByte((char)CodeMode::kPfor128);
+    out->writeVInt(docDeltaBuffer.size());
+    std::vector<uint8_t> compress(4 * docDeltaBuffer.size() + PFOR_BLOCK_SIZE);
+    size_t size = 0;
+    size = p4nd1enc32(docDeltaBuffer.data(), docDeltaBuffer.size(), compress.data());
+    out->writeVInt(size);
+    out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
+    if (has_prox) {
+        size = p4nzenc32(freqBuffer.data(), freqBuffer.size(), compress.data());
+        out->writeVInt(size);
+        out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
+    }
+#else
+    out->writeByte((char)CodeMode::kDefault);
+    out->writeVInt(docDeltaBuffer.size());
+    uint32_t lastDoc = 0;
+    for (int32_t i = 0; i < docDeltaBuffer.size(); i++) {
+        uint32_t curDoc = docDeltaBuffer[i];
+        if (has_prox) {
+            uint32_t newDocCode = (curDoc - lastDoc) << 1;
+            lastDoc = curDoc;
+            uint32_t freq = freqBuffer[i];
+            if (1 == freq) {
+                out->writeVInt(newDocCode | 1);
+            } else {
+                out->writeVInt(newDocCode);
+                out->writeVInt(freq);
+            }
+        } else {
+            out->writeVInt(curDoc - lastDoc);
+            lastDoc = curDoc;
+        }
+    }
+#endif
+    docDeltaBuffer.resize(0);
+    freqBuffer.resize(0);
+}
+
+uint32_t PforUtil::pfor_decode(IndexInput* in, std::vector<uint32_t>& docs,
+                               std::vector<uint32_t>& freqs, bool has_prox, bool compatibleRead) {
+    char mode = in->readByte();
+    uint32_t arraySize = in->readVInt();
+    // old version, need to separate read based on compatibleRead
+    if (mode == (char)CodeMode::kPfor) {
+        {
+            uint32_t SerializedSize = in->readVInt();
+            std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+            in->readBytes(buf.data(), SerializedSize);
+#if defined(USE_AVX2) && defined(__AVX2__)
+            // if compatibleRead is true, means we are reading old version arm64 index in x86_64 platform.
+            if (compatibleRead) {
+                p4nd1dec32(buf.data(), arraySize, docs.data());
+            } else {
+                p4nd1dec256v32(buf.data(), arraySize, docs.data());
+            }
+#elif (defined(__ARM_NEON))
+            // if compatibleRead is true, means we are reading old version x86_64 index in arm64 platform.
+            if (compatibleRead) {
+                p4nd1dec256scalarv32(buf.data(), arraySize, docs.data());
+            } else {
+                p4nd1dec32(buf.data(), arraySize, docs.data());
+            }
+#elif (defined(__SSSE3__))
+            // if compatibleRead is true, means we are reading old version x86_64 index in x86_64 which does not support avx2.
+            if (compatibleRead) {
+                p4nd1dec256scalarv32(buf.data(), arraySize, docs.data());
+            } else {
+                DefaultDDEC(buf.data(), arraySize, docs.data());
+            }
+#else
+            DefaultDDEC(buf.data(), arraySize, docs.data());
+#endif
+        }
+        if (has_prox) {
+            uint32_t SerializedSize = in->readVInt();
+            std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+            in->readBytes(buf.data(), SerializedSize);
+#if defined(USE_AVX2) && defined(__AVX2__)
+            // if compatibleRead is true, means we are reading old version arm64 index in x86_64 platform.
+            if (compatibleRead) {
+                p4nzdec32(buf.data(), arraySize, freqs.data());
+            } else {
+                p4nzdec256v32(buf.data(), arraySize, freqs.data());
+            }
+#elif (defined(__ARM_NEON))
+            // if compatibleRead is true, means we are reading old version x86_64 index in arm64 platform.
+            if (compatibleRead) {
+                p4nzdec256scalarv32(buf.data(), arraySize, freqs.data());
+            } else {
+                p4nzdec32(buf.data(), arraySize, freqs.data());
+            }
+#elif (defined(__SSSE3__))
+            // if compatibleRead is true, means we are reading old version x86_64 index in x86_64 which does not support avx2.
+            if (compatibleRead) {
+                p4nzdec256scalarv32(buf.data(), arraySize, freqs.data());
+            } else {
+                DefaultDEC(buf.data(), arraySize, freqs.data());
+            }
+#else
+            DefaultDEC(buf.data(), arraySize, freqs.data());
+#endif
+        }
+    } else if (mode == (char)CodeMode::kDefault) {
+        uint32_t docDelta = 0;
+        for (uint32_t i = 0; i < arraySize; i++) {
+            uint32_t docCode = in->readVInt();
+            if (has_prox) {
+                docDelta += (docCode >> 1);
+                docs[i] = docDelta;
+                if ((docCode & 1) != 0) {
+                    freqs[i] = 1;
+                } else {
+                    freqs[i] = in->readVInt();
+                }
+            } else {
+                docDelta += docCode;
+                docs[i] = docDelta;
+            }
+        }
+    } else if (mode == (char)CodeMode::kPfor256) {
+        {
+            uint32_t SerializedSize = in->readVInt();
+            std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+            in->readBytes(buf.data(), SerializedSize);
+#if defined(USE_AVX2) && defined(__AVX2__)
+            // new version, read cross platform, x86_64 read arm64 index
+            p4nd1dec256v32(buf.data(), arraySize, docs.data());
+#elif (defined(__SSSE3__) || defined(__ARM_NEON))
+            p4nd1dec256scalarv32(buf.data(), arraySize, docs.data());
+#else
+            _CLTHROWA(CL_ERR_CorruptIndex, "PFOR256 is not supported on this platform");
+#endif
+        }
+        if (has_prox) {
+            uint32_t SerializedSize = in->readVInt();
+            std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+            in->readBytes(buf.data(), SerializedSize);
+#if defined(USE_AVX2) && defined(__AVX2__)
+            p4nzdec256v32(buf.data(), arraySize, freqs.data());
+#elif (defined(__SSSE3__) || defined(__ARM_NEON))
+            // new version, read cross platform, arm64 read x86_64 index
+            p4nzdec256scalarv32(buf.data(), arraySize, freqs.data());
+#else
+            _CLTHROWA(CL_ERR_CorruptIndex, "PFOR256 is not supported on this platform");
+#endif
+        }
+    } else if (mode == (char)CodeMode::kPfor128) {
+        {
+            uint32_t SerializedSize = in->readVInt();
+            std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+            in->readBytes(buf.data(), SerializedSize);
+#if defined(USE_AVX2) && defined(__AVX2__)
+            // new version, read cross platform, x86_64 read arm64 index
+            p4nd1dec32(buf.data(), arraySize, docs.data());
+#elif (defined(__SSSE3__) || defined(__ARM_NEON))
+            p4nd1dec32(buf.data(), arraySize, docs.data());
+#else
+            _CLTHROWA(CL_ERR_CorruptIndex, "PFOR128 is not supported on this platform");
+#endif
+        }
+        if (has_prox) {
+            uint32_t SerializedSize = in->readVInt();
+            std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
+            in->readBytes(buf.data(), SerializedSize);
+#if defined(USE_AVX2) && defined(__AVX2__)
+            p4nzdec32(buf.data(), arraySize, freqs.data());
+#elif (defined(__SSSE3__) || defined(__ARM_NEON))
+            p4nzdec32(buf.data(), arraySize, freqs.data());
+#else
+            _CLTHROWA(CL_ERR_CorruptIndex, "PFOR128 is not supported on this platform");
+#endif
+        }
+    }
+    return arraySize;
 }

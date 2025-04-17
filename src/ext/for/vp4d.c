@@ -95,7 +95,7 @@ extern char _shuffle_16[256][16];
 #include "vp4d.c"
 
 #undef  BITUNDD
-  #elif !defined(SSE2_ON) && !defined(AVX2_ON)
+  #elif defined(__SSSE3__) || defined(__ARM_NEON)
 
 #define _P4DEC      _p4dec
 #define  P4DEC       p4dec
@@ -177,7 +177,6 @@ extern char _shuffle_16[256][16];
 #undef USIZE
 #undef DELTA
 
-  #elif defined(__SSSE3__) || defined(__ARM_NEON)
 #define VSIZE 128
 #define P4DELTA(a)
 #define P4DELTA_(a)
@@ -253,6 +252,36 @@ extern char _shuffle_16[256][16];
 #define  BITUNPACK     bitunpack256w
 #define  BITUNPACKD    bitunpack256w
 #define  _BITUNPACKD  _bitunpack256w
+#include "vp4d.c"
+#define P4DELTA(a) ,a
+#define P4DELTA_(a) a
+#define DELTA
+
+#undef _P4DEC
+#undef  P4DEC
+#undef  P4NDEC
+#undef  BITUNPACKD
+#undef _BITUNPACKD
+
+
+#define _P4DEC        _p4d1dec256scalarv
+#define  P4DEC         p4d1dec256scalarv
+#define  P4NDEC        p4nd1dec256scalarv
+#define  P4NDECS       p4d1dec
+#define  BITUNPACK     bitunpack256scalarv
+#define  BITUNPACKD    bitd1unpack256scalarv
+#define  _BITUNPACKD  _bitd1unpack256scalarv
+#define  BITUNDD       bitd1dec
+#include "vp4d.c"
+
+#define _P4DEC        _p4zdec256scalarv
+#define  P4DEC         p4zdec256scalarv
+#define  P4NDEC        p4nzdec256scalarv
+#define  P4NDECS       p4zdec
+#define  BITUNPACKD    bitzunpack256scalarv
+#define  _BITUNPACKD  _bitzunpack256scalarv
+#define  BITUNDD       bitzdec
+#define USIZE 32
 #include "vp4d.c"
   #endif
 #undef  DELTA
