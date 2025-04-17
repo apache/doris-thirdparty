@@ -1,5 +1,5 @@
-PROJECT (clucene)
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+PROJECT (clucene)
 #Rules for version:
 #MAJOR and MINOR versions are purely political (tracks JLucene compatibility)
 #REVISION version MUST be revised if the headers or compatibility change
