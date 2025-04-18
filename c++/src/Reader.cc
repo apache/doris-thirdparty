@@ -1165,7 +1165,6 @@ namespace orc {
     reader.reset();  // ColumnReaders use lots of memory; free old memory first
     rowIndexes.clear();
     bloomFilterIndex.clear();
-    streams.clear();
     followRowInStripe = 0;
 
     // evaluate file statistics if it exists
@@ -1218,6 +1217,7 @@ namespace orc {
           currentStripeInfo.datalength(), currentStripeInfo.footerlength(),
           currentStripeInfo.numberofrows(), contents->stream.get(), *contents->pool,
           contents->compression, contents->blockSize, contents->readerMetrics));
+      streams.clear();
       contents->stream->beforeReadStripe(std::move(currentStripeInformation), selectedColumns,
                                          streams);
 
