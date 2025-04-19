@@ -113,7 +113,6 @@ jobs:
               'coreutils'
               'gnu-getopt'
               'python@3'
-              'cmake'
               'ninja'
               'ccache'
               'bison'
@@ -138,7 +137,6 @@ jobs:
               'coreutils'
               'gnu-getopt'
               'python@3'
-              'cmake'
               'ninja'
               'ccache'
               'bison'
@@ -159,7 +157,7 @@ jobs:
               'autoconf'
               'libtool-bin'
               'pkg-config'
-              'cmake'
+              'cmake=3.22.1-1ubuntu1.22.04.2'
               'ninja-build'
               'ccache'
               'python-is-python3'
@@ -201,12 +199,20 @@ jobs:
       - name: Prepare for ${{ matrix.config.os }}
         run: |
           if [[ "${{ matrix.config.name }}" =~ macOS-* ]]; then
+            # Install packages except cmake
             brew install ${{ matrix.config.packages }} || true
+            # Install specific version of cmake
+            brew unlink cmake || true
+            wget https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-macos-universal.tar.gz
+            tar -xzf cmake-3.22.1-macos-universal.tar.gz
+            sudo cp -r cmake-3.22.1-macos-universal/CMake.app/Contents/* /usr/local/
+            cmake --version
           else
             export DEFAULT_DIR='/opt/doris'
             export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
 
             sudo apt update
+            sudo apt-cache policy cmake
             sudo DEBIAN_FRONTEND=noninteractive apt install --yes ${{ matrix.config.packages }}
 
             mkdir -p "${DEFAULT_DIR}"
