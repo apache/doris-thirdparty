@@ -28,9 +28,9 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "common.h"
 
-#if defined (COOPERLAKE) || defined (SAPPHIRERAPIDS)
-#include "sbgemv_n_microk_cooperlake.c"
-#endif
+//#if defined (COOPERLAKE) || defined (SAPPHIRERAPIDS)
+//#include "sbgemv_n_microk_cooperlake.c"
+//#endif
 
 #define ALIGN64_ALLOC(alloc_size, TYPE, ptr_align, ptr)   \
     ptr = (TYPE *) malloc(sizeof(TYPE)*alloc_size + 63); \
