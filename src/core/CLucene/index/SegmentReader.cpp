@@ -4,6 +4,9 @@
 * Distributable under the terms of either the Apache License (Version 2.0) or
 * the GNU Lesser General Public License, as specified in the COPYING file.
 ------------------------------------------------------------------------------*/
+#include <assert.h>
+#include <s2/base/integral_types.h>
+
 #include "CLucene/_ApiHeader.h"
 #include "CLucene/search/Similarity.h"
 #include "CLucene/store/FSDirectory.h"
@@ -17,7 +20,6 @@
 #include "_SegmentHeader.h"
 #include "_SegmentMerger.h"
 #include "_TermInfosReader.h"
-#include <assert.h>
 
 CL_NS_USE(util)
 CL_NS_USE(store)
@@ -199,8 +201,8 @@ void SegmentReader::initialize(SegmentInfo *si, int32_t readBufferSize, bool doO
         if (_fieldInfos->hasProx()) {
             proxStream = cfsDir->openInput((segment + ".prx").c_str(), readBufferSize);
         }
-        // we do not need norms, so we don't read it at all.
-        //openNorms(cfsDir, readBufferSize);
+
+        openNorms(cfsDir, readBufferSize);
 
         if (doOpenStores && _fieldInfos->hasVectors()) {// open term vector files only as needed
             string vectorsSegment;
@@ -550,6 +552,31 @@ int32_t SegmentReader::docFreq(const Term *t) {
         return 0;
 }
 
+int32_t SegmentReader::docNorm(const TCHAR* field, int32_t doc) {
+    //Func - Returns the norm of document whose id is doc in this filed
+    //Pre  - field has norm file
+    //Post - The norm of document whose id is doc in this filed has been returned, otherwise -1.0f;
+
+    ensureOpen();
+
+    if (hasNorms(field)) {
+        SCOPED_LOCK_MUTEX(THIS_LOCK)
+        uint8_t* field_norms = norms(field);
+        return search::Similarity::decodeNorm(field_norms[doc]);
+    }
+    return 0;
+}
+
+std::optional<uint64_t> SegmentReader::sumTotalTermFreq(const TCHAR* field) {
+    //Func - Returns the sum number of all terms in all docs
+    //Pre  - field has norm file;
+    //Post - The sum number of all terms in all docs has been returned, otherwise -1.0f;
+    if (hasNorms(field)) {
+        return sum_total_term_freq[*field];
+    }
+    return std::nullopt;
+}
+
 int32_t SegmentReader::numDocs() {
     //Func - Returns the actual number of documents in the segment
     //Pre  - true
@@ -677,18 +704,66 @@ void SegmentReader::norms(const TCHAR *field, uint8_t *bytes) {
         normStream->readBytes(bytes, maxDoc());
     }
 }
+uint8_t* SegmentReader::norms(const TCHAR *field) const {
+    CND_PRECONDITION(field != NULL, "field is NULL");
+    Norm *norm = _norms.get(field);
+    if (norm == NULL) {
+        return NULL;
+    }
+    {
+        SCOPED_LOCK_MUTEX(norm->THIS_LOCK)
+        if (norm->bytes == NULL) {// value not yet read
+            uint8_t *bytes = _CL_NEWARRAY(uint8_t, maxDoc());
+            norms(field, bytes);
+            norm->bytes = bytes;// cache it
+            // it's OK to close the underlying IndexInput as we have cached the
+            // norms and will never read them again.
+            norm->close();
+        }
+
+        return norm->bytes;
+    }
+}
+
+void SegmentReader::norms(const TCHAR *field, uint8_t* bytes) const {
+    CND_PRECONDITION(field != NULL, "field is NULL");
+    Norm *norm = _norms.get(field);
+    if (norm == NULL) {
+        return;
+    }
+
+    {
+        SCOPED_LOCK_MUTEX(norm->THIS_LOCK)
+        if (norm->bytes != NULL) {// can copy from cache
+            memcpy(bytes, norm->bytes, maxDoc());
+            return;
+        }
+
+        // Read from disk.  norm.in may be shared across  multiple norms and
+        // should only be used in a synchronized context.
+        IndexInput *normStream;
+        if (norm->useSingleNormStream) {
+            normStream = singleNormStream;
+        } else {
+            normStream = norm->in;
+        }
+        normStream->seek(norm->normSeek);
+        normStream->readBytes(bytes, maxDoc());
+    }
+}
 
 uint8_t *SegmentReader::createFakeNorms(int32_t size) {
     uint8_t *ones = _CL_NEWARRAY(uint8_t, size);
     if (size > 0)
-        memset(ones, DefaultSimilarity::encodeNorm(1.0f), size);
+        memset(ones, Similarity::encodeNorm(0), size);
     return ones;
 }
 
 uint8_t *SegmentReader::fakeNorms() {
     if (ones == NULL)
-        // ones = createFakeNorms(maxDoc());
-        ones = createFakeNorms(1);
+        // TODO: this is origin clucene norms
+        ones = createFakeNorms(maxDoc());
+        // ones = createFakeNorms(1);
     return ones;
 }
 // can return NULL if norms aren't stored
@@ -752,12 +827,11 @@ uint8_t *SegmentReader::norms(const TCHAR *field) {
     //       and returned containing the norms for that field. If the named field is unknown NULL is returned.
 
     CND_PRECONDITION(field != NULL, "field is NULL");
-    // SCOPED_LOCK_MUTEX(THIS_LOCK)
-    // ensureOpen();
-    // uint8_t *bytes = getNorms(field);
-    // if (bytes == NULL)
-    //     bytes = fakeNorms();
-    uint8_t *bytes = fakeNorms();
+    SCOPED_LOCK_MUTEX(THIS_LOCK)
+    ensureOpen();
+    uint8_t *bytes = getNorms(field);
+    if (bytes == NULL)
+        bytes = fakeNorms();
     return bytes;
 }
 
@@ -830,6 +904,26 @@ void SegmentReader::openNorms(Directory *cfsDir, int32_t readBufferSize) {
             }
 
             _norms[fi->name] = _CLNEW Norm(normInput, singleNormFile, fi->number, normSeek, this, segment.c_str());
+
+            // read total norm info into cache
+            uint8_t *bytes = _CL_NEWARRAY(uint8_t, _maxDoc);
+            IndexInput *normStream;
+            if (_norms[fi->name]->useSingleNormStream) {
+                normStream = singleNormStream;
+            } else {
+                normStream = _norms[fi->name]->in;
+            }
+
+            ensureOpen();
+            SCOPED_LOCK_MUTEX(_norms[fi->name]->THIS_LOCK);
+            normStream->seek(_norms[fi->name]->normSeek);
+            normStream->readBytes(bytes, _maxDoc);
+            uint64_t sum = 0;
+            for (int doc = 0; doc < _maxDoc; doc++) {
+                sum += Similarity::decodeNorm(bytes[doc]);
+            }
+            sum_total_term_freq[*fi->name] = sum;
+
             nextNormSeek += _maxDoc;// increment also if some norms are separate
         }
     }

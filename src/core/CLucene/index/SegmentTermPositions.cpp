@@ -38,8 +38,8 @@ TermPositions* SegmentTermPositions::__asTermPositions(){
     return (TermPositions*) this;
 }
 
-void SegmentTermPositions::seek(const TermInfo* ti, Term* term) {
-    SegmentTermDocs::seek(ti, term);
+void SegmentTermPositions::seek(const TermInfo* ti, Term* term, bool local_stats) {
+    SegmentTermDocs::seek(ti, term, local_stats);
     if (ti != NULL)
     	lazySkipPointer = ti->proxPointer;
     
@@ -104,6 +104,10 @@ bool SegmentTermPositions::next() {
 }
 
 int32_t SegmentTermPositions::read(int32_t* /*docs*/, int32_t* /*freqs*/, int32_t /*length*/) {
+    _CLTHROWA(CL_ERR_UnsupportedOperation,"TermPositions does not support processing multiple documents in one call. Use TermDocs instead.");
+}
+
+int32_t SegmentTermPositions::read(int32_t* /*docs*/, int32_t* /*freqs*/, int32_t*  /*norms*/, int32_t /*length*/) {
     _CLTHROWA(CL_ERR_UnsupportedOperation,"TermPositions does not support processing multiple documents in one call. Use TermDocs instead.");
 }
 
