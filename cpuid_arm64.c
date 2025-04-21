@@ -374,15 +374,20 @@ int detect(void)
 	}
 #else
 #ifdef __APPLE__
+	length64 = sizeof(value64);
 	sysctlbyname("hw.ncpu",&value64,&length64,NULL,0);
 	cpulowperf=value64;
+	length64 = sizeof(value64);
 	sysctlbyname("hw.nperflevels",&value64,&length64,NULL,0);
 	if (value64 > 1) {
-	sysctlbyname("hw.perflevel0.cpusperl",&value64,&length64,NULL,0);
+	length64 = sizeof(value64);
+	sysctlbyname("hw.perflevel0.cpusperl2",&value64,&length64,NULL,0);
 	cpuhiperf=value64;
-	sysctlbyname("hw.perflevel1.cpusperl",&value64,&length64,NULL,0);
+	length64 = sizeof(value64);
+	sysctlbyname("hw.perflevel1.cpusperl2",&value64,&length64,NULL,0);
 	cpulowperf=value64;
 	}
+	length64 = sizeof(value64);
 	sysctlbyname("hw.cpufamily",&value64,&length64,NULL,0);
 	if (value64 ==131287967|| value64 == 458787763 ) return CPU_VORTEX; //A12/M1
 	if (value64 == 3660830781) return CPU_VORTEX; //A15/M2
@@ -467,6 +472,7 @@ int n=0;
 	printf("#define NUM_CORES_HP %d\n",cpuhiperf);
 #endif
 #ifdef __APPLE__
+	length64 = sizeof(value64);
 	sysctlbyname("hw.physicalcpu_max",&value,&length,NULL,0);
 	printf("#define NUM_CORES %d\n",value);
 	if (cpulowperf >0)
@@ -698,12 +704,17 @@ void get_cpuconfig(void)
 	    case CPU_VORTEX:
 		printf("#define VORTEX			      \n");
 #ifdef __APPLE__
+		length64 = sizeof(value64);
 		sysctlbyname("hw.l1icachesize",&value64,&length64,NULL,0);
 		printf("#define L1_CODE_SIZE	     %lld       \n",value64);
+		length64 = sizeof(value64);
 		sysctlbyname("hw.cachelinesize",&value64,&length64,NULL,0);
 		printf("#define L1_CODE_LINESIZE     %lld       \n",value64);
+		printf("#define L1_DATA_LINESIZE     %lld       \n",value64);
+		length64 = sizeof(value64);
 		sysctlbyname("hw.l1dcachesize",&value64,&length64,NULL,0);
 		printf("#define L1_DATA_SIZE	     %lld       \n",value64);
+		length64 = sizeof(value64);
 		sysctlbyname("hw.l2cachesize",&value64,&length64,NULL,0);
 		printf("#define L2_SIZE	     %lld       \n",value64);
 #endif	
