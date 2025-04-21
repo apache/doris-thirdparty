@@ -739,7 +739,7 @@ void SegmentMerger::mergeNorms() {
     for (size_t i = 0; i < fieldInfos->size(); i++) {
       //Get the i-th FieldInfo
       FieldInfo* fi = fieldInfos->fieldInfo(i);
-      //Is this Field indexed?
+      // Is this Field indexed and field need norms ?
       if (fi->isIndexed && !fi->omitNorms){
         //Instantiate  an IndexOutput to that norm file
         if (output == NULL) {

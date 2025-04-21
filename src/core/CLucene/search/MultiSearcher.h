@@ -40,6 +40,10 @@ CL_NS_DEF(search)
 
 	  int32_t docFreq(const CL_NS(index)::Term* term) const ;
 
+    int32_t docNorm(const TCHAR* field, int32_t n) const;
+
+    std::optional<uint64_t> sumTotalTermFreq(const TCHAR* field) const;
+
       /** For use by {@link HitCollector} implementations. */
 	  bool doc(int32_t n, CL_NS(document)::Document* document);
 

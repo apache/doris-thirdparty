@@ -100,6 +100,13 @@ public:
 
 	//Returns the document frequency of the current term in the set
 	int32_t docFreq(const Term* t=NULL);
+
+        // Returns the document norm
+        int32_t docNorm(const TCHAR* field, int32_t n);
+
+        // Returns the total norm of all terms appeared in all documents in this field
+        std::optional<uint64_t> sumTotalTermFreq(const TCHAR* field);
+
 	TermDocs* termDocs();
 	TermPositions* termPositions();
 

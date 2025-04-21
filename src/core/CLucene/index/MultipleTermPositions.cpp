@@ -14,16 +14,20 @@ CL_NS_USE(util)
 
 CL_NS_DEF(index)
 
-void MultipleTermPositions::seek(Term*) {
+void MultipleTermPositions::seek(Term*, bool) {
 	_CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: MultipleTermPositions::seek");
 }
 
-void MultipleTermPositions::seek(TermEnum*) {
+void MultipleTermPositions::seek(TermEnum*, bool) {
 	_CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: MultipleTermPositions::seek");
 }
 
 int32_t MultipleTermPositions::read(int32_t*, int32_t*,int32_t) {
 	_CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: MultipleTermPositions::read");
+}
+
+int32_t MultipleTermPositions::read(int32_t*, int32_t*, int32_t*, int32_t) {
+    _CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: MultipleTermPositions::read");
 }
 
 bool MultipleTermPositions::readRange(DocRange* docRange) {
@@ -144,6 +148,7 @@ bool MultipleTermPositions::next() {
 
 	_posList->clear();
 	_doc = _termPositionsQueue->peek()->doc();
+        _norm = _termPositionsQueue->peek()->norm();
 
 	TermPositions* tp;
 	do {
@@ -163,7 +168,6 @@ bool MultipleTermPositions::next() {
 
 	_posList->sort();
 	_freq = _posList->size();
-
 	return true;
 }
 
@@ -190,6 +194,10 @@ int32_t MultipleTermPositions::doc() const {
 
 int32_t MultipleTermPositions::freq() const {
 	return _freq;
+}
+
+int32_t MultipleTermPositions::norm() const {
+    return _norm;
 }
 
 void MultipleTermPositions::close() {

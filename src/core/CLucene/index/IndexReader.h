@@ -15,6 +15,8 @@
 #include "CLucene/index/IndexVersion.h"
 #include "CLucene/index/_FieldInfos.h"
 
+#include <optional>
+
 CL_CLASS_DEF(store,Directory)
 CL_CLASS_DEF(store,LuceneLock)
 CL_CLASS_DEF(document,Document)
@@ -59,7 +61,6 @@ class CLUCENE_EXPORT IndexReader: public CL_NS(util)::NamedObject{
   bool closed;
 protected:
   bool hasChanges;
-
   /**
   * Legacy Constructor for backwards compatibility.
   *
@@ -560,6 +561,14 @@ public:
    */
 	virtual int32_t docFreq(const Term* t) = 0;
 
+    /** Returns the norm of document whoss id is <code>doc</code> in the <code>field</code>.
+   */
+        virtual int32_t docNorm(const TCHAR* field, int32_t doc) = 0;
+
+    /** Returns the total norm of all terms appeared in all documents
+   */
+        virtual std::optional<uint64_t> sumTotalTermFreq(const TCHAR* field) = 0;
+
 	/* Returns an unpositioned TermPositions enumerator.
    * @throws IOException if there is a low-level IO error
 	 * @memory Caller must clean up
@@ -584,7 +593,7 @@ public:
   * @throws IOException if there is a low-level IO error
   * @memory Caller must clean up
 	*/
-	TermPositions* termPositions(Term* term);
+	TermPositions* termPositions(Term* term, bool load_stats = false);
 
 	/** Returns an unpositioned {@link TermDocs} enumerator.
    * @throws IOException if there is a low-level IO error
@@ -602,7 +611,7 @@ public:
   * @throws IOException if there is a low-level IO error
   * @memory Caller must clean up
 	*/
-	TermDocs* termDocs(Term* term);
+	TermDocs* termDocs(Term* term, bool load_stats = false);
 
 	/** Deletes the document numbered <code>docNum</code>.  Once a document is
 	* deleted it will not appear in TermDocs or TermPostitions enumerations.

@@ -324,7 +324,9 @@ public:
     // write fields info file
     void writeFields(lucene::store::Directory* d, std::string segment);
     // merge terms and write files
-    void mergeTerms(bool hasProx);
+    void mergeTerms(bool hasProx, IndexVersion indexVersion);
+    // merge norms and write files
+    void mergeNorms(std::vector<uint32_t> dest_index_docs, std::vector<std::map<TCHAR, std::vector<uint8_t>>> srcFieldNormsMapValues, std::vector<lucene::store::IndexOutput *> normsOutputList);
     // merge null_bitmap
     void mergeNullBitmap(std::vector<std::vector<uint32_t>> srcBitmapValues, std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList);
 
