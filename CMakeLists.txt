@@ -304,19 +304,14 @@ if(APPLE AND DYNAMIC_ARCH AND (NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "arm64")
   # Use response files
   set(CMAKE_C_USE_RESPONSE_FILE_FOR_OBJECTS 1)
   # Always build static library first
-  if(INTERFACE64)
-    set(STATIC_FILE "libopenblas_64.a")
-  else()
-    set(STATIC_FILE "libopenblas.a")
-  endif()
   if(BUILD_STATIC_LIBS)
-    set(STATIC_PATH "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${STATIC_FILE}")
+    set(STATIC_PATH "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/lib${OpenBLAS_LIBNAME}.a")
   else()
     add_library(${OpenBLAS_LIBNAME}_static STATIC ${TARGET_OBJS} ${OpenBLAS_DEF_FILE})
-    set(STATIC_PATH STATIC_FILE)
+    set(STATIC_PATH "lib${OpenBLAS_LIBNAME}.a")
   endif()
   set(CREATE_STATIC_LIBRARY_COMMAND
-    "sh -c 'cat ${CMAKE_BINARY_DIR}/CMakeFiles/openblas_shared.dir/objects*.rsp | xargs -n 1024 ${CMAKE_AR} -ru ${STATIC_PATH} && exit 0' "
+    "sh -c 'cat ${CMAKE_BINARY_DIR}/CMakeFiles/${OpenBLAS_LIBNAME}_static.dir/objects*.rsp | xargs -n 1024 ${CMAKE_AR} -ru ${STATIC_PATH} && exit 0' "
     "sh -c '${CMAKE_AR} -rs ${STATIC_PATH} ${CMAKE_BINARY_DIR}/driver/others/CMakeFiles/driver_others.dir/xerbla.c.o && exit 0' ")
   if(BUILD_SHARED_LIBS)
     add_dependencies(${OpenBLAS_LIBNAME}_shared ${OpenBLAS_LIBNAME}_static)
