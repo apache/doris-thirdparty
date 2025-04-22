@@ -77,9 +77,9 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1, FLOAT alpha, FLOAT *a,
       svbool_t pg01 = ((j + width * 1) < n) ? SV_TRUE() : svpfalse();
       svbool_t pg02 = ((j + width * 2) < n) ? SV_TRUE() : svpfalse();
 
-      SV_TYPE temp0_vec = SV_DUP(alpha * x0_ptr[ix]);
-      SV_TYPE temp1_vec = SV_DUP(alpha * x1_ptr[ix]);
-      SV_TYPE temp2_vec = SV_DUP(alpha * x2_ptr[ix]);
+      SV_TYPE temp0_vec = ((j + width * 0) < n) ? SV_DUP(alpha * x0_ptr[ix]) : SV_DUP(0.0);
+      SV_TYPE temp1_vec = ((j + width * 1) < n) ? SV_DUP(alpha * x1_ptr[ix]) : SV_DUP(0.0);
+      SV_TYPE temp2_vec = ((j + width * 2) < n) ? SV_DUP(alpha * x2_ptr[ix]) : SV_DUP(0.0);
       i = 0;
       BLASLONG sve_size = SV_COUNT();
       while ((i + sve_size * 1 - 1) < m) {
