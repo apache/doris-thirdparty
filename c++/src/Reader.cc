@@ -1250,7 +1250,7 @@ namespace orc {
       StripeStreamsImpl stripeStreams(*this, currentStripe, currentStripeInfo, currentStripeFooter,
                                       currentStripeInfo.offset(), *contents->stream, streams,
                                       writerTimezone, readerTimezone);
-      reader = buildReader(*contents->schema, stripeStreams, useTightNumericVector);
+      reader = buildReader(*contents->schema, stripeStreams, useTightNumericVector, true);
 
       if (stringDictFilter != nullptr) {
         std::list<std::string> dictFilterColumnNames;
@@ -1407,7 +1407,7 @@ namespace orc {
    * @return Id of the RowGroup that the row belongs to
    */
   int RowReaderImpl::computeRGIdx(uint64_t rowIndexStride, long rowIdx) {
-    return rowIndexStride == 0 ? 0 : (int)(rowIdx / rowIndexStride);
+    return rowIndexStride == 0 ? 0 : static_cast<int>(rowIdx / static_cast<long>(rowIndexStride));
   }
 
   /**
