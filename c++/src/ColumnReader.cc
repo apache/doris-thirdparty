@@ -46,15 +46,17 @@ namespace orc {
     }
   }
 
-  ColumnReader::ColumnReader(const Type& _type, StripeStreams& stripe)
+  ColumnReader::ColumnReader(const Type& _type, StripeStreams& stripe, bool readPresentStream)
       : type(_type),
         columnId(type.getColumnId()),
         memoryPool(stripe.getMemoryPool()),
         metrics(stripe.getReaderMetrics()) {
-    std::unique_ptr<SeekableInputStream> stream =
-        stripe.getStream(columnId, proto::Stream_Kind_PRESENT, true);
-    if (stream.get()) {
-      notNullDecoder = createBooleanRleDecoder(std::move(stream), metrics);
+    if (readPresentStream) {
+      std::unique_ptr<SeekableInputStream> stream =
+          stripe.getStream(columnId, proto::Stream_Kind_PRESENT, true);
+      if (stream.get()) {
+        notNullDecoder = createBooleanRleDecoder(std::move(stream), metrics);
+      }
     }
   }
 
@@ -1109,7 +1111,8 @@ namespace orc {
     std::vector<std::unique_ptr<ColumnReader>> children;
 
    public:
-    StructColumnReader(const Type& type, StripeStreams& stipe, bool useTightNumericVector = false);
+    StructColumnReader(const Type& type, StripeStreams& stipe, bool useTightNumericVector = false,
+                       bool isTopLevel = false);
 
     uint64_t skip(uint64_t numValues, const ReadPhase& readPhase) override;
 
@@ -1133,8 +1136,8 @@ namespace orc {
   };
 
   StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe,
-                                         bool useTightNumericVector)
-      : ColumnReader(type, stripe) {
+                                         bool useTightNumericVector, bool isTopLevel)
+      : ColumnReader(type, stripe, !isTopLevel) {
     // count the number of selected sub-columns
     const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
     switch (static_cast<int64_t>(stripe.getEncoding(columnId).kind())) {
@@ -2311,7 +2314,7 @@ namespace orc {
    * Create a reader for the given stripe.
    */
   std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& stripe,
-                                            bool useTightNumericVector) {
+                                            bool useTightNumericVector, bool isTopLevel) {
     switch (static_cast<int64_t>(type.getKind())) {
       case SHORT: {
         if (useTightNumericVector) {
@@ -2365,7 +2368,7 @@ namespace orc {
         return std::make_unique<UnionColumnReader>(type, stripe, useTightNumericVector);
 
       case STRUCT:
-        return std::make_unique<StructColumnReader>(type, stripe, useTightNumericVector);
+        return std::make_unique<StructColumnReader>(type, stripe, useTightNumericVector, isTopLevel);
 
       case FLOAT: {
         if (useTightNumericVector) {
