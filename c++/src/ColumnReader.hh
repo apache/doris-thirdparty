@@ -129,7 +129,7 @@ namespace orc {
     }
 
    public:
-    ColumnReader(const Type& type, StripeStreams& stipe);
+    ColumnReader(const Type& type, StripeStreams& stipe, bool readPresentStream = true);
 
     virtual ~ColumnReader();
 
@@ -188,7 +188,8 @@ namespace orc {
    * Create a reader for the given stripe.
    */
   std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& stripe,
-                                            bool useTightNumericVector = false);
+                                            bool useTightNumericVector = false,
+                                            bool isTopLevel = false);
 
   void loadStringDicts(ColumnReader* columnReader,
                        const std::unordered_map<uint64_t, std::string>& columnIdToNameMap,
