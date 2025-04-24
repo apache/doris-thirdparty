@@ -29,12 +29,13 @@ namespace orc {
   enum class ReaderCategory {
     FILTER_CHILD,   // Primitive type that is a filter column
     FILTER_PARENT,  // Compound type with filter children
+    FILTER_COMPOUND_ELEMENT, // Compound type that is a filter element, list/map.
     NON_FILTER      // Non-filter column
   };
 
   class ReadPhase {
    public:
-    static const int NUM_CATEGORIES = 3;  // Number of values in ReaderCategory
+    static const int NUM_CATEGORIES = 4;  // Number of values in ReaderCategory
     std::bitset<NUM_CATEGORIES> categories;
 
     static const ReadPhase ALL;
