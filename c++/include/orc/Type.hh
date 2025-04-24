@@ -26,15 +26,57 @@
 #include "orc/orc-config.hh"
 
 namespace orc {
+  /**
+   * Filter Node Types:
+   *
+   * FILTER_CHILD: Primitive type that is a filter column.
+   * FILTER_PARENT: Compound type that may contain both filter and non-filter children.
+   * FILTER_COMPOUND_ELEMENT: Compound type that is a filter element (list/map).
+   *                         The entire column will be read, and must have only filter children.
+   * NON_FILTER: Non-filter column.
+   *
+   * Example:
+   * struct<name:string,
+   *        age:int,
+   *        address:struct<city:string,
+   *                       zip:int,
+   *                       location:struct<latitude:double, longitude:double>>,
+   *        hobbies:list<struct<name:string, level:int>>,
+   *        scores:map<string, struct<subject:string, grade:int>>>
+   *
+   * Filter columns: name, address.city, address.location.latitude, hobbies, scores
+   *
+   * Column Structure:
+   * struct<...>
+   * ├── name (FILTER_CHILD)           # Primitive type, filter column
+   * ├── age (NON_FILTER)              # Non-filter column
+   * ├── address (FILTER_PARENT)       # Compound type with filter children
+   * │   ├── city (FILTER_CHILD)       # Primitive type, filter column
+   * │   ├── zip (NON_FILTER)          # Non-filter column
+   * │   └── location (FILTER_PARENT)  # Compound type with filter children
+   * │       ├── latitude (FILTER_CHILD)  # Primitive type, filter column
+   * │       └── longitude (NON_FILTER)   # Non-filter column
+   * ├── hobbies (FILTER_COMPOUND_ELEMENT)  # Compound type as filter element (list)
+   * │   └── struct<name:string, level:int> (FILTER_PARENT)  # Compound type with filter children
+   * │       ├── name (FILTER_CHILD)   # Primitive type, filter column
+   * │       └── level (FILTER_CHILD)  # Primitive type, filter column
+   * └── scores (FILTER_COMPOUND_ELEMENT)   # Compound type as filter element (map)
+   *     ├── key (FILTER_CHILD)        # Primitive type, filter column
+   *     └── value (FILTER_PARENT)     # Compound type with filter children
+   *         ├── subject (FILTER_CHILD)  # Primitive type, filter column
+   *         └── grade (FILTER_CHILD)    # Primitive type, filter column
+   */
   enum class ReaderCategory {
     FILTER_CHILD,   // Primitive type that is a filter column
-    FILTER_PARENT,  // Compound type with filter children
+    FILTER_PARENT,  // Compound type that may contain both filter and non-filter children
+    FILTER_COMPOUND_ELEMENT, // Compound type that is a filter element (list/map).
+                              // The entire column will be read, and must have only filter children.
     NON_FILTER      // Non-filter column
   };
 
   class ReadPhase {
    public:
-    static const int NUM_CATEGORIES = 3;  // Number of values in ReaderCategory
+    static const int NUM_CATEGORIES = 4;  // Number of values in ReaderCategory
     std::bitset<NUM_CATEGORIES> categories;
 
     static const ReadPhase ALL;

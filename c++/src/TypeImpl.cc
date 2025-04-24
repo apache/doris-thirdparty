@@ -26,9 +26,9 @@
 namespace orc {
 
   const ReadPhase ReadPhase::ALL = ReadPhase::fromCategories(
-      {ReaderCategory::FILTER_CHILD, ReaderCategory::FILTER_PARENT, ReaderCategory::NON_FILTER});
+      {ReaderCategory::FILTER_CHILD, ReaderCategory::FILTER_PARENT, ReaderCategory::FILTER_COMPOUND_ELEMENT, ReaderCategory::NON_FILTER});
   const ReadPhase ReadPhase::LEADERS =
-      ReadPhase::fromCategories({ReaderCategory::FILTER_CHILD, ReaderCategory::FILTER_PARENT});
+      ReadPhase::fromCategories({ReaderCategory::FILTER_CHILD, ReaderCategory::FILTER_COMPOUND_ELEMENT, ReaderCategory::FILTER_PARENT});
   const ReadPhase ReadPhase::FOLLOWERS = ReadPhase::fromCategories({ReaderCategory::NON_FILTER});
   const ReadPhase ReadPhase::LEADER_PARENTS =
       ReadPhase::fromCategories({ReaderCategory::FILTER_PARENT});
