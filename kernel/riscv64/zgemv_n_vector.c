@@ -52,11 +52,11 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1, FLOAT alpha_r, FLOAT alpha_i, FLOAT *a, BLASLONG lda, FLOAT *x, BLASLONG inc_x, FLOAT *y, BLASLONG inc_y, FLOAT *buffer)
 {
-	BLASLONG i = 0, j = 0, k = 0;
+        BLASLONG i = 0, j = 0, k = 0;
         BLASLONG ix = 0, iy = 0;
         FLOAT *a_ptr = a;
-        FLOAT temp_r = 0.0, temp_i = 0.0 ,temp_r1 ,temp_i1, temp_r2 ,temp_i2 ,temp_r3, temp_i3,temp_rr[4] ,temp_ii[4];
-        FLOAT_V_T va0, va1, vy0, vy1,vy0_new, vy1_new, va2 , va3 , va4 , va5, va6 , va7, temp_iv , temp_rv,x_v0 , x_v1,temp_v1 , temp_v2 , temp_v3 , temp_v4;
+        FLOAT temp_r = 0.0, temp_i = 0.0, temp_r1, temp_i1, temp_r2, temp_i2, temp_r3, temp_i3, temp_rr[4], temp_ii[4];
+        FLOAT_V_T va0, va1, vy0, vy1, vy0_new, vy1_new, va2, va3, va4, va5, va6, va7, temp_iv, temp_rv, x_v0, x_v1, temp_v1, temp_v2, temp_v3, temp_v4;
         unsigned int gvl = 0;
         BLASLONG stride_a = sizeof(FLOAT) * 2;
         BLASLONG stride_y = inc_y * sizeof(FLOAT) * 2;
@@ -64,56 +64,58 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1, FLOAT alpha_r, FLOAT alpha_i,
         BLASLONG inc_yv = inc_y * gvl * 2;
         BLASLONG inc_x2 = inc_x * 2;
         BLASLONG lda2 = lda * 2;
-		vy0_new = VLSEV_FLOAT(&y[iy], stride_y, gvl);
-		vy1_new = VLSEV_FLOAT(&y[iy+1], stride_y, gvl);
-        for(k=0,j=0; k<m/gvl; k++){
+        vy0_new = VLSEV_FLOAT(&y[iy], stride_y, gvl);
+        vy1_new = VLSEV_FLOAT(&y[iy + 1], stride_y, gvl);
+        for (k = 0, j = 0; k < m / gvl; k++)
+        {
                 a_ptr = a;
                 ix = 0;
-				vy0 = vy0_new;
-				vy1 = vy1_new;
-                // vy0 = VLSEV_FLOAT(&y[iy], stride_y, gvl);
-                // vy1 = VLSEV_FLOAT(&y[iy+1], stride_y, gvl);
-				if(k < m/gvl - 1){
-					vy0_new = VLSEV_FLOAT(&y[iy + inc_yv ], stride_y, gvl);
-					vy1_new = VLSEV_FLOAT(&y[iy+ inc_yv + 1], stride_y, gvl);
-				}
-                for(i = 0; i < n %4; i++){
+                vy0 = vy0_new;
+                vy1 = vy1_new;
+
+                if (k < m / gvl - 1)
+                {
+                        vy0_new = VLSEV_FLOAT(&y[iy + inc_yv], stride_y, gvl);
+                        vy1_new = VLSEV_FLOAT(&y[iy + inc_yv + 1], stride_y, gvl);
+                }
+                for (i = 0; i < n % 4; i++)
+                {
 #if !defined(XCONJ)
-			temp_r = alpha_r * x[ix]   - alpha_i * x[ix+1];
-			temp_i = alpha_r * x[ix+1] + alpha_i * x[ix];
+                        temp_r = alpha_r * x[ix] - alpha_i * x[ix + 1];
+                        temp_i = alpha_r * x[ix + 1] + alpha_i * x[ix];
 #else
-			temp_r = alpha_r * x[ix]   + alpha_i * x[ix+1];
-			temp_i = alpha_r * x[ix+1] - alpha_i * x[ix];
+                        temp_r = alpha_r * x[ix] + alpha_i * x[ix + 1];
+                        temp_i = alpha_r * x[ix + 1] - alpha_i * x[ix];
 #endif
 
-			va0 = VLSEV_FLOAT(&a_ptr[j], stride_a, gvl);
-			va1 = VLSEV_FLOAT(&a_ptr[j+1], stride_a, gvl);
+                        va0 = VLSEV_FLOAT(&a_ptr[j], stride_a, gvl);
+                        va1 = VLSEV_FLOAT(&a_ptr[j + 1], stride_a, gvl);
 #if !defined(CONJ)
 #if !defined(XCONJ)
-			vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_i, va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_r, va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_i, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_i, va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_r, va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_i, va0, gvl);
 #else
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_i, va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_r, va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_i, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_i, va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_r, va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_i, va0, gvl);
 #endif
 
 #else
 
 #if !defined(XCONJ)
-			vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_i, va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_r, va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_i, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_i, va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_r, va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_i, va0, gvl);
 #else
-			vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_i, va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_r, va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_i, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_i, va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_r, va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_i, va0, gvl);
 #endif
 
 #endif
@@ -121,134 +123,129 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1, FLOAT alpha_r, FLOAT alpha_i,
                         ix += inc_x2;
                 }
 
-                for(; i < n ; i+=4){
+                for (; i < n; i += 4)
+                {
 #if !defined(XCONJ)
 
-
-				x_v0 = VLSEV_FLOAT(&x[ix], inc_x2 * sizeof(FLOAT), 4);
-				x_v1 = VLSEV_FLOAT(&x[ix+1], inc_x2 * sizeof(FLOAT), 4);
-				temp_rv = VFMUL_VF_FLOAT(x_v0, alpha_r, 4);
-				temp_iv = VFMUL_VF_FLOAT(x_v0, alpha_i, 4);
-				temp_rv = VFNMSACVF_FLOAT(temp_rv, alpha_i, x_v1, 4);
-				temp_iv = VFMACCVF_FLOAT(temp_iv, alpha_r, x_v1, 4);
-				VSEV_FLOAT(&temp_rr[0],temp_rv, 4 );
-				VSEV_FLOAT(&temp_ii[0],temp_iv, 4 );
-
+                        x_v0 = VLSEV_FLOAT(&x[ix], inc_x2 * sizeof(FLOAT), 4);
+                        x_v1 = VLSEV_FLOAT(&x[ix + 1], inc_x2 * sizeof(FLOAT), 4);
+                        temp_rv = VFMUL_VF_FLOAT(x_v0, alpha_r, 4);
+                        temp_iv = VFMUL_VF_FLOAT(x_v0, alpha_i, 4);
+                        temp_rv = VFNMSACVF_FLOAT(temp_rv, alpha_i, x_v1, 4);
+                        temp_iv = VFMACCVF_FLOAT(temp_iv, alpha_r, x_v1, 4);
+                        VSEV_FLOAT(&temp_rr[0], temp_rv, 4);
+                        VSEV_FLOAT(&temp_ii[0], temp_iv, 4);
 
 #else
-			x_v0 = VLSEV_FLOAT(&x[ix], inc_x2 * sizeof(FLOAT), 4);
-			x_v1 = VLSEV_FLOAT(&x[ix+1], inc_x2 * sizeof(FLOAT), 4);
-			temp_rv = VFMUL_VF_FLOAT(x_v0, alpha_r, 4);
-			temp_iv = VFMUL_VF_FLOAT(x_v0, alpha_i, 4);
-			temp_rv = VFMACCVF_FLOAT(temp_rv, alpha_i, x_v1, 4);
-			temp_iv = VFNMSACVF_FLOAT(temp_iv, alpha_r, x_v1, 4);
-			VSEV_FLOAT(&temp_rr[0],temp_rv, 4 );
-			VSEV_FLOAT(&temp_ii[0],temp_iv, 4 );	
+                        x_v0 = VLSEV_FLOAT(&x[ix], inc_x2 * sizeof(FLOAT), 4);
+                        x_v1 = VLSEV_FLOAT(&x[ix + 1], inc_x2 * sizeof(FLOAT), 4);
+                        temp_rv = VFMUL_VF_FLOAT(x_v0, alpha_r, 4);
+                        temp_iv = VFMUL_VF_FLOAT(x_v0, alpha_i, 4);
+                        temp_rv = VFMACCVF_FLOAT(temp_rv, alpha_i, x_v1, 4);
+                        temp_iv = VFNMSACVF_FLOAT(temp_iv, alpha_r, x_v1, 4);
+                        VSEV_FLOAT(&temp_rr[0], temp_rv, 4);
+                        VSEV_FLOAT(&temp_ii[0], temp_iv, 4);
 
 #endif
 
-			va0 = VLSEV_FLOAT(&a_ptr[j], stride_a, gvl);
-			va1 = VLSEV_FLOAT(&a_ptr[j+1], stride_a, gvl);
-			va2 = VLSEV_FLOAT(&a_ptr[j+lda2], stride_a, gvl);
-			va3 = VLSEV_FLOAT(&a_ptr[j+lda2+1], stride_a, gvl);
-			va4 = VLSEV_FLOAT(&a_ptr[j+lda2*2], stride_a, gvl);
-			va5 = VLSEV_FLOAT(&a_ptr[j+lda2*2+1], stride_a, gvl);
-			va6 = VLSEV_FLOAT(&a_ptr[j+lda2*3], stride_a, gvl);
-			va7 = VLSEV_FLOAT(&a_ptr[j+lda2*3+1], stride_a, gvl);
-
+                        va0 = VLSEV_FLOAT(&a_ptr[j], stride_a, gvl);
+                        va1 = VLSEV_FLOAT(&a_ptr[j + 1], stride_a, gvl);
+                        va2 = VLSEV_FLOAT(&a_ptr[j + lda2], stride_a, gvl);
+                        va3 = VLSEV_FLOAT(&a_ptr[j + lda2 + 1], stride_a, gvl);
+                        va4 = VLSEV_FLOAT(&a_ptr[j + lda2 * 2], stride_a, gvl);
+                        va5 = VLSEV_FLOAT(&a_ptr[j + lda2 * 2 + 1], stride_a, gvl);
+                        va6 = VLSEV_FLOAT(&a_ptr[j + lda2 * 3], stride_a, gvl);
+                        va7 = VLSEV_FLOAT(&a_ptr[j + lda2 * 3 + 1], stride_a, gvl);
 
 #if !defined(CONJ)
 #if !defined(XCONJ)
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[0], va0, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[0], va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_rr[0], va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_ii[0], va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[0], va0, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[0], va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_rr[0], va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_ii[0], va0, gvl);
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[1], va2, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[1], va3, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_rr[1], va3, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_ii[1], va2, gvl);
-			
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[2], va4, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[2], va5, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_rr[2], va5, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_ii[2], va4, gvl);
-			
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[3], va6, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[3], va7, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_rr[3], va7, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_ii[3], va6, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[1], va2, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[1], va3, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_rr[1], va3, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_ii[1], va2, gvl);
 
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[2], va4, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[2], va5, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_rr[2], va5, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_ii[2], va4, gvl);
+
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[3], va6, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[3], va7, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_rr[3], va7, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_ii[3], va6, gvl);
 
 #else
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[0], va0, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_ii[0], va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_rr[0], va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[0], va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[0], va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_ii[0], va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_rr[0], va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[0], va0, gvl);
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[1], va2, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_ii[1], va3, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_rr[1], va3, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[1], va2, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[1], va2, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_ii[1], va3, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_rr[1], va3, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[1], va2, gvl);
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[2], va4, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_ii[2], va5, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_rr[2], va5, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[2], va4, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[2], va4, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_ii[2], va5, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_rr[2], va5, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[2], va4, gvl);
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[3], va6, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_ii[3], va7, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_rr[3], va7, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[3], va6, gvl);
-
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[3], va6, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_ii[3], va7, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_rr[3], va7, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[3], va6, gvl);
 
 #endif
 
 #else
 
 #if !defined(XCONJ)
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[0], va0, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_ii[0], va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[0], va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_ii[0], va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[0], va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_ii[0], va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[0], va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_ii[0], va0, gvl);
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[1], va2, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_ii[1], va3, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[1], va3, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_ii[1], va2, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[1], va2, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_ii[1], va3, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[1], va3, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_ii[1], va2, gvl);
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[2], va4, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_ii[2], va5, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[2], va5, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_ii[2], va4, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[2], va4, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_ii[2], va5, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[2], va5, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_ii[2], va4, gvl);
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[3], va6, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_ii[3], va7, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[3], va7, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_ii[3], va6, gvl);
-
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[3], va6, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_ii[3], va7, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[3], va7, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_ii[3], va6, gvl);
 
 #else
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[0], va0, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[0], va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[0], va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[0], va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[0], va0, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[0], va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[0], va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[0], va0, gvl);
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[1], va2, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[1], va3, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[1], va3, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[1], va2, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[1], va2, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[1], va3, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[1], va3, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[1], va2, gvl);
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[2], va4, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[2], va5, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[2], va5, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[2], va4, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[2], va4, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[2], va5, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[2], va5, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[2], va4, gvl);
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_rr[3], va6, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[3], va7, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[3], va7, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[3], va6, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_rr[3], va6, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_ii[3], va7, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_rr[3], va7, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_ii[3], va6, gvl);
 
 #endif
 
@@ -257,57 +254,58 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1, FLOAT alpha_r, FLOAT alpha_i,
                         ix += inc_x2 * 4;
                 }
 
-
                 VSSEV_FLOAT(&y[iy], stride_y, vy0, gvl);
-                VSSEV_FLOAT(&y[iy+1], stride_y, vy1, gvl);
+                VSSEV_FLOAT(&y[iy + 1], stride_y, vy1, gvl);
                 j += gvl * 2;
                 iy += inc_yv;
         }
-        //tail
-        if(j/2 < m){
-                gvl = VSETVL(m-j/2);
+        // tail
+        if (j / 2 < m)
+        {
+                gvl = VSETVL(m - j / 2);
                 a_ptr = a;
                 ix = 0;
                 vy0 = VLSEV_FLOAT(&y[iy], stride_y, gvl);
-                vy1 = VLSEV_FLOAT(&y[iy+1], stride_y, gvl);
-                for(i = 0; i < n; i++){
+                vy1 = VLSEV_FLOAT(&y[iy + 1], stride_y, gvl);
+                for (i = 0; i < n; i++)
+                {
 #if !defined(XCONJ)
-			temp_r = alpha_r * x[ix]   - alpha_i * x[ix+1];
-			temp_i = alpha_r * x[ix+1] + alpha_i * x[ix];
+                        temp_r = alpha_r * x[ix] - alpha_i * x[ix + 1];
+                        temp_i = alpha_r * x[ix + 1] + alpha_i * x[ix];
 #else
-			temp_r = alpha_r * x[ix]   + alpha_i * x[ix+1];
-			temp_i = alpha_r * x[ix+1] - alpha_i * x[ix];
+                        temp_r = alpha_r * x[ix] + alpha_i * x[ix + 1];
+                        temp_i = alpha_r * x[ix + 1] - alpha_i * x[ix];
 #endif
 
                         va0 = VLSEV_FLOAT(&a_ptr[j], stride_a, gvl);
-                        va1 = VLSEV_FLOAT(&a_ptr[j+1], stride_a, gvl);
+                        va1 = VLSEV_FLOAT(&a_ptr[j + 1], stride_a, gvl);
 #if !defined(CONJ)
 
 #if !defined(XCONJ)
-			vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_i, va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_r, va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_i, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_i, va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_r, va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_i, va0, gvl);
 #else
 
-			vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_i, va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_r, va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_i, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_i, va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_r, va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_i, va0, gvl);
 #endif
 
 #else
 
 #if !defined(XCONJ)
-			vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
-			vy0 = VFMACCVF_FLOAT(vy0, temp_i, va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_r, va1, gvl);
-			vy1 = VFMACCVF_FLOAT(vy1, temp_i, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_i, va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_r, va1, gvl);
+                        vy1 = VFMACCVF_FLOAT(vy1, temp_i, va0, gvl);
 #else
-			vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
-			vy0 = VFNMSACVF_FLOAT(vy0, temp_i, va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_r, va1, gvl);
-			vy1 = VFNMSACVF_FLOAT(vy1, temp_i, va0, gvl);
+                        vy0 = VFMACCVF_FLOAT(vy0, temp_r, va0, gvl);
+                        vy0 = VFNMSACVF_FLOAT(vy0, temp_i, va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_r, va1, gvl);
+                        vy1 = VFNMSACVF_FLOAT(vy1, temp_i, va0, gvl);
 #endif
 
 #endif
@@ -315,10 +313,8 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1, FLOAT alpha_r, FLOAT alpha_i,
                         ix += inc_x2;
                 }
                 VSSEV_FLOAT(&y[iy], stride_y, vy0, gvl);
-                VSSEV_FLOAT(&y[iy+1], stride_y, vy1, gvl);
+                VSSEV_FLOAT(&y[iy + 1], stride_y, vy1, gvl);
         }
-	return(0);
+        return (0);
 }
-
-
 
