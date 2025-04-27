@@ -1407,7 +1407,7 @@ namespace orc {
    * @return Id of the RowGroup that the row belongs to
    */
   int RowReaderImpl::computeRGIdx(uint64_t rowIndexStride, long rowIdx) {
-    return rowIndexStride == 0 ? 0 : static_cast<int>(rowIdx / static_cast<long>(rowIndexStride));
+    return rowIndexStride == 0 ? 0 : (int)(rowIdx / rowIndexStride);
   }
 
   /**
