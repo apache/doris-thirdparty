@@ -337,6 +337,9 @@ namespace orc {
         while (current != nullptr) {
           if (current->getSubtypeCount() == 0) {
             current->setReaderCategory(ReaderCategory::FILTER_CHILD);
+          } else if (current->getKind() == TypeKind::LIST
+                     || current->getKind() == TypeKind::MAP) {
+            current->setReaderCategory(ReaderCategory::FILTER_COMPOUND_ELEMENT);
           } else {
             current->setReaderCategory(ReaderCategory::FILTER_PARENT);
           }
@@ -345,7 +348,7 @@ namespace orc {
         }
 
         // Process all child nodes of the current node
-        // For child nodes: set FILTER_PARENT if it's a leaf, FILTER_CHILD if it has children
+        // For child nodes: set FILTER_CHILD if it's a leaf, FILTER_PARENT if it has children
         std::function<void(Type*)> processChildren = [&processChildren](Type* node) {
           if (node == nullptr) return;
 
@@ -354,16 +357,20 @@ namespace orc {
             Type* child = node->getSubtype(i);
             if (child->getSubtypeCount() == 0) {
               // Leaf node (no children)
-              child->setReaderCategory(ReaderCategory::FILTER_PARENT);
+              child->setReaderCategory(ReaderCategory::FILTER_CHILD);
+            } else if (child->getKind() == TypeKind::LIST
+                       || child->getKind() == TypeKind::MAP) {
+              child->setReaderCategory(ReaderCategory::FILTER_COMPOUND_ELEMENT);
+              // Recursively process its children
+              processChildren(child);
             } else {
               // Non-leaf node (has children)
-              child->setReaderCategory(ReaderCategory::FILTER_CHILD);
+              child->setReaderCategory(ReaderCategory::FILTER_PARENT);
               // Recursively process its children
               processChildren(child);
             }
           }
         };
-
         processChildren(type);
       }
 
@@ -1341,6 +1348,7 @@ namespace orc {
               prepareFollowReaders(footer->rowindexstride(), currentRowInStripe, followRowInStripe),
               sel_rowid_idx.get(), arg);
           followRowInStripe = currentRowInStripe + rowsToRead;
+          data.numElements = rowsToRead;
         }
       } else {
         nextBatch(data, rowsToRead, startReadPhase, nullptr, arg);

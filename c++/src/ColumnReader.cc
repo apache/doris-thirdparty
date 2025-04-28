@@ -1158,7 +1158,9 @@ namespace orc {
   }
 
   uint64_t StructColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
-    numValues = ColumnReader::skip(numValues, readPhase);
+    if (readPhase.contains(this->type.getReaderCategory())) {
+      numValues = ColumnReader::skip(numValues, readPhase);
+    }
     for (auto& ptr : children) {
       if (shouldProcessChild(ptr->getType().getReaderCategory(), readPhase)) {
         ptr->skip(numValues, readPhase);
@@ -1183,7 +1185,9 @@ namespace orc {
   void StructColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
                                         char* notNull, const ReadPhase& readPhase,
                                         uint16_t* sel_rowid_idx, size_t sel_size) {
-    ColumnReader::next(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
+    if (readPhase.contains(this->type.getReaderCategory())) {
+      ColumnReader::next(rowBatch, numValues, notNull, readPhase, sel_rowid_idx, sel_size);
+    }
     uint64_t i = 0;
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     for (auto iter = children.begin(); iter != children.end(); ++iter, ++i) {
@@ -1201,7 +1205,9 @@ namespace orc {
 
   void StructColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                                           const ReadPhase& readPhase) {
-    ColumnReader::seekToRowGroup(positions, readPhase);
+    if (readPhase.contains(this->type.getReaderCategory())) {
+      ColumnReader::seekToRowGroup(positions, readPhase);
+    }
 
     for (auto& ptr : children) {
       if (shouldProcessChild(ptr->getType().getReaderCategory(), readPhase)) {
@@ -1579,6 +1585,9 @@ namespace orc {
   }
 
   uint64_t UnionColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
+    if (!readPhase.contains(this->type.getReaderCategory())) {
+      throw NotImplementedYet("Not implemented yet");
+    }
     numValues = ColumnReader::skip(numValues, readPhase);
     const uint64_t BUFFER_SIZE = 1024;
     char buffer[BUFFER_SIZE];
@@ -1618,6 +1627,9 @@ namespace orc {
   void UnionColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues,
                                        char* notNull, const ReadPhase& readPhase,
                                        uint16_t* sel_rowid_idx, size_t sel_size) {
+    if (!readPhase.contains(this->type.getReaderCategory())) {
+      throw NotImplementedYet("Not implemented yet");
+    }
     ColumnReader::next(rowBatch, numValues, notNull, readPhase);
     UnionVectorBatch& unionBatch = dynamic_cast<UnionVectorBatch&>(rowBatch);
     uint64_t* offsets = unionBatch.offsets.data();
@@ -1655,6 +1667,9 @@ namespace orc {
 
   void UnionColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                                          const ReadPhase& readPhase) {
+    if (!readPhase.contains(this->type.getReaderCategory())) {
+      throw NotImplementedYet("Not implemented yet");
+    }
     ColumnReader::seekToRowGroup(positions, readPhase);
     rle->seek(positions.at(columnId));
     for (size_t i = 0; i < numChildren; ++i) {
