@@ -1256,7 +1256,7 @@ namespace orc {
       StripeStreamsImpl stripeStreams(*this, currentStripe, currentStripeInfo, currentStripeFooter,
                                       currentStripeInfo.offset(), *contents->stream, writerTimezone,
                                       readerTimezone);
-      reader = buildReader(*contents->schema, stripeStreams, useTightNumericVector);
+      reader = buildReader(*contents->schema, stripeStreams, useTightNumericVector, true);
 
       if (stringDictFilter != nullptr) {
         std::list<std::string> dictFilterColumnNames;
