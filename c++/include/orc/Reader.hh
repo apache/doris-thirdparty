@@ -639,6 +639,8 @@ namespace orc {
     virtual void setStream(std::unique_ptr<InputStream>) = 0;
 
     virtual std::vector<int> getNeedReadStripes(const RowReaderOptions& opts) = 0;
+
+    virtual void getSelectedColumns(const std::list<std::string>& names, std::vector<bool>& selectedColumns) = 0;
   };
 
   /**
