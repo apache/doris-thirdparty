@@ -439,6 +439,8 @@ namespace orc {
 
     std::map<uint32_t, BloomFilterIndex> getBloomFilters(
         uint32_t stripeIndex, const std::set<uint32_t>& included) const override;
+
+    void getSelectedColumns(const std::list<std::string>& names, std::vector<bool>& selectedColumns) override;
   };
 }  // namespace orc
 
