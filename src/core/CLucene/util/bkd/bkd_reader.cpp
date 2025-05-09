@@ -152,6 +152,7 @@ bkd_reader::intersect_state::intersect_state(store::IndexInput *in,
                                              bkd_reader::intersect_visitor *visitor,
                                              index_tree* indexVisitor) {
     in_ = std::unique_ptr<store::IndexInput>(in);
+    in_->setIoContext(visitor->get_io_context());
     visitor_ = visitor;
     common_prefix_lengths_.resize(numDims);
     docid_set_iterator = std::make_unique<bkd_docid_set_iterator>(maxPointsInLeafNode);

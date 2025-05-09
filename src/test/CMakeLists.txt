@@ -91,6 +91,7 @@ SET(test_files ./tests.cpp
         ./index/TestIndexWriter.cpp
         ./index/TestIndexModifier.cpp
         ./index/TestIndexReader.cpp
+        ./index/TestIndexReader2.cpp
         ./index/TestThreading.cpp
         ./index/TestUtf8.cpp
         ./index/TestHighFreqTerms.cpp

@@ -295,7 +295,7 @@ int64_t TermInfosReader::getPosition(const Term* term) {
         return -1;
 }
 
-SegmentTermEnum* TermInfosReader::terms(const Term* term) {
+SegmentTermEnum* TermInfosReader::terms(const Term* term, const void* io_ctx) {
     //Func - Returns an enumeration of terms starting at or after the named term.
     //       If term is null then enumerator is set to the beginning
     //Pre  - term holds a valid reference to a Term
@@ -305,7 +305,7 @@ SegmentTermEnum* TermInfosReader::terms(const Term* term) {
     SegmentTermEnum* enumerator = NULL;
     if (term != NULL) {
         //Seek enumerator to term; delete the new TermInfo that's returned.
-        TermInfo* ti = get(term);
+        TermInfo* ti = get(term, io_ctx);
         _CLLDELETE(ti);
         enumerator = getEnum();
     } else
@@ -313,6 +313,9 @@ SegmentTermEnum* TermInfosReader::terms(const Term* term) {
 
     //Clone the entire enumeration
     SegmentTermEnum* cln = enumerator->clone();
+    if (cln) {
+        cln->setIoContext(io_ctx);
+    }
 
     //Check if cln points to a valid instance
     CND_CONDITION(cln != NULL, "cln is NULL");
