@@ -71,4 +71,10 @@ void CNAME (BLASLONG M, BLASLONG N, BLASLONG K, float * __restrict A,\
         free(A_mod);
 }
 
+#else
+
+void CNAME (BLASLONG M, BLASLONG N, BLASLONG K, float * __restrict A,\
+            BLASLONG strideA, float * __restrict B, BLASLONG strideB ,\
+            float * __restrict R, BLASLONG strideR){}
+ 
 #endif

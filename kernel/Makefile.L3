@@ -103,8 +103,8 @@ endif
 ifeq ($(ARCH), arm64)
 ifeq ($(TARGET_CORE), ARMV9SME)
 HAVE_SME = 1
-SGEMMDIRECTKERNEL = sgemm_direct_arm64_sme1.c
 endif
+SGEMMDIRECTKERNEL = sgemm_direct_arm64_sme1.c
 endif
 endif
 endif
@@ -143,9 +143,10 @@ SKERNELOBJS += \
 	sgemm_direct_performant$(TSUFFIX).$(SUFFIX)
 endif
 ifeq ($(ARCH), arm64)
+SKERNELOBJS += \
+	sgemm_direct$(TSUFFIX).$(SUFFIX)
 ifdef HAVE_SME
 SKERNELOBJS += \
-	sgemm_direct$(TSUFFIX).$(SUFFIX) \
 	sgemm_direct_sme1$(TSUFFIX).$(SUFFIX) \
 	sgemm_direct_sme1_preprocess$(TSUFFIX).$(SUFFIX)
 endif
@@ -835,9 +836,9 @@ $(KDIR)sgemm_direct$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(SGEMMDIRECTKERNEL)
 	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX $< -o $@
 endif
 ifeq ($(ARCH), arm64)
-ifdef HAVE_SME
 $(KDIR)sgemm_direct$(TSUFFIX).$(SUFFIX) : $(KERNELDIR)/$(SGEMMDIRECTKERNEL)
 	$(CC) $(CFLAGS) -c -UDOUBLE -UCOMPLEX $< -o $@
+ifdef HAVE_SME
 $(KDIR)sgemm_direct_sme1$(TSUFFIX).$(SUFFIX) : 
 	$(CC) $(CFLAGS) -c $(KERNELDIR)/sgemm_direct_sme1.S -UDOUBLE -UCOMPLEX  -o $@
 $(KDIR)sgemm_direct_sme1_preprocess$(TSUFFIX).$(SUFFIX) : 

@@ -180,9 +180,7 @@ gotoblas_t TABLE_NAME = {
   sgemm_direct_performantTS,	
 #endif
 #ifdef ARCH_ARM64
-#ifdef HAVE_SME
   sgemm_directTS,
-#endif
 #endif
 
   sgemm_kernelTS, sgemm_betaTS,
