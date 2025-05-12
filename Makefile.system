@@ -276,6 +276,7 @@ SMALL_MATRIX_OPT = 1
 endif
 ifeq ($(ARCH), arm64)
 GEMM_GEMV_FORWARD = 1
+GEMM_GEMV_FORWARD_BF16 = 1
 endif
 ifeq ($(ARCH), riscv)
 GEMM_GEMV_FORWARD = 1
