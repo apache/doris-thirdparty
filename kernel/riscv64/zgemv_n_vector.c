@@ -66,7 +66,7 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1, FLOAT alpha_r, FLOAT alpha_i,
         BLASLONG lda2 = lda * 2;
         vy0_new = VLSEV_FLOAT(&y[iy], stride_y, gvl);
         vy1_new = VLSEV_FLOAT(&y[iy + 1], stride_y, gvl);
-        for (k = 0, j = 0; k < m / gvl; k++)
+        for (k = 0, j = 0; k < m / gvl; k ++)
         {
                 a_ptr = a;
                 ix = 0;
@@ -121,30 +121,73 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1, FLOAT alpha_r, FLOAT alpha_i,
 #endif
                         a_ptr += lda2;
                         ix += inc_x2;
+                        
                 }
 
-                for (; i < n; i += 4)
+                for (i = n % 4 ; i < n; i += 4)
                 {
 #if !defined(XCONJ)
+                        // temp_rr[0] = alpha_r * x[ix] - alpha_i * x[ix + 1];
+                        // temp_rr[1] = alpha_r * x[ix + inc_x2] - alpha_i * x[ix + inc_x2 + 1];
+                        x_v0 = VLSEV_FLOAT(&x[ix], inc_x2 * sizeof(FLOAT), 2);
+                        x_v1 = VLSEV_FLOAT(&x[ix + 1], inc_x2 * sizeof(FLOAT), 2);
+                        temp_rv = VFMUL_VF_FLOAT(x_v0, alpha_r, 2);
+                        temp_rv = VFNMSACVF_FLOAT(temp_rv, alpha_i, x_v1, 2);         
 
-                        x_v0 = VLSEV_FLOAT(&x[ix], inc_x2 * sizeof(FLOAT), 4);
-                        x_v1 = VLSEV_FLOAT(&x[ix + 1], inc_x2 * sizeof(FLOAT), 4);
-                        temp_rv = VFMUL_VF_FLOAT(x_v0, alpha_r, 4);
-                        temp_iv = VFMUL_VF_FLOAT(x_v0, alpha_i, 4);
-                        temp_rv = VFNMSACVF_FLOAT(temp_rv, alpha_i, x_v1, 4);
-                        temp_iv = VFMACCVF_FLOAT(temp_iv, alpha_r, x_v1, 4);
-                        VSEV_FLOAT(&temp_rr[0], temp_rv, 4);
-                        VSEV_FLOAT(&temp_ii[0], temp_iv, 4);
+                        // temp_ii[0] = alpha_r * x[ix + 1] + alpha_i * x[ix]; 
+                        // temp_ii[1] = alpha_r * x[ix + inc_x2 + 1] + alpha_i * x[ix + inc_x2];
+                        temp_iv = VFMUL_VF_FLOAT(x_v0, alpha_i, 2);
+                        temp_iv = VFMACCVF_FLOAT(temp_iv, alpha_r, x_v1, 2);
+                        VSEV_FLOAT(&temp_rr[0], temp_rv, 2);
+                        VSEV_FLOAT(&temp_ii[0], temp_iv, 2);
+                                  
+                        // temp_rr[2] = alpha_r * x[ix + inc_x2 * 2] - alpha_i * x[ix + inc_x2 * 2 + 1];
+                        // temp_rr[3] = alpha_r * x[ix + inc_x2 * 3] - alpha_i * x[ix + inc_x2 * 3 + 1];
+                        x_v0 = VLSEV_FLOAT(&x[ix + inc_x2 * 2], inc_x2 * sizeof(FLOAT), 2);
+                        x_v1 = VLSEV_FLOAT(&x[ix + inc_x2 * 2 + 1], inc_x2 * sizeof(FLOAT), 2);
+                        temp_rv = VFMUL_VF_FLOAT(x_v0, alpha_r, 2);
+                        temp_rv = VFNMSACVF_FLOAT(temp_rv, alpha_i, x_v1, 2);
+
+                        // temp_ii[2] = alpha_r * x[ix + inc_x2 * 2 + 1] + alpha_i * x[ix + inc_x2 * 2];
+                        // temp_ii[3] = alpha_r * x[ix + inc_x2 * 3 + 1] + alpha_i * x[ix + inc_x2 * 3];
+                        temp_iv = VFMUL_VF_FLOAT(x_v0, alpha_i, 2);
+                        temp_iv = VFMACCVF_FLOAT(temp_iv, alpha_r, x_v1, 2);
+                        VSEV_FLOAT(&temp_rr[2], temp_rv, 2);
+                        VSEV_FLOAT(&temp_ii[2], temp_iv, 2);
 
 #else
-                        x_v0 = VLSEV_FLOAT(&x[ix], inc_x2 * sizeof(FLOAT), 4);
-                        x_v1 = VLSEV_FLOAT(&x[ix + 1], inc_x2 * sizeof(FLOAT), 4);
-                        temp_rv = VFMUL_VF_FLOAT(x_v0, alpha_r, 4);
-                        temp_iv = VFMUL_VF_FLOAT(x_v0, alpha_i, 4);
-                        temp_rv = VFMACCVF_FLOAT(temp_rv, alpha_i, x_v1, 4);
-                        temp_iv = VFNMSACVF_FLOAT(temp_iv, alpha_r, x_v1, 4);
-                        VSEV_FLOAT(&temp_rr[0], temp_rv, 4);
-                        VSEV_FLOAT(&temp_ii[0], temp_iv, 4);
+                        //  temp_rr[0] = alpha_r * x[ix] + alpha_i * x[ix + 1];
+                        //  temp_rr[1] = alpha_r * x[ix + inc_x2] + alpha_i * x[ix + inc_x2 + 1];
+                        x_v0 = VLSEV_FLOAT(&x[ix], inc_x2 * sizeof(FLOAT), 2);
+                        x_v1 = VLSEV_FLOAT(&x[ix + 1], inc_x2 * sizeof(FLOAT), 2);
+                        temp_rv = VFMUL_VF_FLOAT(x_v0, alpha_r, 2);
+                        temp_rv = VFMACCVF_FLOAT(temp_rv, alpha_i, x_v1, 2);
+
+
+                        // temp_ii[0] = alpha_r * x[ix + 1] - alpha_i * x[ix]; 
+                        // temp_ii[1] = alpha_r * x[ix + inc_x2 + 1] - alpha_i * x[ix + inc_x2];
+                        temp_iv = VFMUL_VF_FLOAT(x_v1, alpha_r, 2);
+                        temp_iv = VFNMSACVF_FLOAT(temp_iv, alpha_i, x_v0, 2);
+                        VSEV_FLOAT(&temp_rr[0], temp_rv, 2);
+                        VSEV_FLOAT(&temp_ii[0], temp_iv, 2);
+
+                        
+                        // temp_rr[2] = alpha_r * x[ix + inc_x2 * 2] + alpha_i * x[ix + inc_x2 * 2 + 1];
+                        // temp_rr[3] = alpha_r * x[ix + inc_x2 * 3] + alpha_i * x[ix + inc_x2 * 3 + 1];
+                        x_v0 = VLSEV_FLOAT(&x[ix + inc_x2 * 2], inc_x2 * sizeof(FLOAT), 2);
+                        x_v1 = VLSEV_FLOAT(&x[ix + inc_x2 * 2 + 1], inc_x2 * sizeof(FLOAT), 2);
+                        temp_rv = VFMUL_VF_FLOAT(x_v0, alpha_r, 2);
+                        temp_rv = VFMACCVF_FLOAT(temp_rv, alpha_i, x_v1, 2);
+
+
+                        temp_ii[2] = alpha_r * x[ix + inc_x2 * 2 + 1] - alpha_i * x[ix + inc_x2 * 2];
+                        temp_ii[3] = alpha_r * x[ix + inc_x2 * 3 + 1] - alpha_i * x[ix + inc_x2 * 3];
+                        temp_iv = VFMUL_VF_FLOAT(x_v1, alpha_r, 2);
+                        temp_iv = VFNMSACVF_FLOAT(temp_iv, alpha_i, x_v0, 2);
+                        VSEV_FLOAT(&temp_rr[2], temp_rv, 2);
+                        VSEV_FLOAT(&temp_ii[2], temp_iv, 2);
+
+
 
 #endif
 
@@ -257,7 +300,7 @@ int CNAME(BLASLONG m, BLASLONG n, BLASLONG dummy1, FLOAT alpha_r, FLOAT alpha_i,
                 VSSEV_FLOAT(&y[iy], stride_y, vy0, gvl);
                 VSSEV_FLOAT(&y[iy + 1], stride_y, vy1, gvl);
                 j += gvl * 2;
-                iy += inc_yv;
+                iy += inc_yv  ;
         }
         // tail
         if (j / 2 < m)
