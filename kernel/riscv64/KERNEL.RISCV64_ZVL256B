@@ -201,3 +201,9 @@ endif
 ifndef ZGEMM_BETA
 ZGEMM_BETA = ../generic/zgemm_beta.c
 endif
+
+ZOMATCOPY_CN = zomatcopy_cn_vector.c
+COMATCOPY_CN = zomatcopy_cn_vector.c
+
+DOMATCOPY_CN = omatcopy_cn_vector.c
+SOMATCOPY_CN = omatcopy_cn_vector.c
