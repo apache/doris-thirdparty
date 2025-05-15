@@ -1041,21 +1041,26 @@ namespace orc {
     return getMemoryUse(stripeIx, selectedColumns);
   }
 
+  void ReaderImpl::getSelectedColumns(const std::list<std::string>& names, std::vector<bool>& selectedColumns) {
+      selectedColumns.clear();
+      selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
+      ColumnSelector column_selector(contents.get());
+      if (contents->schema->getKind() == STRUCT && names.begin() != names.end()) {
+          for (std::list<std::string>::const_iterator field = names.begin(); field != names.end();
+               ++field) {
+              column_selector.updateSelectedByName(selectedColumns, *field);
+          }
+      } else {
+          // default is to select all columns
+          std::fill(selectedColumns.begin(), selectedColumns.end(), true);
+      }
+      column_selector.selectParents(selectedColumns, *contents->schema.get());
+      selectedColumns[0] = true;  // column 0 is selected by default
+  }
+
   uint64_t ReaderImpl::getMemoryUseByName(const std::list<std::string>& names, int stripeIx) {
     std::vector<bool> selectedColumns;
-    selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
-    ColumnSelector column_selector(contents.get());
-    if (contents->schema->getKind() == STRUCT && names.begin() != names.end()) {
-      for (std::list<std::string>::const_iterator field = names.begin(); field != names.end();
-           ++field) {
-        column_selector.updateSelectedByName(selectedColumns, *field);
-      }
-    } else {
-      // default is to select all columns
-      std::fill(selectedColumns.begin(), selectedColumns.end(), true);
-    }
-    column_selector.selectParents(selectedColumns, *contents->schema.get());
-    selectedColumns[0] = true;  // column 0 is selected by default
+    getSelectedColumns(names, selectedColumns);
     return getMemoryUse(stripeIx, selectedColumns);
   }
 
