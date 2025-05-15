@@ -26,8 +26,6 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *****************************************************************************/
 
 #include "common.h"
-
-
 #if !defined(DOUBLE)
 #define VSETVL_MAX				RISCV_RVV(vsetvlmax_e32m4)()
 #define VSETVL(n)               RISCV_RVV(vsetvl_e32m4)(n)

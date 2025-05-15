@@ -70,7 +70,6 @@ int CNAME(BLASLONG rows, BLASLONG cols, FLOAT alpha_r, FLOAT alpha_i, FLOAT *a, 
 	FLOAT_VX2_T va, vb;
 	unsigned int gvl = 0;
 
-
 	if ( rows <= 0     )  return(0);
 	if ( cols <= 0     )  return(0);
 
@@ -85,8 +84,6 @@ int CNAME(BLASLONG rows, BLASLONG cols, FLOAT alpha_r, FLOAT alpha_i, FLOAT *a, 
 		for(j=0; j<rows ; j+=gvl)
 		{
 			gvl = VSETVL(rows - j);
-			// bptr[ia + 0] = alpha_r * aptr[ia + 0] - alpha_i * aptr[ia+1];			
-			// bptr[ia + 2] = alpha_r * aptr[ia + 2] - alpha_i * aptr[ia+3];
 			va = VLSEG2_FLOAT(aptr + ia, gvl);
 			aptr_v0 = VGET_VX2(va, 0);
 			aptr_v1 = VGET_VX2(va, 1);
@@ -94,8 +91,6 @@ int CNAME(BLASLONG rows, BLASLONG cols, FLOAT alpha_r, FLOAT alpha_i, FLOAT *a, 
 			bptr_v1 = VFMACCVF_FLOAT(bptr_v1, alpha_i, aptr_v0, gvl);
 			bptr_v0 = VFMUL_VF_FLOAT(  aptr_v0,alpha_r, gvl);
 			bptr_v0 = VFNMSACVF_FLOAT(bptr_v0, alpha_i, aptr_v1, gvl);
-			// bptr[ia + 1] = alpha_r * aptr[ia + 1] + alpha_i * aptr[ia+0];
-			// bptr[ia + 3] = alpha_r * aptr[ia + 3] + alpha_i * aptr[ia+2];
 			vb = VSET_VX2(vb, 0, bptr_v0);
 			vb = VSET_VX2(vb, 1, bptr_v1);
 			VSSEG2_FLOAT(&bptr[ia], vb, gvl);
