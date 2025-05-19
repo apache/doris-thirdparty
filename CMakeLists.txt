@@ -62,6 +62,7 @@ option(CPP_THREAD_SAFETY_TEST "Run a massively parallel DGEMM test to confirm th
 
 option(CPP_THREAD_SAFETY_GEMV "Run a massively parallel DGEMV test to confirm thread safety of the library (requires OpenMP)" OFF)
 option(BUILD_STATIC_LIBS "Build static library" OFF)
+option(BUILD_SHARED_LIBS "Build shared library" OFF)
 if(NOT BUILD_STATIC_LIBS AND NOT BUILD_SHARED_LIBS)
   set(BUILD_STATIC_LIBS ON CACHE BOOL "Build static library" FORCE)
 endif()
