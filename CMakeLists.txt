@@ -123,7 +123,12 @@ message(WARNING "CMake support is experimental. It does not yet support all buil
 include("${PROJECT_SOURCE_DIR}/cmake/utils.cmake")
 include("${PROJECT_SOURCE_DIR}/cmake/system.cmake")
 
-set(OpenBLAS_LIBNAME ${LIBNAMEPREFIX}openblas${LIBNAMESUFFIX}${SUFFIX64_UNDERSCORE})
+string(FIND "${LIBNAMESUFFIX}" "${SUFFIX64_UNDERSCORE}" HAVE64)
+if (${HAVE64} GREATER -1)
+	set(OpenBLAS_LIBNAME ${LIBNAMEPREFIX}openblas${LIBNAMESUFFIX})
+else ()
+	set(OpenBLAS_LIBNAME ${LIBNAMEPREFIX}openblas${LIBNAMESUFFIX}${SUFFIX64_UNDERSCORE})
+endif ()
 
 set(BLASDIRS interface driver/level2 driver/level3 driver/others)
 
@@ -717,3 +722,4 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${PN}ConfigVersion.cmake
 install(EXPORT "${PN}${SUFFIX64}Targets"
         NAMESPACE "${PN}${SUFFIX64}::"
         DESTINATION ${CMAKECONFIG_INSTALL_DIR})
+
