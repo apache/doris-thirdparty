@@ -134,9 +134,9 @@ namespace orc {
     MemoryPool& memory;
     CompressionKind compression;
     uint64_t blockSize;
+    ReaderMetrics* metrics;
     mutable proto::StripeFooter* stripeFooter;
     mutable std::unique_ptr<proto::StripeFooter> managedStripeFooter;
-    ReaderMetrics* metrics;
     void ensureStripeFooterLoaded() const;
 
    public:
