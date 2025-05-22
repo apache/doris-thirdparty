@@ -852,7 +852,8 @@ int CNAME(blas_arg_t *args, BLASLONG *range_m, BLASLONG *range_n, IFLOAT *sa, IF
     /* (n / nthreads_n) + (m / nthreads_m)                                    */
     /* = (n * nthreads_m + m * nthreads_n) / (nthreads_n * nthreads_m)        */
     BLASLONG cost = 0, div = 0;
-    for (BLASLONG i = 1; i <= sqrt(nthreads_m); i++) {
+    BLASLONG i;
+    for (i = 1; i <= sqrt(nthreads_m); i++) {
       if (nthreads_m % i) continue;
       BLASLONG j = nthreads_m / i;
       BLASLONG cost_i = n * j + m * nthreads_n * i;
