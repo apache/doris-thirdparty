@@ -132,15 +132,16 @@ namespace orc {
     MemoryPool& memory;
     CompressionKind compression;
     uint64_t blockSize;
-    mutable std::unique_ptr<proto::StripeFooter> stripeFooter;
     ReaderMetrics* metrics;
+    mutable proto::StripeFooter* stripeFooter;
+    mutable std::unique_ptr<proto::StripeFooter> managedStripeFooter;
     void ensureStripeFooterLoaded() const;
 
    public:
     StripeInformationImpl(uint64_t _offset, uint64_t _indexLength, uint64_t _dataLength,
                           uint64_t _footerLength, uint64_t _numRows, InputStream* _stream,
                           MemoryPool& _memory, CompressionKind _compression, uint64_t _blockSize,
-                          ReaderMetrics* _metrics)
+                          ReaderMetrics* _metrics, proto::StripeFooter* _stripeFooter)
         : offset(_offset),
           indexLength(_indexLength),
           dataLength(_dataLength),
@@ -150,7 +151,8 @@ namespace orc {
           memory(_memory),
           compression(_compression),
           blockSize(_blockSize),
-          metrics(_metrics) {
+          metrics(_metrics),
+          stripeFooter(_stripeFooter) {
       // PASS
     }
 
