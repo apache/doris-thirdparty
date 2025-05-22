@@ -130,13 +130,14 @@ namespace orc {
   }
 
   void StripeInformationImpl::ensureStripeFooterLoaded() const {
-    if (stripeFooter.get() == nullptr) {
+    if (stripeFooter == nullptr && managedStripeFooter.get() == nullptr) {
       std::unique_ptr<SeekableInputStream> pbStream =
           createDecompressor(compression,
                              std::make_unique<SeekableFileInputStream>(
                                  stream, offset + indexLength + dataLength, footerLength, memory),
                              blockSize, memory, metrics);
-      stripeFooter = std::make_unique<proto::StripeFooter>();
+      managedStripeFooter = std::make_unique<proto::StripeFooter>();
+      stripeFooter = managedStripeFooter.get();
       if (!stripeFooter->ParseFromZeroCopyStream(pbStream.get())) {
         throw ParseError("Failed to parse the stripe footer");
       }

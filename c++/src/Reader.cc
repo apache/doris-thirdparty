@@ -679,7 +679,7 @@ namespace orc {
     return std::unique_ptr<StripeInformation>(new StripeInformationImpl(
         stripeInfo.offset(), stripeInfo.indexlength(), stripeInfo.datalength(),
         stripeInfo.footerlength(), stripeInfo.numberofrows(), contents->stream.get(),
-        *contents->pool, contents->compression, contents->blockSize, contents->readerMetrics));
+        *contents->pool, contents->compression, contents->blockSize, contents->readerMetrics, nullptr));
   }
 
   FileVersion ReaderImpl::getFormatVersion() const {
@@ -1185,7 +1185,7 @@ namespace orc {
             currentStripeInfo.offset(), currentStripeInfo.indexlength(),
             currentStripeInfo.datalength(), currentStripeInfo.footerlength(),
             currentStripeInfo.numberofrows(), contents->stream.get(), *contents->pool,
-            contents->compression, contents->blockSize, contents->readerMetrics));
+            contents->compression, contents->blockSize, contents->readerMetrics, &currentStripeFooter));
       contents->stream->beforeReadStripe(std::move(currentStripeInformation), selectedColumns);
 
       if (sargsApplier) {
@@ -1216,11 +1216,6 @@ namespace orc {
 
       if (stringDictFilter != nullptr) {
         std::list<std::string> dictFilterColumnNames;
-        std::unique_ptr<StripeInformation> currentStripeInformation(new StripeInformationImpl(
-            currentStripeInfo.offset(), currentStripeInfo.indexlength(),
-            currentStripeInfo.datalength(), currentStripeInfo.footerlength(),
-            currentStripeInfo.numberofrows(), contents->stream.get(), *contents->pool,
-            contents->compression, contents->blockSize, contents->readerMetrics));
         stringDictFilter->fillDictFilterColumnNames(std::move(currentStripeInformation),
                                                     dictFilterColumnNames);
         std::unordered_map<uint64_t, std::string> columnIdToNameMap;
