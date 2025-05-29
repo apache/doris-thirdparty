@@ -169,10 +169,14 @@ SSYMV_U_KERNEL =  symv_U_vector.c
 SSYMV_L_KERNEL =  symv_L_vector.c
 DSYMV_U_KERNEL =  symv_U_vector.c
 DSYMV_L_KERNEL =  symv_L_vector.c
+
+
 CSYMV_U_KERNEL =  ../generic/zsymv_k.c
 CSYMV_L_KERNEL =  ../generic/zsymv_k.c
 ZSYMV_U_KERNEL =  ../generic/zsymv_k.c
 ZSYMV_L_KERNEL =  ../generic/zsymv_k.c
+
+
 
 CHEMV_L_KERNEL =  zhemv_LM_vector.c
 CHEMV_M_KERNEL =  zhemv_LM_vector.c
@@ -207,3 +211,7 @@ COMATCOPY_CN = zomatcopy_cn_vector.c
 
 DOMATCOPY_CN = omatcopy_cn_vector.c
 SOMATCOPY_CN = omatcopy_cn_vector.c
+
+SAXPBYKERNEL  = axpby_vector_v2.c
+DAXPBYKERNEL  = axpby_vector_v2.c
+
