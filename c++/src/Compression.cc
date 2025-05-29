@@ -27,6 +27,13 @@
 #include <array>
 #include <iomanip>
 #include <iostream>
+
+// Only used on x86 or x86_64
+#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(__i386__) || \
+  defined(__i386) || defined(_M_IX86)
+#include <libdeflate.h>
+#endif
+
 #include <sstream>
 
 #include "zlib.h"
@@ -785,6 +792,43 @@ namespace orc {
     outputBufferLength = 0;
   }
 
+// Only used on x86 or x86_64
+#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(__i386__) || \
+  defined(__i386) || defined(_M_IX86)
+  class ZlibDecompressionStreamByLibDeflate : public BlockDecompressionStream {
+   public:
+    ZlibDecompressionStreamByLibDeflate(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool,
+                                  ReaderMetrics* _metrics)
+        : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
+      decompressor = libdeflate_alloc_decompressor();
+      if (decompressor == nullptr) {
+        throw std::runtime_error("libdeflate allocate decompressor failed");
+      }
+    }
+
+    ~ZlibDecompressionStreamByLibDeflate() override { libdeflate_free_decompressor(decompressor); }
+
+    std::string getName() const override {
+      std::ostringstream result;
+      result << "ZlibDecompressionStreamByLibDeflate(" << getStreamName() << ")";
+      return result.str();
+    }
+
+   protected:
+    uint64_t decompress(const char* inputPtr, uint64_t length, char* output, size_t maxOutputLength) override {
+      size_t actual = 0;
+      auto res = libdeflate_deflate_decompress(decompressor, inputPtr, length, output, maxOutputLength, &actual);
+      if (res != LIBDEFLATE_SUCCESS) {
+        throw ParseError("libdeflate deflate decompress failed");
+      }
+      return actual;
+    }
+
+   private:
+    libdeflate_decompressor* decompressor;
+  };
+#endif
+
   class SnappyDecompressionStream : public BlockDecompressionStream {
    public:
     SnappyDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize,
@@ -1186,8 +1230,15 @@ namespace orc {
       case CompressionKind_NONE:
         return input;
       case CompressionKind_ZLIB:
+// Only used on x86 or x86_64
+#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(__i386__) || \
+  defined(__i386) || defined(_M_IX86)
+        return std::make_unique<ZlibDecompressionStreamByLibDeflate>(std::move(input), blockSize, pool,
+                                                               metrics);
+#else
         return std::make_unique<ZlibDecompressionStream>(std::move(input), blockSize, pool,
                                                          metrics);
+#endif
       case CompressionKind_SNAPPY:
         return std::make_unique<SnappyDecompressionStream>(std::move(input), blockSize, pool,
                                                            metrics);
