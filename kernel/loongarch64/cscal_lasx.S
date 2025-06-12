@@ -94,7 +94,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     CMPEQ  $fcc1, ALPHAI, a1
     bge $r0, I, .L19
 ///////   INCX == 1 && N >= 4   ////////
-    bnez  DUMMY2, .L17 // if DUMMPY2 == 1, called from c/zscal.
+    bnez  DUMMY2, .L17 // if DUMMY2 == 1, called from c/zscal.
 
     bceqz $fcc0, .L17
 
@@ -146,6 +146,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     addi.d  I, I, -1
     blt $r0, I, .L17
     b .L19
+
     .align 3
 
 ///////  INCX == 1 && N < 8   ///////
@@ -156,7 +157,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     andi   I,   N,   7
 #endif
     beqz   I,   .L999
-    bnez  DUMMY2, .L998 // if DUMMPY2 == 1, called from c/zscal.
+    bnez  DUMMY2, .L998 // if DUMMY2 == 1, called from c/zscal.
 
     bceqz $fcc0, .L998
 
@@ -171,7 +172,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     CMPEQ  $fcc1, ALPHAI, a1
     move XX, X
     bge $r0, I, .L29
-    bnez  DUMMY2, .L25 // if DUMMPY2 == 1, called from c/zscal.
+    bnez  DUMMY2, .L25 // if DUMMY2 == 1, called from c/zscal.
     bceqz $fcc0, .L25
 
     bceqz $fcc1, .L25
@@ -341,7 +342,7 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     andi   I,   N,   7
 #endif
     beqz   I,   .L999
-    bnez  DUMMY2, .L998 // if DUMMPY2 == 1, called from c/zscal.
+    bnez  DUMMY2, .L998 // if DUMMY2 == 1, called from c/zscal.
 
     bceqz $fcc0, .L998
 
