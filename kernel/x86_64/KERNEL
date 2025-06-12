@@ -323,11 +323,11 @@ DSCALKERNEL =  scal_sse2.S
 endif
 
 ifndef CSCALKERNEL
-CSCALKERNEL = zscal_sse.S
+CSCALKERNEL = ../arm/zscal.c
 endif
 
 ifndef ZSCALKERNEL
-ZSCALKERNEL = zscal_sse2.S
+ZSCALKERNEL = ../arm/zscal.c
 endif
 
 ifndef ASCALKERNEL
