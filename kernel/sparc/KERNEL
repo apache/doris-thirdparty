@@ -86,3 +86,8 @@ endif
 ifndef QROTMKERNEL
 QROTMKERNEL = ../generic/rotm.c
 endif
+
+SSCALKERNEL = ../arm/scal.c
+DSCALKERNEL = ../arm/scal.c
+CSCALKERNEL = ../arm/zscal.c
+ZSCALKERNEL = ../arm/zscal.c
