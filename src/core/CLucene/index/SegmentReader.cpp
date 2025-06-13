@@ -5,7 +5,6 @@
 * the GNU Lesser General Public License, as specified in the COPYING file.
 ------------------------------------------------------------------------------*/
 #include <assert.h>
-#include <s2/base/integral_types.h>
 
 #include "CLucene/_ApiHeader.h"
 #include "CLucene/search/Similarity.h"
@@ -906,7 +905,7 @@ void SegmentReader::openNorms(Directory *cfsDir, int32_t readBufferSize) {
             _norms[fi->name] = _CLNEW Norm(normInput, singleNormFile, fi->number, normSeek, this, segment.c_str());
 
             // read total norm info into cache
-            uint8_t *bytes = _CL_NEWARRAY(uint8_t, _maxDoc);
+            std::vector<uint8_t> bytes(_maxDoc);
             IndexInput *normStream;
             if (_norms[fi->name]->useSingleNormStream) {
                 normStream = singleNormStream;
@@ -917,7 +916,7 @@ void SegmentReader::openNorms(Directory *cfsDir, int32_t readBufferSize) {
             ensureOpen();
             SCOPED_LOCK_MUTEX(_norms[fi->name]->THIS_LOCK);
             normStream->seek(_norms[fi->name]->normSeek);
-            normStream->readBytes(bytes, _maxDoc);
+            normStream->readBytes(bytes.data(), _maxDoc);
             uint64_t sum = 0;
             for (int doc = 0; doc < _maxDoc; doc++) {
                 sum += Similarity::decodeNorm(bytes[doc]);
