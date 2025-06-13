@@ -7,8 +7,8 @@ ZROTKERNEL  = ../mips/zrot.c
 CSWAPKERNEL = ../mips/zswap.c
 ZSWAPKERNEL = ../mips/zswap.c
 
-CSCALKERNEL = zscal.c
-ZSCALKERNEL = zscal.c
+CSCALKERNEL = ../mips/zscal.c
+ZSCALKERNEL = ../mips/zscal.c
                                                                                         
                                                                                                                                           
 ifndef SNRM2KERNEL
