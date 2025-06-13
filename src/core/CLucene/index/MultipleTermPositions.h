@@ -21,8 +21,9 @@ private:
 	class IntQueue;
 
 	int32_t _doc;
-	int32_t _freq;
-	TermPositionsQueue* _termPositionsQueue;
+        int32_t _freq;
+        int32_t _norm;
+        TermPositionsQueue* _termPositionsQueue;
 	IntQueue* _posList;
 
 public:
@@ -44,25 +45,28 @@ public:
 
 	int32_t freq() const;
 
+        int32_t norm() const;
+
 	void close();
 
 	/**
 	* Not implemented.
 	* @throws UnsupportedOperationException
 	*/
-	void seek(Term*);
+	void seek(Term*, bool);
 
 	/**
 	* Not implemented.
 	* @throws UnsupportedOperationException
 	*/
-	void seek(TermEnum*);
+	void seek(TermEnum*, bool);
 
 	/**
 	* Not implemented.
 	* @throws UnsupportedOperationException
 	*/
 	int32_t read(int32_t*, int32_t*,int32_t);
+        int32_t read(int32_t*, int32_t*, int32_t*, int32_t);
 	bool readRange(DocRange* docRange) override;
 
 	/**

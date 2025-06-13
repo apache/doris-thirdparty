@@ -247,4 +247,12 @@ CL_NS_DEF(search)
   		return 0.0f;
     return overlap / (float_t)maxOverlap;
   }
+
+  LengthSimilarity::LengthSimilarity(){
+     }
+  LengthSimilarity::~LengthSimilarity(){
+     }
+  float_t LengthSimilarity::lengthNorm(const TCHAR* /*fieldName*/, int32_t numTerms) {
+       return numTerms;
+  }
 CL_NS_END

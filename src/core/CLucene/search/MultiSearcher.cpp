@@ -5,8 +5,10 @@
 * the GNU Lesser General Public License, as specified in the COPYING file.
 ------------------------------------------------------------------------------*/
 #include "CLucene/_ApiHeader.h"
+#include <optional>
 #include "CLucene/index/IndexReader.h"
 #include "MultiSearcher.h"
+
 #include "SearchHeader.h"
 #include "Query.h"
 #include "_HitQueue.h"
@@ -72,6 +74,30 @@ CL_NS_DEF(search)
 	for (int32_t i = 0; i < searchablesLen; ++i)
       docFreq += searchables[i]->docFreq(term);
     return docFreq;
+  }
+
+// doc norm
+int32_t MultiSearcher::docNorm(const TCHAR* field, int32_t n) const {
+
+      CND_PRECONDITION(reader != NULL, "reader is NULL");
+      int32_t i = subSearcher(n);			  // find searcher index
+      return searchables[i]->docNorm(field, n - starts[i]);
+  }
+
+std::optional<uint64_t> MultiSearcher::sumTotalTermFreq(const TCHAR* field) const {
+      bool fieldHasNorm = false;
+      int64_t sum = 0;
+      for (int32_t i = 0; i < searchablesLen; ++i) {
+           std::optional<int64_t> norm = searchables[i]->sumTotalTermFreq(field);
+          if (norm != std::nullopt) {
+              fieldHasNorm = true;
+              sum += norm.value();
+          }
+      }
+      if (fieldHasNorm) {
+           return sum;
+      }
+      return std::nullopt;
   }
 
   /** For use by {@link HitCollector} implementations. */

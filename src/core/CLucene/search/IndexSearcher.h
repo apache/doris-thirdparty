@@ -77,6 +77,10 @@ public:
 
 	int32_t docFreq(const CL_NS(index)::Term* term) const;
 
+        int32_t docNorm(const TCHAR* field, int32_t doc) const;
+
+        std::optional<uint64_t> sumTotalTermFreq(const TCHAR* field) const;
+
 	bool doc(int32_t i, CL_NS(document)::Document& document);
 	bool doc(int32_t i, CL_NS(document)::Document* document);
 	_CL_DEPRECATED( doc(i, document) ) CL_NS(document)::Document* doc(int32_t i);

@@ -275,5 +275,14 @@ public:
   float_t coord(int32_t overlap, int32_t maxOverlap);
 };
 
+/** Expert: Length scoring implementation. */
+class CLUCENE_EXPORT LengthSimilarity: public DefaultSimilarity {
+public:
+    LengthSimilarity();
+    ~LengthSimilarity();
+    /** Implemented as <code>1/sqrt(numTerms)</code>. */
+    float_t lengthNorm(const TCHAR* fieldName, int32_t numTerms) override;
+};
+
 CL_NS_END
 #endif

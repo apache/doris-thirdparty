@@ -1338,6 +1338,12 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
 
     std::vector<lucene::index::IndexWriter *> destIndexWriterList;
     std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList;
+    std::vector<lucene::store::IndexOutput *> normsOutputList;
+
+    // first level vector index is src_index_id
+    // <TCHAR, ValueArray<uint8_t>> key is field name, value is the norm of src_doc_id
+    std::vector<map<TCHAR, std::vector<uint8_t>>> srcFieldNormsMapValues(numIndices);
+
     try {
         // check hasProx, indexVersion
         bool hasProx = false;
@@ -1365,6 +1371,42 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
 
         /// merge fields
         mergeFields(hasProx, indexVersion);
+
+        // check if field has norms
+        bool hasNorms = false;
+        {
+            for (size_t i = 0; i < fieldInfos->size(); i++) {
+                //Get the i-th FieldInfo
+                FieldInfo* fi = fieldInfos->fieldInfo(i);
+                // Is this Field indexed and field need norms ?
+                if (fi->isIndexed && !fi->omitNorms) {
+                    hasNorms = true;
+                }
+            }
+        }
+
+        if (hasNorms) {
+            for (int srcIndex = 0; srcIndex < numIndices; srcIndex++) {
+                auto reader = readers[srcIndex];
+                for (size_t i = 0; i < fieldInfos->size(); i++) {
+                    //Get the i-th FieldInfo
+                    FieldInfo* fi = fieldInfos->fieldInfo(i);
+                    // Is this Field indexed and field need norms ?
+                    if (fi->isIndexed && !fi->omitNorms) {
+                        CL_NS(util)::ValueArray<uint8_t> normBuffer;
+                        size_t maxDoc = reader->maxDoc();
+                        if ( normBuffer.length < maxDoc){
+                            normBuffer.resize(maxDoc);
+                            memset(normBuffer.values, 0, sizeof(uint8_t) * maxDoc);
+                        }
+                        reader->norms(fi->name, normBuffer.values);
+                        for (int j = 0; j < normBuffer.length; j++) {
+                            srcFieldNormsMapValues[srcIndex][*fi->name].emplace_back(normBuffer.values[j]);
+                        }
+                    }
+                }
+            }
+        }
 
         /// write fields and create files writers
         for (int j = 0; j < numDestIndexes; j++) {
@@ -1406,6 +1448,13 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
             maxSkipLevels = termInfosWriter->maxSkipLevels;
             skipListWriterList.push_back(_CLNEW DefaultSkipListWriter(skipInterval, maxSkipLevels, (int) dest_index_docs[j], freqOutputList[j], proxOutputList[j]));
 
+            if (hasNorms) {
+                // create norms output
+                auto* norms_out = dest_dir->createOutput(Misc::segmentname(segment.c_str(), ".nrm").c_str());
+                norms_out->writeBytes(SegmentMerger::NORMS_HEADER, SegmentMerger::NORMS_HEADER_length);
+                normsOutputList.push_back(norms_out);
+            }
+
             // create null_bitmap index output
             auto* null_bitmap_out = dest_dir->createOutput(NULL_BITMAP_FILE_NAME);
             nullBitmapIndexOutputList.push_back(null_bitmap_out);
@@ -1413,6 +1462,11 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
 
         /// merge terms
         mergeTerms(hasProx, indexVersion);
+
+        /// merge norms if have
+        if (hasNorms){
+            mergeNorms(dest_index_docs, srcFieldNormsMapValues, normsOutputList);
+        }
 
         /// merge null_bitmap
         mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
@@ -1451,7 +1505,14 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
                     r->close();
                     _CLDELETE(r);
                 }
-            } readers.clear(););
+                 } readers.clear(););
+            for (auto* norms_out
+                 : normsOutputList) {
+                if (norms_out != nullptr) {
+                    norms_out->close();
+                    _CLDELETE(norms_out);
+                }
+         } normsOutputList.clear();
             for (auto* null_bitmap_out
                  : nullBitmapIndexOutputList) {
                 if (null_bitmap_out != nullptr) {
@@ -1912,6 +1973,71 @@ void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
     if (queue != NULL) {
         queue->close();
         _CLDELETE(queue);
+    }
+}
+
+void IndexWriter::mergeNorms(std::vector<uint32_t> dest_index_docs,
+                                std::vector<std::map<TCHAR, std::vector<uint8_t>>> srcFieldNormsMapValues,
+                                std::vector<lucene::store::IndexOutput *> normsOutputList) {
+    //Func - Merges the norms for all fields
+    //Pre  - fieldInfos != NULL
+    //Post - The norms for all fields have been merged
+    CND_PRECONDITION(fieldInfos != NULL, "fieldInfos is NULL");
+
+    std::vector<std::map<TCHAR, std::vector<uint8_t>>> destFieldNormsMapValues(numDestIndexes);
+
+    // iterate srcFieldNormsValues to construct destFieldNormsMapValues
+    for (size_t srcIndex = 0; srcIndex < srcFieldNormsMapValues.size(); ++srcIndex) {
+        std::map<TCHAR, std::vector<uint8_t>> &srcFieldNormsMap = srcFieldNormsMapValues[srcIndex];
+        if (srcFieldNormsMap.empty()) {
+            // empty indicates there is no nrm file in this index
+            continue;
+        }
+        // find field has norms
+        for (int j =0; j < fieldInfos->size(); j++) {
+            FieldInfo* fi = fieldInfos->fieldInfo(j);
+            TCHAR fieldName = *fi->name;
+            // Is this Field indexed and field need norms ?
+            if (fi->isIndexed && !fi->omitNorms) {
+                auto& srcFieldNorms = srcFieldNormsMap[fieldName];
+                // construct srcFieldNorms to destFieldNorms
+                for (int srcDocId = 0; srcDocId < srcFieldNorms.size(); srcDocId++) {
+                    auto destIdx = _trans_vec[srcIndex][srcDocId].first;
+                    auto destDocId = _trans_vec[srcIndex][srcDocId].second;
+                    if (destIdx == UINT32_MAX || destDocId == UINT32_MAX) {
+                        continue;
+                    }
+                    auto destDocCount = dest_index_docs[destIdx];
+                    auto& destFieldNormsMap = destFieldNormsMapValues[destIdx];
+                    if (destFieldNormsMap.find(fieldName) == destFieldNormsMap.end()) {
+                        destFieldNormsMap[fieldName].resize(destDocCount);
+                        std::fill(destFieldNormsMap[fieldName].begin(),destFieldNormsMap[fieldName].end(), 0);
+                    }
+                    auto& destFieldNorms = destFieldNormsMap[fieldName];
+                    destFieldNorms[destDocId] = srcFieldNorms[srcDocId];
+                    destFieldNormsMap[fieldName] = destFieldNorms;
+                }
+            }
+        }
+    }
+
+    // construct nrm and write nrm to dest index
+    for (size_t i = 0; i < destFieldNormsMapValues.size(); ++i) {
+        auto& destFieldNormsMap = destFieldNormsMapValues[i];
+        for (int j =0; j < fieldInfos->size(); j++) {
+            FieldInfo* fi = fieldInfos->fieldInfo(j);
+            TCHAR fieldName = *fi->name;
+            auto destDocCount = dest_index_docs[i];
+            if (fi->isIndexed && !fi->omitNorms) {
+                // if not find then norm is zero
+                if (destFieldNormsMap.find(fieldName) == destFieldNormsMap.end()) {
+                    destFieldNormsMap[fieldName].resize(destDocCount);
+                    std::fill(destFieldNormsMap[fieldName].begin(),destFieldNormsMap[fieldName].end(), 0);
+                }
+                auto& destFieldNorms = destFieldNormsMap[fieldName];
+                normsOutputList[i]->writeBytes(destFieldNorms.data(), destDocCount);
+            }
+        }
     }
 }
 
