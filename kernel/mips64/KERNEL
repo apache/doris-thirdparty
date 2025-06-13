@@ -6,6 +6,9 @@ CROTKERNEL  = ../mips/zrot.c
 ZROTKERNEL  = ../mips/zrot.c
 CSWAPKERNEL = ../mips/zswap.c
 ZSWAPKERNEL = ../mips/zswap.c
+
+CSCALKERNEL = zscal.c
+ZSCALKERNEL = zscal.c
                                                                                         
                                                                                                                                           
 ifndef SNRM2KERNEL
