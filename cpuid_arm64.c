@@ -276,11 +276,11 @@ int detect(void)
         		fclose(infile);
 			}
 		}
-		sprintf(cpuimpl,"0x%2x",implementer);
+		sprintf(cpuimpl,"0x%02x",implementer);
 		cpu_implementer=strdup(cpuimpl);
 	}
 	qsort(cpucores,1024,sizeof(int),cpusort);
-	sprintf(cpupart,"0x%3x",cpucores[0]);
+	sprintf(cpupart,"0x%03x",cpucores[0]);
 	cpu_part=strdup(cpupart);
 	if(cpu_part != NULL && cpu_implementer != NULL) {
     // Arm
