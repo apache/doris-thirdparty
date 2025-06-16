@@ -50,6 +50,7 @@ x86_64:
  - fixed compilation with the MinGW build of GCC 15
 
 arm64:
+ - fixed cpu type detection of A64FX and some ThunderX models (broken in 0.3.29)
  - added an optimized SBGEMM kernel for NEOVERSEV1
  - improved 1xN SBGEMM performance by forwarding to SBGEMV 
  - introduced a stepwise increase of the thread count used for
