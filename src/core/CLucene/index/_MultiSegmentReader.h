@@ -107,6 +107,12 @@ public:
 	TermDocs* termDocs(const void* io_ctx = nullptr);
 	TermPositions* termPositions(const void* io_ctx = nullptr);
 
+  // Returns the document norm
+  int32_t docNorm(const TCHAR* field, int32_t n);
+
+  // Returns the total norm of all terms appeared in all documents in this field
+  std::optional<uint64_t> sumTotalTermFreq(const TCHAR* field);
+
   void getFieldNames (FieldOption fldOption, StringArrayWithDeletor& retarray);
 	static void getFieldNames(FieldOption fldOption, StringArrayWithDeletor& retarray, CL_NS(util)::ArrayBase<IndexReader*>* subReaders);
 
@@ -146,7 +152,7 @@ protected:
   size_t pointer;
 
   TermDocs* current;              // == segTermDocs[pointer]
-  TermDocs* termDocs(const int32_t i); //< internal use only
+  TermDocs* termDocs(const int32_t i, bool local_stats = false); //< internal use only
   virtual TermDocs* termDocs(IndexReader* reader);
   void init(CL_NS(util)::ArrayBase<IndexReader*>* subReaders, const int32_t* starts);
 public:
@@ -156,13 +162,15 @@ public:
 
   int32_t doc() const;
   int32_t freq() const;
+  int32_t norm() const;
 
-  void seek(TermEnum* termEnum);
-  void seek(Term* tterm);
+  void seek(TermEnum* termEnum, bool load_stats = false);
+  void seek(Term* tterm, bool load_stats = false);
   bool next();
 
   /** Optimized implementation. */
   int32_t read(int32_t* docs, int32_t* freqs, int32_t length);
+  int32_t read(int32_t* docs, int32_t* freqs, int32_t* norms , int32_t length);
   bool readRange(DocRange* docRange) override;
 
    /* A Possible future optimization could skip entire segments */
@@ -173,6 +181,7 @@ public:
   virtual TermPositions* __asTermPositions();
 
   int32_t docFreq() override;
+  int32_t docNorm() override;
 
   void setIoContext(const void* io_ctx) override;
 

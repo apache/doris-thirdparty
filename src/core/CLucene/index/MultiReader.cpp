@@ -275,6 +275,38 @@ int32_t MultiReader::docFreq(const Term* t) {
 	return total;
 }
 
+int32_t MultiReader::docNorm(const TCHAR* field, int32_t n) {
+    ensureOpen();
+    if (hasNorms(field)) {
+        int32_t i = readerIndex(n);
+        return (*subReaders)[i]->docNorm(field, n - starts[i]);
+    }
+    return 0;
+};
+
+std::optional<uint64_t> MultiReader::sumTotalTermFreq(const TCHAR* field) {
+    ensureOpen();
+
+    if (hasNorms(field)) {
+        int64_t sum = 0;
+        bool hasTotalNorm = false;
+        for (size_t i = 0; i < subReaders->length; i++) {
+            if(!isDeleted(i)) {
+                std::optional<int64_t> totalNorm = (*subReaders)[i]->sumTotalTermFreq(field);
+                if (totalNorm != std::nullopt) {
+                    hasTotalNorm = true;
+                    sum += totalNorm.value();
+                }
+            }
+        }
+        if (hasTotalNorm) {
+            return sum;
+        }
+    }
+
+    return std::nullopt;
+}
+
 TermDocs* MultiReader::termDocs(const void* io_ctx) {
     ensureOpen();
 	TermDocs* ret =  _CLNEW MultiTermDocs(subReaders, starts);

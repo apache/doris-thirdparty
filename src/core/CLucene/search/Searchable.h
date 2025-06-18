@@ -9,6 +9,7 @@
 
 
 //#include "CLucene/index/IndexReader.h"
+#include <optional>
 CL_CLASS_DEF(index,Term)
 //#include "Filter.h"
 CL_CLASS_DEF(document,Document)
@@ -67,7 +68,12 @@ CL_NS_DEF(search)
       * @see IndexReader#docFreq(Term).
       */
       virtual int32_t docFreq(const CL_NS(index)::Term* term) const = 0;
-
+      /** Expert: Returns the norm of document whoss id is <code>doc</code> in the <code>field</code>.
+      */
+      virtual int32_t docNorm(const TCHAR* field, int32_t doc) const = 0;
+      /** Expert: Returns the total norm of all terms appeared in all documents in this field
+      */
+      virtual std::optional<uint64_t> sumTotalTermFreq(const TCHAR* field) const = 0;
       /** Expert: Returns one greater than the largest possible document number.
       * Called by search code to compute term weights.
       * @see IndexReader#maxDoc().

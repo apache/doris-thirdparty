@@ -33,9 +33,11 @@ class SegmentReader;
 
 class TermDocsBuffer {
 public:
-  TermDocsBuffer(CL_NS(store)::IndexInput* freqStream, bool hasProx, IndexVersion indexVersion, bool compatibleRead)
+  TermDocsBuffer(CL_NS(store)::IndexInput* freqStream, bool hasProx, IndexVersion indexVersion, bool compatibleRead, uint32_t maxDoc)
       : docs_(PFOR_BLOCK_SIZE + 3),
         freqs_(PFOR_BLOCK_SIZE + 3),
+        norms_(PFOR_BLOCK_SIZE + 3),
+        maxDoc(maxDoc),
         freqStream_(freqStream),
         hasProx_(hasProx),
         indexVersion_(indexVersion),
@@ -45,9 +47,11 @@ public:
   ~TermDocsBuffer() {
     cur_doc_ = 0;
     cur_freq_ = 0;
+    cur_norm_ = 0;
 
     docs_.clear();
     freqs_.clear();
+    norms_.clear();
 
     freqStream_ = nullptr;
   }
@@ -66,12 +70,29 @@ public:
     return freqs_[cur_freq_++];
   }
 
+  inline int32_t getNorm() {
+      if (cur_norm_ >= size_) {
+          refill();
+      }
+      if(cur_norm_ >= maxDoc) {
+          return 0;
+      }
+      return norms_[cur_norm_++];
+  }
+
   void refill();
   void readRange(DocRange* docRange);
+
+  // set doc norms before readrange or refill
+  void setAllDocNorms(uint8_t* norms);
+
+  // need load state
+  void needLoadStats(bool load_stats = false);
 
 private:
   int32_t refillV0();
   int32_t refillV1();
+  void refillNorm(int32_t size);
 
 private:
   uint32_t size_ = 0;
@@ -82,7 +103,18 @@ private:
   uint32_t cur_freq_ = 0;
   std::vector<uint32_t> freqs_;
 
+  //cur doc norm
+  uint32_t cur_norm_ = 0;
+  std::vector<uint32_t> norms_;
+
   CL_NS(store)::IndexInput* freqStream_ = nullptr;
+
+  // need load statistic info
+  bool load_stats_ = false;
+
+  // save all doc norms in this term's field
+  uint32_t maxDoc = 0;
+  uint8_t* all_doc_norms_;
 
   bool hasProx_ = false;
   bool compatibleRead_ = false;
@@ -151,14 +183,19 @@ protected:
   CL_NS(store)::IndexInput* freqStream;
   int32_t count;
   int32_t df;
+  int32_t maxDoc;
+
   CL_NS(util)::BitSet* deletedDocs;
   int32_t _doc = -1;
   int32_t _freq = 0;
+  int32_t _norm = 0;
+
   int32_t docs[PFOR_BLOCK_SIZE];	  // buffered doc numbers
   int32_t freqs[PFOR_BLOCK_SIZE];	  // buffered term freqs
   int32_t pointer;
   int32_t pointerMax;
 
+  uint8_t* norms;
 private:
   int32_t skipInterval;
   int32_t maxSkipLevels;
@@ -181,18 +218,22 @@ public:
   SegmentTermDocs( const SegmentReader* Parent);
   virtual ~SegmentTermDocs();
 
-  virtual void seek(Term* term);
-  virtual void seek(TermEnum* termEnum);
-  virtual void seek(const TermInfo* ti,Term* term);
+  virtual void seek(Term* term, bool load_stats = false);
+  virtual void seek(TermEnum* termEnum, bool load_stats = false);
+  virtual void seek(const TermInfo* ti,Term* term, bool load_stats = false);
 
   virtual void close();
   virtual int32_t doc()const;
   virtual int32_t freq()const;
+  virtual int32_t norm()const;
 
   virtual bool next();
 
   /** Optimized implementation. */
   virtual int32_t read(int32_t* docs, int32_t* freqs, int32_t length);
+
+  virtual int32_t read(int32_t* docs, int32_t* freqs,int32_t* norms, int32_t length);
+
   bool readRange(DocRange* docRange) override;
 
   /** Optimized implementation. */
@@ -203,6 +244,8 @@ public:
   void setIoContext(const void* io_ctx) override;
 
   int32_t docFreq() override;
+
+  int32_t docNorm() override;
 
 protected:
   virtual void skippingDoc(){}
@@ -242,7 +285,7 @@ public:
   void setIoContext(const void* io_ctx) override;
 
 private:
-  void seek(const TermInfo* ti, Term* term);
+  void seek(const TermInfo* ti, Term* term, bool load_stats = false);
 
 public:
   void close();
@@ -257,6 +300,7 @@ protected:
 public:
   bool next();
   int32_t read(int32_t* docs, int32_t* freqs, int32_t length);
+  int32_t read(int32_t* docs, int32_t* freqs, int32_t* norms, int32_t length);
   bool readRange(DocRange* docRange) override;
 
 protected:
@@ -291,10 +335,11 @@ private:
   virtual TermPositions* __asTermPositions();
 
   //resolve SegmentTermDocs/TermPositions ambiguity
-  void seek(Term* term){ SegmentTermDocs::seek(term); }
-  void seek(TermEnum* termEnum){ SegmentTermDocs::seek(termEnum); }
+  void seek(Term* term, bool load_stats = false){ SegmentTermDocs::seek(term, load_stats); }
+  void seek(TermEnum* termEnum, bool load_stats = false){ SegmentTermDocs::seek(termEnum, load_stats); }
   int32_t doc() const{ return SegmentTermDocs::doc(); }
   int32_t freq() const{ return SegmentTermDocs::freq(); }
+  int32_t norm() const{ return SegmentTermDocs::norm(); }
   bool skipTo(const int32_t target){ return SegmentTermDocs::skipTo(target); }
 
 private:
@@ -370,6 +415,7 @@ class SegmentReader: public DirectoryIndexReader {
     CL_NS(util)::Deletor::Dummy,
     Norm > NormsType;
   NormsType _norms;
+  std::unordered_map<TCHAR, std::optional<int64_t>> sum_total_term_freq;
 
   uint8_t* ones;
   uint8_t* fakeNorms();
@@ -487,12 +533,17 @@ public:
   ///Returns the number of documents which contain the term t
   int32_t docFreq(const Term* t);
 
+  ///Returns the number of document whose id is doc in this field
+  int32_t docNorm(const TCHAR* field, int32_t doc);
+
+  ///Returns the total norm of all terms appeared in all documents in this field
+  std::optional<uint64_t> sumTotalTermFreq(const TCHAR* field);
+
   ///Returns the actual number of documents in the segment
   int32_t numDocs();
   ///Returns the number of  all the documents in the segment including the ones that have
   ///been marked deleted
   int32_t maxDoc() const;
-
 
   void setTermInfosIndexDivisor(int32_t indexDivisor);
 
@@ -501,6 +552,11 @@ public:
   ///Returns the bytes array that holds the norms of a named field.
   ///Returns fake norms if norms aren't available
   uint8_t* norms(const TCHAR* field);
+
+  uint8_t* norms(const TCHAR* field) const;
+
+  ///Returns the bytes array that holds the norms of a named field.
+  void norms(const TCHAR* field, uint8_t* bytes) const;
 
   ///Reads the Norms for field from disk
   void norms(const TCHAR* field, uint8_t* bytes);
