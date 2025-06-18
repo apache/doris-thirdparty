@@ -1,7 +1,7 @@
 OpenBLAS ChangeLog
 ====================================================================
 Version 0.3.30
-16-Jun-2025
+19-Jun-2025
 
 general:
  - fixed an installation problem with the thread safety test in gmake builds
@@ -51,6 +51,7 @@ x86_64:
 
 arm64:
  - fixed cpu type detection of A64FX and some ThunderX models (broken in 0.3.29)
+ - added support for the AmpereOne/1A cpus in DYNAMIC_ ARCH builds
  - added an optimized SBGEMM kernel for NEOVERSEV1
  - improved 1xN SBGEMM performance by forwarding to SBGEMV 
  - introduced a stepwise increase of the thread count used for
@@ -117,9 +118,11 @@ zarch:
 
 x86:
  - fixed corner cases of NAN and INF input handling in CSCAL and ZSCAL
+ - worked around potential miscompilation of CDOT with very old binutils
 
 arm:
  - fixed corner cases of NAN and INF input handling in CSCAL and ZSCAL
+ - fixed unwanted generation of object files with a writable stack
 
 sparc:
  - fixed corner cases of NAN and INF input handling in CSCAL and ZSCAL
