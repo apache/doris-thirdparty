@@ -25,14 +25,28 @@ jobs:
       echo "FROM quay.io/pypa/manylinux1_x86_64
         COPY . /tmp/openblas
         RUN cd /tmp/openblas                                      &&  \
-            COMMON_FLAGS='DYNAMIC_ARCH=1 TARGET=NEHALEM NUM_THREADS=32' && \
-            BTYPE='BINARY=64' CC=gcc && \
-            make QUIET_MAKE=1 $COMMON_FLAGS $BTYPE && \
-            make -C test $COMMON_FLAGS $BTYPE && \
-            make -C ctest $COMMON_FLAGS $BTYPE && \
-            make -C utest $COMMON_FLAGS $BTYPE" > Dockerfile
+            CC=gcc && \
+            make QUIET_MAKE=1 BINARY=64 DYNAMIC_ARCH=1 TARGET=NEHALEM NUM_THREADS=32 && \
+            make -C test BINARY=64 DYNAMIC_ARCH=1 TARGET=NEHALEM NUM_THREADS=32 && \
+            make -C ctest BINARY=64 DYNAMIC_ARCH=1 TARGET=NEHALEM NUM_THREADS=32 && \
+            make -C utest BINARY=64 DYNAMIC_ARCH=1 TARGET=NEHALEM NUM_THREADS=32" > Dockerfile
       docker build .
     displayName: Run manylinux1 docker build
+- job: manylinux_32bit
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - script: |
+      echo "FROM quay.io/pypa/manylinux2014_i686
+        COPY . /tmp/openblas
+        RUN cd /tmp/openblas                                      &&  \
+            CC=gcc && \
+            make QUIET_MAKE=1 BINARY=32 TARGET=NEHALEM NUM_THREADS=32 && \
+            make -C test BINARY=32 TARGET=NEHALEM NUM_THREADS=32 && \
+            make -C ctest BINARY=32 TARGET=NEHALEM NUM_THREADS=32 && \
+            make -C utest BINARY=32 TARGET=NEHALEM NUM_THREADS=32" > Dockerfile
+      docker build .
+    displayName: Run manylinux 32bit docker build
 - job: Intel_SDE_skx
   pool:
     vmImage: 'ubuntu-latest'
