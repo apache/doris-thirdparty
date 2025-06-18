@@ -440,11 +440,19 @@ static gotoblas_t *get_coretype(void) {
           return &gotoblas_TSV110;
       }
       break;
-    case 0x50: // Ampere
+    case 0x50: // Ampere/AppliedMicro
       switch (part)
       {
         case 0x000: // Skylark/EMAG8180
           return &gotoblas_EMAG8180;
+      }
+      break;
+    case 0xc0: // Ampere
+      switch(part)
+      {
+	case 0xac3:
+	case 0xac4:
+	  return &gotoblas_NEOVERSEN1;
       }
       break;
     case 0x51: // Qualcomm
