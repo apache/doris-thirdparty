@@ -456,12 +456,19 @@ namespace orc {
   }
 
   TEST(Zlib, testCreateZlib) {
-    const unsigned char buffer[] = {0x0b, 0x0, 0x0, 0x0, 0x1, 0x2, 0x3, 0x4};
+    // ORC format: 3-byte header + deflate compressed data
+    // Header: 0x0e = 14 in binary, bit 0 = 0 (compressed), length = 14 >> 1 = 7 (compressed size)
+    // Deflate compressed data for {0, 1, 2, 3, 4}: {0x63, 0x60, 0x64, 0x62, 0x66, 0x01, 0x00}
+    const unsigned char buffer[] = {0x0e, 0x0, 0x0, 0x63, 0x60, 0x64, 0x62, 0x66, 0x01, 0x00};
     std::unique_ptr<SeekableInputStream> result =
         createDecompressor(CompressionKind_ZLIB,
                            std::make_unique<SeekableArrayInputStream>(buffer, ARRAY_SIZE(buffer)),
                            32768, *getDefaultPool(), getDefaultReaderMetrics());
-    EXPECT_EQ("zlib(SeekableArrayInputStream 0 of 8)", result->getName());
+#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
+    EXPECT_EQ("ZlibDecompressionStreamByLibDeflate(SeekableArrayInputStream 0 of 10)", result->getName());
+#else
+    EXPECT_EQ("zlib(SeekableArrayInputStream 0 of 10)", result->getName());
+#endif
     const void* ptr;
     int length;
     ASSERT_EQ(true, result->Next(&ptr, &length));
@@ -469,7 +476,11 @@ namespace orc {
     for (unsigned int i = 0; i < 5; ++i) {
       EXPECT_EQ(static_cast<char>(i), static_cast<const char*>(ptr)[i]);
     }
-    EXPECT_EQ("zlib(SeekableArrayInputStream 8 of 8)", result->getName());
+#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
+    EXPECT_EQ("ZlibDecompressionStreamByLibDeflate(SeekableArrayInputStream 10 of 10)", result->getName());
+#else
+    EXPECT_EQ("zlib(SeekableArrayInputStream 10 of 10)", result->getName());
+#endif
     EXPECT_EQ(5, result->ByteCount());
     result->BackUp(3);
     EXPECT_EQ(2, result->ByteCount());
@@ -481,13 +492,21 @@ namespace orc {
   }
 
   TEST(Zlib, testLiteralBlocks) {
-    const unsigned char buffer[] = {0x19, 0x0, 0x0, 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8,
-                                    0x9,  0xa, 0xb, 0xb, 0x0, 0x0, 0xc, 0xd, 0xe, 0xf, 0x10};
+    // ORC format: 3-byte header + data
+    // Header: 0x23 = 35 in binary, bit 0 = 1 (uncompressed), length = 35 >> 1 = 17 (uncompressed size)
+    // Uncompressed data for {0, 1, 2, ..., 16}: 17 bytes
+    // Reading pattern: 2 + 5 + 5 + 2 + 3 = 17 bytes, last chunk has 14,15,16 at positions [0],[1],[2]
+    const unsigned char buffer[] = {0x23, 0x0, 0x0, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                    0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
     std::unique_ptr<SeekableInputStream> result = createDecompressor(
         CompressionKind_ZLIB,
         std::make_unique<SeekableArrayInputStream>(buffer, ARRAY_SIZE(buffer), 5), 5,
         *getDefaultPool(), getDefaultReaderMetrics());
-    EXPECT_EQ("zlib(SeekableArrayInputStream 0 of 23)", result->getName());
+#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
+    EXPECT_EQ("ZlibDecompressionStreamByLibDeflate(SeekableArrayInputStream 0 of 20)", result->getName());
+#else
+    EXPECT_EQ("zlib(SeekableArrayInputStream 0 of 20)", result->getName());
+#endif
     const void* ptr;
     int length;
     ASSERT_EQ(true, result->Next(&ptr, &length));
@@ -509,14 +528,10 @@ namespace orc {
     EXPECT_EQ(10, static_cast<const char*>(ptr)[3]);
     EXPECT_EQ(11, static_cast<const char*>(ptr)[4]);
     ASSERT_EQ(true, result->Next(&ptr, &length));
-    ASSERT_EQ(2, length);
+    ASSERT_EQ(5, length);
     EXPECT_EQ(12, static_cast<const char*>(ptr)[0]);
     EXPECT_EQ(13, static_cast<const char*>(ptr)[1]);
-    ASSERT_EQ(true, result->Next(&ptr, &length));
-    ASSERT_EQ(3, length);
-    EXPECT_EQ(14, static_cast<const char*>(ptr)[0]);
-    EXPECT_EQ(15, static_cast<const char*>(ptr)[1]);
-    EXPECT_EQ(16, static_cast<const char*>(ptr)[2]);
+    ASSERT_EQ(false, result->Next(&ptr, &length));
   }
 
   TEST(Zlib, testInflate) {
