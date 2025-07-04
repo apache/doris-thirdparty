@@ -1938,7 +1938,7 @@ void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
                 }
                 docDeltaBuffer.resize(0);
                 freqBuffer.resize(0);
-                if (indexVersion >= IndexVersion::kV2) {
+                if (hasProx && indexVersion >= IndexVersion::kV2) {
                     PforUtil::encodePos(proxOutput, posBuffer);
                 }
             }
