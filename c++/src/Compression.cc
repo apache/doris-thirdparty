@@ -810,7 +810,7 @@ namespace orc {
 
     std::string getName() const override {
       std::ostringstream result;
-      result << "ZlibDecompressionStreamByLibDeflate(" << getStreamName() << ")";
+      result << "zlib(" << input->getName() << ")";
       return result.str();
     }
 
