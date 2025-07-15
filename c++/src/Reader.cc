@@ -1235,11 +1235,6 @@ namespace orc {
             currentRowInStripe = 0;
             continue;
           }
-        } else {
-          if (filter) {
-            // read row group statistics and bloom filters of current stripe
-            loadStripeIndex();
-          }
         }
       }
 
