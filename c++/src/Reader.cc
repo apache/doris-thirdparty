@@ -1203,6 +1203,11 @@ namespace orc {
           currentRowInStripe = 0;
           continue;
         }
+      } else {
+        if (filter) {
+          // read row group statistics and bloom filters of current stripe
+          loadStripeIndex();
+        }
       }
 
       // get writer timezone info from stripe footer to help understand timestamp values.
