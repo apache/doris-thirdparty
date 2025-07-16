@@ -21,7 +21,7 @@ on:
   pull_request:
     branches:
     - clucene
-    - clucene-2.0
+    - clucene-3.1
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
