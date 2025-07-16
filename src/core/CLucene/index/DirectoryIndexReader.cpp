@@ -148,7 +148,12 @@ CL_NS_DEF(index)
     DirectoryIndexReader* doBody(const char* segmentFileName) {
 
       SegmentInfos* infos = _CLNEW SegmentInfos;
-      infos->read(directory, segmentFileName);
+      try {
+        infos->read(directory, segmentFileName);
+      } catch (CLuceneError& e) {
+        _CLDELETE(infos);
+        throw e;
+      }
 
       DirectoryIndexReader* reader;
 
