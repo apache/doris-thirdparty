@@ -227,7 +227,7 @@ class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
 
 
   bool commitPending; // true if segmentInfos has changes not yet committed
-  SegmentInfos* rollbackSegmentInfos;      // segmentInfos we will fallback to if the commit fails
+  //SegmentInfos* rollbackSegmentInfos;      // segmentInfos we will fallback to if the commit fails
 
   SegmentInfos* localRollbackSegmentInfos;      // segmentInfos we will fallback to if the commit fails
   bool localAutoCommit;                // saved autoCommit during local transaction
@@ -237,7 +237,7 @@ class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
   //typedef SDocumentsWriter<char> SDocumentsWriterType;
   //SDocumentsWriterType *sdocWriter;
   //lucene::index::SDocumentsWriter<char>* sdocWriter;
-  IndexFileDeleter* deleter;
+  //IndexFileDeleter* deleter;
 
   typedef std::vector<SegmentInfo*> SegmentsToOptimizeType;
   SegmentsToOptimizeType* segmentsToOptimize;           // used by optimize to note those needing optimization

@@ -755,7 +755,9 @@ public:
     int32_t getNumBufferedDeleteTerms() override {
         return 0;
     }
-    void abort(AbortException *ae) override {}
+    void abort(AbortException *ae) override {
+        resetPostingsData();
+    }
     void setMaxBufferedDocs(int32_t count) override {
         maxBufferedDocs = count;
     }

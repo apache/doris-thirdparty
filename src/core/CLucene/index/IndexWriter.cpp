@@ -5,6 +5,7 @@
 * the GNU Lesser General Public License, as specified in the COPYING file.
 ------------------------------------------------------------------------------*/
 #include "CLucene/_ApiHeader.h"
+#include "CLucene/index/IndexWriter.h"
 
 #include "CLucene/analysis/AnalysisHeader.h"
 #include "CLucene/analysis/Analyzers.h"
@@ -14,11 +15,8 @@
 #include "CLucene/store/Directory.h"
 #include "CLucene/util/Misc.h"
 #include "CLucene/util/PFORUtil.h"
-#include "IndexReader.h"
-#include "IndexWriter.h"
-
+#include "CLucene/index/IndexReader.h"
 #include "CLucene/index/MergePolicy.h"
-#include "CLucene/search/Similarity.h"
 #include "CLucene/store/FSDirectory.h"
 #include "CLucene/store/_Lock.h"
 #include "CLucene/store/_RAMDirectory.h"
@@ -26,17 +24,18 @@
 #include "CLucene/util/PriorityQueue.h"
 #include "CLucene/index/CodeMode.h"
 #include "CLucene/analysis/standard95/StandardAnalyzer.h"
-#include "MergePolicy.h"
-#include "MergeScheduler.h"
-#include "SDocumentWriter.h"
-#include "_DocumentsWriter.h"
-#include "_IndexFileDeleter.h"
-#include "_SegmentHeader.h"
-#include "_SegmentInfos.h"
-#include "_SegmentMerger.h"
-#include "_SkipListWriter.h"
-#include "_Term.h"
-#include "_TermInfo.h"
+#include "CLucene/index/MergePolicy.h"
+#include "CLucene/index/MergeScheduler.h"
+#include "CLucene/index/SDocumentWriter.h"
+#include "CLucene/index/_DocumentsWriter.h"
+#include "CLucene/index/_IndexFileDeleter.h"
+#include "CLucene/index/_SegmentHeader.h"
+#include "CLucene/index/_SegmentInfos.h"
+#include "CLucene/index/_SegmentMerger.h"
+#include "CLucene/index/_SkipListWriter.h"
+#include "CLucene/index/_Term.h"
+#include "CLucene/index/_TermInfo.h"
+
 #include <algorithm>
 #include <memory>
 #include <assert.h>
@@ -106,7 +105,6 @@ void IndexWriter::deinit(bool releaseWriteLock) throw() {
     _CLLDELETE(segmentsToOptimize);
     _CLLDELETE(mergeScheduler);
     _CLLDELETE(mergePolicy);
-    _CLLDELETE(deleter);
     _CLLDELETE(docWriter);
     if (bOwnsDirectory) _CLLDECDELETE(directory);
     delete _internal;
@@ -252,8 +250,6 @@ void IndexWriter::init(Directory *d, Analyzer *a, const bool create, const bool 
     this->autoCommit = true;
     this->segmentInfos = _CLNEW SegmentInfos;
     this->mergeGen = 0;
-    this->rollbackSegmentInfos = NULL;
-    this->deleter = NULL;
     this->docWriter = NULL;
     this->writeLock = NULL;
     this->fieldInfos = NULL;
@@ -294,11 +290,6 @@ void IndexWriter::init(Directory *d, Analyzer *a, const bool create, const bool 
         }
 
         this->autoCommit = autoCommit;
-        if (!autoCommit) {
-            rollbackSegmentInfos = segmentInfos->clone();
-        } else {
-            rollbackSegmentInfos = NULL;
-        }
         if (analyzer != nullptr) {
             if (analyzer->isSDocOpt()) {
                 docWriter = _CLNEW SDocumentsWriter<char>(directory, this);
@@ -308,11 +299,6 @@ void IndexWriter::init(Directory *d, Analyzer *a, const bool create, const bool 
         } else {
             _CLTHROWA(CL_ERR_IllegalArgument, "IndexWriter::init: Only support SDocumentsWriter");
         }
-        // Default deleter (for backwards compatibility) is
-        // KeepOnlyLastCommitDeleter:
-        deleter = _CLNEW IndexFileDeleter(directory,
-                                          deletionPolicy == NULL ? _CLNEW KeepOnlyLastCommitDeletionPolicy() : deletionPolicy,
-                                          segmentInfos, infoStream, docWriter);
 
         pushMaxBufferedDocs();
 
@@ -476,7 +462,6 @@ void IndexWriter::setInfoStream(std::ostream *infoStream) {
     this->infoStream = infoStream;
     setMessageID();
     docWriter->setInfoStream(infoStream);
-    deleter->setInfoStream(infoStream);
     if (infoStream != NULL)
         messageState();
 }
@@ -587,19 +572,14 @@ void IndexWriter::closeInternal(bool waitForMerges) {
                 if (infoStream != NULL)
                     message("close: wrote segments file \"" + segmentInfos->getCurrentSegmentFileName() + "\"");
 
-                deleter->checkpoint(segmentInfos, true);
-
                 commitPending = false;
                 //        _CLDELETE(rollbackSegmentInfos);
             }
-            _CLDELETE(rollbackSegmentInfos);
-
 
             if (infoStream != NULL)
                 message("at close: " + segString());
 
             _CLDELETE(docWriter);
-            deleter->close();
         }
 
         if (closeDir)
@@ -688,11 +668,8 @@ bool IndexWriter::flushDocStores() {
                                 si->getDocStoreSegment().compare(docStoreSegment) == 0)
                                 si->setDocStoreIsCompoundFile(false);
                         }
-                        deleter->deleteFile(compoundFileName.c_str());
                         deletePartialSegmentsFile();
                     })
-
-            deleter->checkpoint(segmentInfos, false);
         }
     }
 
@@ -798,15 +775,6 @@ void IndexWriter::updateDocument(Term *term, Document *doc, Analyzer *analyzer) 
                 if (!success) {
                     if (infoStream != NULL)
                         message(string("hit exception updating document"));
-
-                    {
-                        SCOPED_LOCK_MUTEX(this->THIS_LOCK)
-                        // If docWriter has some aborted files that were
-                        // never incref'd, then we clean them up here
-                        const std::vector<std::string> *files = docWriter->abortedFiles();
-                        if (files != NULL)
-                            deleter->deleteNewFiles(*files);
-                    }
                 })
         if (doFlush)
             flush(true, false);
@@ -1032,10 +1000,7 @@ void IndexWriter::startTransaction() {
         flush();
         // Turn off auto-commit during our local transaction:
         autoCommit = false;
-    } else
-        // We must "protect" our files at this point from
-        // deletion in case we need to rollback:
-        deleter->incRef(segmentInfos, false);
+    }
 }
 
 void IndexWriter::rollbackTransaction() {
@@ -1055,15 +1020,6 @@ void IndexWriter::rollbackTransaction() {
     segmentInfos->insert(localRollbackSegmentInfos, true);
     _CLDELETE(localRollbackSegmentInfos);
 
-    // Ask deleter to locate unreferenced files we had
-    // created & remove them:
-    deleter->checkpoint(segmentInfos, false);
-
-    if (!autoCommit)
-        // Remove the incRef we did in startTransaction:
-        deleter->decRef(segmentInfos);
-
-    deleter->refresh();
     finishMerges(false);
     stopMerges = false;
 }
@@ -1089,15 +1045,6 @@ void IndexWriter::commitTransaction() {
 
                 rollbackTransaction();
             })
-
-    if (!autoCommit)
-        // Remove the incRef we did in startTransaction.
-        deleter->decRef(localRollbackSegmentInfos);
-
-    _CLDELETE(localRollbackSegmentInfos);
-
-    // Give deleter a chance to remove files now:
-    deleter->checkpoint(segmentInfos, autoCommit);
 }
 
 void IndexWriter::abort() {
@@ -1134,14 +1081,8 @@ void IndexWriter::abort() {
             // will always write to a _CLNEW generation ("write
             // once").
             segmentInfos->clear();
-            segmentInfos->insert(rollbackSegmentInfos, false);
 
             docWriter->abort(NULL);
-
-            // Ask deleter to locate unreferenced files & remove
-            // them:
-            deleter->checkpoint(segmentInfos, false);
-            deleter->refresh();
         }
 
         commitPending = false;
@@ -2116,14 +2057,14 @@ bool IndexWriter::doFlush(bool _flushDocStores) {
         // have to fix the "applyDeletesSelectively" logic to
         // apply to more than just the last flushed segment
         //bool flushDeletes = sdocWriter->hasDeletes();
-        bool flushDeletes = docWriter->hasDeletes();
+        //bool flushDeletes = docWriter->hasDeletes();
 
         if (infoStream != NULL) {
             message("  flush: segment=" + docWriter->getSegment() +
                     " docStoreSegment=" + docWriter->getDocStoreSegment() +
                     " docStoreOffset=" + Misc::toString(docWriter->getDocStoreOffset()) +
                     " flushDocs=" + Misc::toString(flushDocs) +
-                    " flushDeletes=" + Misc::toString(flushDeletes) +
+                    //" flushDeletes=" + Misc::toString(flushDeletes) +
                     " flushDocStores=" + Misc::toString(_flushDocStores) +
                     " numDocs=" + Misc::toString(numDocs) +
                     " numBufDelTerms=" + Misc::toString(docWriter->getNumBufferedDeleteTerms()));
@@ -2158,13 +2099,7 @@ bool IndexWriter::doFlush(bool _flushDocStores) {
         // If we are flushing docs, segment must not be NULL:
         assert(!segment.empty() || !flushDocs);
 
-        if (flushDocs || flushDeletes) {
-
-            SegmentInfos *rollback = NULL;
-
-            if (flushDeletes)
-                rollback = segmentInfos->clone();
-
+        if (flushDocs) {
             bool success = false;
 
             try {
@@ -2191,13 +2126,6 @@ bool IndexWriter::doFlush(bool _flushDocStores) {
                     segmentInfos->insert(newSegment);
                 }
 
-                if (flushDeletes)
-                    // we should be able to change this so we can
-                    // buffer deletes longer and then flush them to
-                    // multiple flushed segments, when
-                    // autoCommit=false
-                    applyDeletes(flushDocs);
-
                 doAfterFlush();
 
                 checkpoint();
@@ -2207,44 +2135,16 @@ bool IndexWriter::doFlush(bool _flushDocStores) {
                     if (!success) {
                         if (infoStream != NULL)
                             message("hit exception flushing segment " + segment);
-
-                        if (flushDeletes) {
-
-                            // Carefully check if any partial .del files
-                            // should be removed:
-                            const int32_t size = rollback->size();
-                            for (int32_t i = 0; i < size; i++) {
-                                const string newDelFileName = segmentInfos->info(i)->getDelFileName();
-                                const string delFileName = rollback->info(i)->getDelFileName();
-                                if (!newDelFileName.empty() && newDelFileName.compare(delFileName) != 0)
-                                    deleter->deleteFile(newDelFileName.c_str());
-                            }
-
-                            // Fully replace the segmentInfos since flushed
-                            // deletes could have changed any of the
-                            // SegmentInfo instances:
-                            segmentInfos->clear();
-                            assert(false);//test me..
-                            segmentInfos->insert(rollback, false);
-
-                        } else {
+                        {
                             // Remove segment we added, if any:
                             if (newSegment != NULL &&
                                 segmentInfos->size() > 0 &&
                                 segmentInfos->info(segmentInfos->size() - 1) == newSegment)
                                 segmentInfos->remove(segmentInfos->size() - 1);
                         }
-                        if (flushDocs) {}
-                        //sdocWriter->abort(NULL);
+                        docWriter->abort(NULL);
                         deletePartialSegmentsFile();
-                        deleter->checkpoint(segmentInfos, false);
-
-                        if (!segment.empty())
-                            deleter->refresh(segment.c_str());
-                    } else if (flushDeletes)
-                            _CLDELETE(rollback);)
-
-            deleter->checkpoint(segmentInfos, autoCommit);
+                    })
 
             if (flushDocs && mergePolicy->useCompoundFile(segmentInfos,
                                                           newSegment)) {
@@ -2260,11 +2160,8 @@ bool IndexWriter::doFlush(bool _flushDocStores) {
                             if (infoStream != NULL)
                                 message("hit exception creating compound file for newly flushed segment " + segment);
                             newSegment->setUseCompoundFile(false);
-                            deleter->deleteFile((segment + "." + IndexFileNames::COMPOUND_FILE_EXTENSION).c_str());
                             deletePartialSegmentsFile();
                         })
-
-                deleter->checkpoint(segmentInfos, autoCommit);
             }
 
             ret = true;
@@ -2338,7 +2235,6 @@ bool IndexWriter::commitMerge(MergePolicy::OneMerge *_merge) {
 
         assert(_merge->increfDone);
         decrefMergeSegments(_merge);
-        deleter->refresh(_merge->info->name.c_str());
         return false;
     }
 
@@ -2434,7 +2330,6 @@ bool IndexWriter::commitMerge(MergePolicy::OneMerge *_merge) {
             if (!success) {
                 if (infoStream != NULL)
                     message(string("hit exception creating merged deletes file"));
-                deleter->refresh(_merge->info->name.c_str());
             })
 
     // Simple optimization: if the doc store we are using
@@ -2475,16 +2370,10 @@ bool IndexWriter::commitMerge(MergePolicy::OneMerge *_merge) {
                 segmentInfos->clear();
                 segmentInfos->insert(rollback, true);
                 deletePartialSegmentsFile();
-                deleter->refresh(_merge->info->name.c_str());
             } _CLDELETE(rollback);)
 
     if (_merge->optimize)
         segmentsToOptimize->push_back(_merge->info);
-
-    // Must checkpoint before decrefing so any newly
-    // referenced files in the _CLNEW merge->info are incref'd
-    // first:
-    deleter->checkpoint(segmentInfos, autoCommit);
 
     decrefMergeSegments(_merge);
 
@@ -2499,10 +2388,6 @@ void IndexWriter::decrefMergeSegments(MergePolicy::OneMerge *_merge) {
     _merge->increfDone = false;
     for (int32_t i = 0; i < numSegmentsToMerge; i++) {
         SegmentInfo *previousInfo = sourceSegmentsClone->info(i);
-        // Decref all files for this SegmentInfo (this
-        // matches the incref in mergeInit):
-        if (previousInfo->dir == directory)
-            deleter->decRef(previousInfo->files());
     }
 }
 
@@ -2547,8 +2432,6 @@ void IndexWriter::merge(MergePolicy::OneMerge *_merge) {
                             if (infoStream != NULL)
                                 message(string("hit exception during merge"));
                             addMergeException(_merge);
-                            if (_merge->info != NULL && segmentInfos->indexOf(_merge->info) == -1)
-                                deleter->refresh(_merge->info->name.c_str());
                         }
 
                         // This merge (and, generally, any change to the
@@ -2738,11 +2621,6 @@ void IndexWriter::_mergeInit(MergePolicy::OneMerge *_merge) {
 
     for (int32_t i = 0; i < end; i++) {
         SegmentInfo *si = _merge->segmentsClone->info(i);
-
-        // IncRef all files for this segment info to make sure
-        // they are not removed while we are trying to merge->
-        if (si->dir == directory)
-            deleter->incRef(si->files());
     }
 
     _merge->increfDone = true;
@@ -2836,7 +2714,6 @@ int32_t IndexWriter::mergeMiddle(MergePolicy::OneMerge *_merge) {
                 {
                     SCOPED_LOCK_MUTEX(this->THIS_LOCK)
                     addMergeException(_merge);
-                    deleter->refresh(mergedName.c_str());
                 }
             })
 
@@ -2887,7 +2764,6 @@ int32_t IndexWriter::mergeMiddle(MergePolicy::OneMerge *_merge) {
                         SCOPED_LOCK_MUTEX(this->THIS_LOCK)
                         if (!skip)
                             addMergeException(_merge);
-                        deleter->deleteFile(compoundFileName.c_str());
                     }
                 })
 
@@ -2895,18 +2771,12 @@ int32_t IndexWriter::mergeMiddle(MergePolicy::OneMerge *_merge) {
 
             {
                 SCOPED_LOCK_MUTEX(this->THIS_LOCK)
-                if (skip || segmentInfos->indexOf(_merge->info) == -1 || _merge->isAborted()) {
-                    // Our segment (committed in non-compound
-                    // format) got merged away while we were
-                    // building the compound format.
-                    deleter->deleteFile(compoundFileName.c_str());
-                } else {
-                    success = false;
-                    try {
+                success = false;
+                try {
                         _merge->info->setUseCompoundFile(true);
                         checkpoint();
                         success = true;
-                    }
+                }
                     _CLFINALLY(
                             if (!success) {
                                 if (infoStream != NULL)
@@ -2916,12 +2786,7 @@ int32_t IndexWriter::mergeMiddle(MergePolicy::OneMerge *_merge) {
                                 addMergeException(_merge);
                                 _merge->info->setUseCompoundFile(false);
                                 deletePartialSegmentsFile();
-                                deleter->deleteFile(compoundFileName.c_str());
                             })
-
-                    // Give deleter a chance to remove files now.
-                    deleter->checkpoint(segmentInfos, autoCommit);
-                }
             }
         }
     }
@@ -2951,7 +2816,6 @@ void IndexWriter::deletePartialSegmentsFile() {
         if (infoStream != NULL)
             message("now delete partial segments file \"" + segmentFileName + "\"");
 
-        deleter->deleteFile(segmentFileName.c_str());
     }
 }
 
