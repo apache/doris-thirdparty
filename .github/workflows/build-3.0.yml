@@ -20,6 +20,7 @@ name: Build (3.0)
 on:
   schedule:
     - cron: '*/30 * * * *'
+  workflow_dispatch:
 
 jobs:
   prerelease:
