@@ -118,7 +118,7 @@ jobs:
               'openjdk@11'
               'maven'
               'node'
-              'llvm@16'
+              'llvm@20'
 
           - name: macOS-arm64
             os: macos-14
@@ -142,7 +142,7 @@ jobs:
               'openjdk@11'
               'maven'
               'node'
-              'llvm@16'
+              'llvm@20'
 
           - name: Linux
             os: ubuntu-22.04
