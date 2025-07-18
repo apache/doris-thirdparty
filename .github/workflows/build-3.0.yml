@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-name: Build
+name: Build (3.0)
 
 on:
   schedule:
@@ -37,16 +37,20 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'apache/doris'
+          ref: 'branch-3.0'
           fetch-depth: 0
 
       - name: Check Diff
         id: check_diff
         run: |
+          tag_name='automation-3.0'
+          title="Apache Doris Third Party Prebuilt (${tag_name/automation-/})"
+
           if [[ -z "$(gh release list)" ]] ||
-              ! gh release list | awk -F "\t" '{ print $3 }' | grep 'automation' >/dev/null; then
-            gh release create -t 'Apache Doris Third Party Prebuilt' automation
+              ! gh release list | awk -F "\t" '{ print $3 }' | grep "${tag_name}" >/dev/null; then
+            gh release create -t "${title}" "${tag_name}"
           fi
-          last_version="$(gh release view automation | sed -n -E 's/Doris Version: \*(.*)\*.*/\1/p')"
+          last_version="$(gh release view "${tag_name}" | sed -n -E 's/Doris Version: \*(.*)\*.*/\1/p')"
           current_version="$(git log -1 --format='%H')"
 
           echo "Last Version: ${last_version}"
@@ -69,24 +73,26 @@ jobs:
           if "${should_release}"; then
             echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*" >release_note.md
           else
-            gh release view automation | sed -n '/--/,$p' | awk '{ if (NR > 1) print $0 }' | sed "{
+            gh release view "${tag_name}" | sed -n '/--/,$p' | awk '{ if (NR > 1) print $0 }' | sed "{
               s/Update Time:.*/Update Time: *$(date)*/
               s/Doris Version:.*/Doris Version: *${current_version}*/
             }" >release_note.md
           fi
-          gh release edit -F release_note.md automation
+          gh release edit -F release_note.md "${tag_name}"
 
           echo "should_release=${should_release}" >> $GITHUB_OUTPUT
 
       - name: Download Source and Upload
         if: steps.check_diff.outputs.should_release == 'true'
         run: |
+          tag_name='automation-3.0'
+
           cd thirdparty
           sed '/# unpacking thirdpart archives/,$d' download-thirdparty.sh | bash -
 
           tar -zcvf doris-thirdparty-source.tgz src
 
-          gh release upload --clobber automation doris-thirdparty-source.tgz
+          gh release upload --clobber "${tag_name}" doris-thirdparty-source.tgz
 
   build:
     name: Build
@@ -195,11 +201,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'apache/doris'
+          ref: 'branch-3.0'
+          fetch-depth: 0
 
       - name: Download
         run: |
+          tag_name='automation-3.0'
+
           cd thirdparty
-          curl -L https://github.com/${{ github.repository }}/releases/download/automation/doris-thirdparty-source.tgz \
+          curl -L "https://github.com/${{ github.repository }}/releases/download/${tag_name}/doris-thirdparty-source.tgz" \
             -o doris-thirdparty-source.tgz
           tar -zxvf doris-thirdparty-source.tgz
 
@@ -223,13 +233,15 @@ jobs:
             sudo DEBIAN_FRONTEND=noninteractive apt install --yes ${{ matrix.config.packages }}
 
             mkdir -p "${DEFAULT_DIR}"
-            wget https://github.com/amosbird/ldb_toolchain_gen/releases/download/v0.25/ldb_toolchain_gen.sh \
+            wget https://github.com/amosbird/ldb_toolchain_gen/releases/download/v0.18/ldb_toolchain_gen.sh \
               -q -O /tmp/ldb_toolchain_gen.sh
             bash /tmp/ldb_toolchain_gen.sh "${DEFAULT_DIR}/ldb-toolchain"
           fi
 
       - name: Build and Upload
         run: |
+          tag_name='automation-3.0'
+
           if [[ "${{ matrix.config.name }}" == 'Linux' ]]; then
             export DEFAULT_DIR='/opt/doris'
             export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
@@ -247,7 +259,7 @@ jobs:
           arch="$(uname -m)"
           rm -rf "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
           tar -cf - installed | xz -z -T0 - >"doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
-          gh release upload --clobber automation "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
+          gh release upload --clobber "${tag_name}" "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
 
   success:
     name: Success
@@ -262,11 +274,13 @@ jobs:
     steps:
       - name: Update Checksums
         run: |
-          gh release download automation
+          tag_name='automation-3.0'
 
-          content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
+          gh release download "${tag_name}"
+
+          content="$(gh release view "${tag_name}" | sed -n '/Update Time:/,/Doris Version:/p')"
           echo -ne "${content}\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
-          gh release edit --latest -F release_note.md automation
+          gh release edit -F release_note.md "${tag_name}"
 
   failure:
     name: Failure
@@ -281,7 +295,9 @@ jobs:
     steps:
       - name: Update Checksums
         run: |
-          gh release download automation
+          tag_name='automation-3.0'
+
+          gh release download "${tag_name}"
 
           echo -ne "Status: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
-          gh release edit --latest -F release_note.md automation
+          gh release edit -F release_note.md "${tag_name}"
