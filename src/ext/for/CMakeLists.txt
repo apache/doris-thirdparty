@@ -9,7 +9,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(DEBUG "-DNDEBUG -g -O3")
-set(OPT "-w -Wall -fstrict-aliasing -falign-loops -Wno-int-conversion")
+set(OPT "-w -Wall -fstrict-aliasing -falign-loops -Wno-int-conversion -Wno-incompatible-pointer-types")
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     set(SSE "-msse4.2")
