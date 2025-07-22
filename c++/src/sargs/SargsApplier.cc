@@ -122,12 +122,22 @@ namespace orc {
     } while (rowGroup != 0);
 
     // update stats
-    uint64_t selectedRGs = std::accumulate(
-        mNextSkippedRows.cbegin(), mNextSkippedRows.cend(), 0UL,
-        [](uint64_t initVal, uint64_t rg) { return rg > 0 ? initVal + 1 : initVal; });
+    uint64_t selectedRGs = 0;
+    uint64_t selectedReadRows = 0;
+
+    for (size_t i = 0; i < mNextSkippedRows.size(); ++i) {
+      if (mNextSkippedRows[i] > 0) {
+        selectedRGs++;
+        uint64_t rowGroupStartRow = i * mRowIndexStride;
+        uint64_t rowGroupEndRow = std::min((i + 1) * mRowIndexStride, rowsInStripe);
+        uint64_t rowsInCurrentRG = rowGroupEndRow - rowGroupStartRow;
+        selectedReadRows += rowsInCurrentRG;
+      }
+    }
     if (mMetrics != nullptr) {
       mMetrics->SelectedRowGroupCount.fetch_add(selectedRGs);
       mMetrics->EvaluatedRowGroupCount.fetch_add(groupsInStripe);
+      mMetrics->ReadRowCount.fetch_add(selectedReadRows);
     }
 
     return mHasSelected;
