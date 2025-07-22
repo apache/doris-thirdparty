@@ -60,6 +60,7 @@ namespace orc {
     std::atomic<uint64_t> IOBlockingLatencyUs{0};
     std::atomic<uint64_t> SelectedRowGroupCount{0};
     std::atomic<uint64_t> EvaluatedRowGroupCount{0};
+    std::atomic<uint64_t> ReadRowCount{0};
   };
   ReaderMetrics* getDefaultReaderMetrics();
 
