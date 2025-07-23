@@ -1249,7 +1249,9 @@ namespace orc {
           continue;
         }
       } else {
-        contents->readerMetrics->ReadRowCount.fetch_add(rowsInCurrentStripe);
+        if (contents->readerMetrics != nullptr) {
+          contents->readerMetrics->ReadRowCount.fetch_add(rowsInCurrentStripe);
+        }
         if (filter) {
           // read row group statistics and bloom filters of current stripe
           loadStripeIndex();
