@@ -733,10 +733,17 @@ public:
 
 
     std::string segmentFileName(const std::string &extension) {
-        return segment + "." + extension;
+        std::string result;
+        result.reserve(segment.size() + extension.size() + 1);
+        result = segment;
+        result += ".";
+        result += extension;
+        return result;
     }
     std::string segmentFileName(const char *extension) {
-        return segmentFileName(string(extension));
+        if (!extension) return segment;
+        std::string ext(extension);
+        return segmentFileName(ext);
     }
     int32_t getMaxBufferedDocs() override {
         return maxBufferedDocs;
