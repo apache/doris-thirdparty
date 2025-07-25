@@ -13,6 +13,11 @@ set(OpenBLAS_PATCH_VERSION 30.dev)
 
 set(OpenBLAS_VERSION "${OpenBLAS_MAJOR_VERSION}.${OpenBLAS_MINOR_VERSION}.${OpenBLAS_PATCH_VERSION}")
 
+# A known problem of OpenBLAS.
+# It can not be built with -O0 optimization level.
+# https://stackoverflow.com/questions/63023087/inline-asm-fails-to-compile-without-optimization?utm_source=chatgpt.com
+add_compile_options(-Wno-everything -O3)
+
 # Adhere to GNU filesystem layout conventions
 include(GNUInstallDirs)
 
