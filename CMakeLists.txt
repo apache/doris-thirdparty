@@ -67,7 +67,10 @@ option(FAISS_ENABLE_PYTHON "Build Python extension." ON)
 option(FAISS_ENABLE_C_API "Build C API." OFF)
 option(FAISS_ENABLE_EXTRAS "Build extras like benchmarks and demos" ON)
 option(FAISS_USE_LTO "Enable Link-Time optimization" OFF)
-
+# compile error:
+# simdlib_avx2.h:695:25: error: always_inline function '_mm256_fmadd_ps' requires target feature 'fma', but would be inlined into function 'fmadd' that is compiled without support for 'fma'
+# if fixed by -mfma
+add_compile_options(-Wno-everything -mfma)
 if(FAISS_ENABLE_GPU)
   if(FAISS_ENABLE_ROCM)
     enable_language(HIP)

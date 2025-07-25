@@ -391,6 +391,56 @@ if(MKL_FOUND)
   target_link_libraries(faiss_avx2 PRIVATE ${MKL_LIBRARIES})
   target_link_libraries(faiss_avx512 PRIVATE ${MKL_LIBRARIES})
   target_link_libraries(faiss_avx512_spr PRIVATE ${MKL_LIBRARIES})
+elseif(TARGET openblas)
+  # Use OpenBLAS target when it's available (built together)
+  message(STATUS "Using OpenBLAS target for linking")
+
+  # Link OpenBLAS target to all faiss targets
+  target_link_libraries(faiss PRIVATE openblas)
+  target_link_libraries(faiss_avx2 PRIVATE openblas)
+  target_link_libraries(faiss_avx512 PRIVATE openblas)
+  target_link_libraries(faiss_avx512_spr PRIVATE openblas)
+  target_link_libraries(faiss_sve PRIVATE openblas)
+
+  # Add dependency to ensure OpenBLAS is built before Faiss
+  add_dependencies(faiss openblas)
+  add_dependencies(faiss_avx2 openblas)
+  add_dependencies(faiss_avx512 openblas)
+  add_dependencies(faiss_avx512_spr openblas)
+  add_dependencies(faiss_sve openblas)
+elseif(DEFINED OPENBLAS_PATH)
+  # Use pre-built OpenBLAS when OPENBLAS_PATH is set
+  message(STATUS "Using pre-built OpenBLAS from OPENBLAS_PATH: ${OPENBLAS_PATH}")
+
+  # Find OpenBLAS library
+  find_library(OPENBLAS_LIBRARY
+    NAMES openblas
+    PATHS ${OPENBLAS_PATH}/lib ${OPENBLAS_PATH}/lib64
+    NO_DEFAULT_PATH
+  )
+
+  if(OPENBLAS_LIBRARY)
+    # Set include directories
+    set(OPENBLAS_INCLUDE_DIRS ${OPENBLAS_PATH}/include)
+
+    # Link OpenBLAS to all targets
+    target_link_libraries(faiss PRIVATE ${OPENBLAS_LIBRARY})
+    target_link_libraries(faiss_avx2 PRIVATE ${OPENBLAS_LIBRARY})
+    target_link_libraries(faiss_avx512 PRIVATE ${OPENBLAS_LIBRARY})
+    target_link_libraries(faiss_avx512_spr PRIVATE ${OPENBLAS_LIBRARY})
+    target_link_libraries(faiss_sve PRIVATE ${OPENBLAS_LIBRARY})
+
+    # Set include directories for all targets
+    target_include_directories(faiss PRIVATE ${OPENBLAS_INCLUDE_DIRS})
+    target_include_directories(faiss_avx2 PRIVATE ${OPENBLAS_INCLUDE_DIRS})
+    target_include_directories(faiss_avx512 PRIVATE ${OPENBLAS_INCLUDE_DIRS})
+    target_link_libraries(faiss_avx512_spr PRIVATE ${OPENBLAS_LIBRARY})
+    target_include_directories(faiss_sve PRIVATE ${OPENBLAS_INCLUDE_DIRS})
+
+    message(STATUS "Found OpenBLAS: ${OPENBLAS_LIBRARY}")
+  else()
+    message(FATAL_ERROR "OpenBLAS not found in ${OPENBLAS_PATH}")
+  endif()
 else()
   find_package(BLAS REQUIRED)
   target_link_libraries(faiss PRIVATE ${BLAS_LIBRARIES})
