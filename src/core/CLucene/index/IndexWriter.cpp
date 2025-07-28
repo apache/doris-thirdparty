@@ -298,7 +298,7 @@ void IndexWriter::init(Directory *d, Analyzer *a, const bool create, const bool 
                 _CLTHROWA(CL_ERR_IllegalArgument, "IndexWriter::init: Only support SDocumentsWriter");
             }
         } else {
-            _CLTHROWA(CL_ERR_IllegalArgument, "IndexWriter::init: Only support SDocumentsWriter");
+            docWriter = _CLNEW SDocumentsWriter<char>(directory, this);
         }
 
         pushMaxBufferedDocs();
