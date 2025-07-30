@@ -200,7 +200,7 @@ string SegmentInfo::segString(Directory* dir) {
       // Already cached:
       return _files;
     }
-
+    _files.reserve(10);
     bool useCompoundFile = getUseCompoundFile();
 
     if (useCompoundFile) {
@@ -912,7 +912,7 @@ string SegmentInfo::segString(Directory* dir) {
         // contents (NOTE: NFS clients often have such stale
         // caching):
         vector<string> files;
-
+        files.reserve(10);
         int64_t genA = -1;
 
         if (directory != NULL){
