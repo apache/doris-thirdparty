@@ -278,9 +278,9 @@ CL_NS_DEF(index)
 
       ensureOpen();
       //Reference an instantiated TermDocs instance
-      TermDocs* _termDocs = termDocs(io_ctx);
+      TermDocs* _termDocs = termDocs(load_stats, io_ctx);
       //Seek all documents containing term
-      _termDocs->seek(term, load_stats);
+      _termDocs->seek(term);
       //return the enumaration
       return _termDocs;
   }
@@ -304,9 +304,9 @@ CL_NS_DEF(index)
 
       ensureOpen();
       //Reference an instantiated termPositions instance
-      TermPositions* _termPositions = termPositions(io_ctx);
+      TermPositions* _termPositions = termPositions(load_stats, io_ctx);
 	  //Seek all documents containing term
-      _termPositions->seek(term, load_stats);
+      _termPositions->seek(term);
 	  //return the enumeration
       return _termPositions;
   }

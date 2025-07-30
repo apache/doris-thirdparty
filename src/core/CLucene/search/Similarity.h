@@ -95,6 +95,8 @@ public:
    static uint8_t floatToByte(float_t f);
    static float_t byteToFloat(uint8_t b);
 
+   static uint8_t encodeNorm(int32_t i);
+
    /** Computes a score factor for a phrase.
    *
    * <p>The default implementation sums the {@link #idf(Term,Searcher)} factor

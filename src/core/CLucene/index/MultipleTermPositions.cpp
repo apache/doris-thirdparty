@@ -14,11 +14,11 @@ CL_NS_USE(util)
 
 CL_NS_DEF(index)
 
-void MultipleTermPositions::seek(Term*, bool) {
+void MultipleTermPositions::seek(Term*) {
 	_CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: MultipleTermPositions::seek");
 }
 
-void MultipleTermPositions::seek(TermEnum*, bool) {
+void MultipleTermPositions::seek(TermEnum*) {
 	_CLTHROWA(CL_ERR_UnsupportedOperation, "Unsupported operation: MultipleTermPositions::seek");
 }
 

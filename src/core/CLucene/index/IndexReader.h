@@ -575,7 +575,7 @@ public:
    * @throws IOException if there is a low-level IO error
 	 * @memory Caller must clean up
 	 */
-	virtual TermPositions* termPositions(const void* io_ctx = nullptr) = 0;
+	virtual TermPositions* termPositions(bool load_stats = false, const void* io_ctx = nullptr) = 0;
 
     /** Returns an enumeration of all the documents which contain
 	* <code>term</code>.  For each document, in addition to the document number
@@ -601,7 +601,7 @@ public:
    * @throws IOException if there is a low-level IO error
 	 * @memory Caller must clean up
 	 */
-	virtual TermDocs* termDocs(const void* io_ctx = nullptr) = 0;
+	virtual TermDocs* termDocs(bool load_stats = false, const void* io_ctx = nullptr) = 0;
 
 	/** Returns an enumeration of all the documents which contain
 	* <code>term</code>. For each document, the document number, the frequency of

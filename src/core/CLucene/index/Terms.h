@@ -31,12 +31,12 @@ public:
 
 	// Sets this to the data for a term.
 	// The enumeration is reset to the start of the data for this term.
-	virtual void seek(Term* term, bool load_stats = false) = 0;
+	virtual void seek(Term* term) = 0;
 
 	/** Sets this to the data for the current term in a {@link TermEnum}.
 	* This may be optimized in some implementations.
 	*/
-	virtual void seek(TermEnum* termEnum,  bool load_stats = false) = 0;
+	virtual void seek(TermEnum* termEnum) = 0;
 
 	// Returns the current document number.  <p> This is invalid until {@link
 	//	#next()} is called for the first time.
@@ -88,6 +88,7 @@ public:
     */
 	virtual TermPositions* __asTermPositions()=0;
 
+	virtual void setLoadStats(bool load_stats) {}
 	virtual void setIoContext(const void*) {}
 
 	virtual int32_t docFreq() {
@@ -140,6 +141,7 @@ public:
 	*/
 	virtual bool skipTo(Term* target);
 
+	virtual void setLoadStats(bool load_stats) {}
 	virtual void setIoContext(const void*) {}
 };
 

@@ -330,7 +330,11 @@ public:
     // merge terms and write files
     void mergeTerms(bool hasProx, IndexVersion indexVersion);
     // merge norms and write files
-    void mergeNorms(std::vector<uint32_t> dest_index_docs, std::vector<std::map<TCHAR, std::vector<uint8_t>>> srcFieldNormsMapValues, std::vector<lucene::store::IndexOutput *> normsOutputList);
+    void mergeNorms(
+            std::vector<uint32_t> dest_index_docs,
+            std::map<std::wstring, uint64_t> srcFieldTotalTermCountMap,
+            std::vector<std::map<std::wstring, std::vector<uint8_t>>> srcFieldNormsMapValues,
+            std::vector<lucene::store::IndexOutput*> normsOutputList);
     // merge null_bitmap
     void mergeNullBitmap(std::vector<std::vector<uint32_t>> srcBitmapValues, std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList);
 

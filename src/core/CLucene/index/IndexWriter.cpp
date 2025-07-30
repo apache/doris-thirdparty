@@ -1282,8 +1282,9 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     std::vector<lucene::store::IndexOutput *> normsOutputList;
 
     // first level vector index is src_index_id
-    // <TCHAR, ValueArray<uint8_t>> key is field name, value is the norm of src_doc_id
-    std::vector<map<TCHAR, std::vector<uint8_t>>> srcFieldNormsMapValues(numIndices);
+    // <std::wstring, ValueArray<uint8_t>> key is field name, value is the norm of src_doc_id
+    std::vector<std::map<std::wstring, std::vector<uint8_t>>> srcFieldNormsMapValues(numIndices);
+    std::map<std::wstring, uint64_t> srcFieldTotalTermCountMap;
 
     try {
         // check hasProx, indexVersion
@@ -1336,14 +1337,17 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
                     if (fi->isIndexed && !fi->omitNorms) {
                         CL_NS(util)::ValueArray<uint8_t> normBuffer;
                         size_t maxDoc = reader->maxDoc();
-                        if ( normBuffer.length < maxDoc){
+                        if (normBuffer.length < maxDoc) {
                             normBuffer.resize(maxDoc);
                             memset(normBuffer.values, 0, sizeof(uint8_t) * maxDoc);
                         }
                         reader->norms(fi->name, normBuffer.values);
                         for (int j = 0; j < normBuffer.length; j++) {
-                            srcFieldNormsMapValues[srcIndex][*fi->name].emplace_back(normBuffer.values[j]);
+                            srcFieldNormsMapValues[srcIndex][fi->name].emplace_back(
+                                    normBuffer.values[j]);
                         }
+                        srcFieldTotalTermCountMap[fi->name] +=
+                                reader->sumTotalTermFreq(fi->name).value_or(0);
                     }
                 }
             }
@@ -1406,7 +1410,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
 
         /// merge norms if have
         if (hasNorms){
-            mergeNorms(dest_index_docs, srcFieldNormsMapValues, normsOutputList);
+            mergeNorms(dest_index_docs, srcFieldTotalTermCountMap, srcFieldNormsMapValues, normsOutputList);
         }
 
         /// merge null_bitmap
@@ -1918,18 +1922,19 @@ void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
 }
 
 void IndexWriter::mergeNorms(std::vector<uint32_t> dest_index_docs,
-                                std::vector<std::map<TCHAR, std::vector<uint8_t>>> srcFieldNormsMapValues,
-                                std::vector<lucene::store::IndexOutput *> normsOutputList) {
+                             std::map<std::wstring, uint64_t> srcFieldTotalTermCountMap,
+                             std::vector<std::map<std::wstring, std::vector<uint8_t>>> srcFieldNormsMapValues,
+                             std::vector<lucene::store::IndexOutput *> normsOutputList) {
     //Func - Merges the norms for all fields
     //Pre  - fieldInfos != NULL
     //Post - The norms for all fields have been merged
     CND_PRECONDITION(fieldInfos != NULL, "fieldInfos is NULL");
 
-    std::vector<std::map<TCHAR, std::vector<uint8_t>>> destFieldNormsMapValues(numDestIndexes);
+    std::vector<std::map<std::wstring, std::vector<uint8_t>>> destFieldNormsMapValues(numDestIndexes);
 
     // iterate srcFieldNormsValues to construct destFieldNormsMapValues
     for (size_t srcIndex = 0; srcIndex < srcFieldNormsMapValues.size(); ++srcIndex) {
-        std::map<TCHAR, std::vector<uint8_t>> &srcFieldNormsMap = srcFieldNormsMapValues[srcIndex];
+        std::map<std::wstring, std::vector<uint8_t>> &srcFieldNormsMap = srcFieldNormsMapValues[srcIndex];
         if (srcFieldNormsMap.empty()) {
             // empty indicates there is no nrm file in this index
             continue;
@@ -1937,7 +1942,7 @@ void IndexWriter::mergeNorms(std::vector<uint32_t> dest_index_docs,
         // find field has norms
         for (int j =0; j < fieldInfos->size(); j++) {
             FieldInfo* fi = fieldInfos->fieldInfo(j);
-            TCHAR fieldName = *fi->name;
+            std::wstring fieldName = fi->name;
             // Is this Field indexed and field need norms ?
             if (fi->isIndexed && !fi->omitNorms) {
                 auto& srcFieldNorms = srcFieldNormsMap[fieldName];
@@ -1965,15 +1970,21 @@ void IndexWriter::mergeNorms(std::vector<uint32_t> dest_index_docs,
     // construct nrm and write nrm to dest index
     for (size_t i = 0; i < destFieldNormsMapValues.size(); ++i) {
         auto& destFieldNormsMap = destFieldNormsMapValues[i];
-        for (int j =0; j < fieldInfos->size(); j++) {
+        for (int j = 0; j < fieldInfos->size(); j++) {
             FieldInfo* fi = fieldInfos->fieldInfo(j);
-            TCHAR fieldName = *fi->name;
+            std::wstring fieldName = fi->name;
             auto destDocCount = dest_index_docs[i];
             if (fi->isIndexed && !fi->omitNorms) {
                 // if not find then norm is zero
                 if (destFieldNormsMap.find(fieldName) == destFieldNormsMap.end()) {
                     destFieldNormsMap[fieldName].resize(destDocCount);
-                    std::fill(destFieldNormsMap[fieldName].begin(),destFieldNormsMap[fieldName].end(), 0);
+                    std::fill(destFieldNormsMap[fieldName].begin(),
+                              destFieldNormsMap[fieldName].end(), 0);
+                }
+                if (i == 0) {
+                    normsOutputList[i]->writeLong(srcFieldTotalTermCountMap[fieldName]);
+                } else {
+                    normsOutputList[i]->writeLong(0);
                 }
                 auto& destFieldNorms = destFieldNormsMap[fieldName];
                 normsOutputList[i]->writeBytes(destFieldNorms.data(), destDocCount);

@@ -104,8 +104,8 @@ public:
 
 	//Returns the document frequency of the current term in the set
 	int32_t docFreq(const Term* t=NULL);
-	TermDocs* termDocs(const void* io_ctx = nullptr);
-	TermPositions* termPositions(const void* io_ctx = nullptr);
+	TermDocs* termDocs(bool load_stats = false, const void* io_ctx = nullptr);
+	TermPositions* termPositions(bool load_stats = false, const void* io_ctx = nullptr);
 
   // Returns the document norm
   int32_t docNorm(const TCHAR* field, int32_t n);
@@ -152,7 +152,7 @@ protected:
   size_t pointer;
 
   TermDocs* current;              // == segTermDocs[pointer]
-  TermDocs* termDocs(const int32_t i, bool local_stats = false); //< internal use only
+  TermDocs* termDocs(const int32_t i); //< internal use only
   virtual TermDocs* termDocs(IndexReader* reader);
   void init(CL_NS(util)::ArrayBase<IndexReader*>* subReaders, const int32_t* starts);
 public:
@@ -164,8 +164,8 @@ public:
   int32_t freq() const;
   int32_t norm() const;
 
-  void seek(TermEnum* termEnum, bool load_stats = false);
-  void seek(Term* tterm, bool load_stats = false);
+  void seek(TermEnum* termEnum);
+  void seek(Term* tterm);
   bool next();
 
   /** Optimized implementation. */
@@ -183,9 +183,11 @@ public:
   int32_t docFreq() override;
   int32_t docNorm() override;
 
+  void setLoadStats(bool load_stats) override;
   void setIoContext(const void* io_ctx) override;
 
 protected:
+  bool load_stats_ = false;
   const void* io_ctx_ = nullptr;
 };
 
@@ -224,6 +226,7 @@ public:
   void setIoContext(const void*) override;
 
 private:
+  bool load_stats_ = false;
   const void* io_ctx_ = nullptr;
 };
 

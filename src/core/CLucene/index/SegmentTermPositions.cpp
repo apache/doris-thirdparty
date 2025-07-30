@@ -27,6 +27,10 @@ SegmentTermPositions::~SegmentTermPositions() {
     close();
 }
 
+void SegmentTermPositions::setLoadStats(bool load_stats) {
+    SegmentTermDocs::setLoadStats(load_stats);
+}
+
 void SegmentTermPositions::setIoContext(const void* io_ctx) {
     SegmentTermDocs::setIoContext(io_ctx);
 }
@@ -38,8 +42,8 @@ TermPositions* SegmentTermPositions::__asTermPositions(){
     return (TermPositions*) this;
 }
 
-void SegmentTermPositions::seek(const TermInfo* ti, Term* term, bool local_stats) {
-    SegmentTermDocs::seek(ti, term, local_stats);
+void SegmentTermPositions::seek(const TermInfo* ti, Term* term) {
+    SegmentTermDocs::seek(ti, term);
     if (ti != NULL)
     	lazySkipPointer = ti->proxPointer;
     

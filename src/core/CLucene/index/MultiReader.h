@@ -107,8 +107,8 @@ public:
   // Returns the total norm of all terms appeared in all documents in this field
   std::optional<uint64_t> sumTotalTermFreq(const TCHAR* field);
 
-	TermDocs* termDocs(const void* io_ctx = nullptr);
-	TermPositions* termPositions(const void* io_ctx = nullptr);
+	TermDocs* termDocs(bool load_stats = false, const void* io_ctx = nullptr);
+	TermPositions* termPositions(bool load_stats = false, const void* io_ctx = nullptr);
 
 	/**
 	* @see IndexReader#getFieldNames(IndexReader.FieldOption fldOption)

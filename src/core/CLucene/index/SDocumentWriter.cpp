@@ -31,7 +31,7 @@ CL_NS_USE(document)
 CL_NS_DEF(index)
 
 template<typename T>
-const uint8_t SDocumentsWriter<T>::defaultNorm = search::Similarity::encodeNorm(1.0f);
+const uint8_t SDocumentsWriter<T>::defaultNorm = search::Similarity::encodeNorm(1);
 
 template<typename T>
 const int32_t SDocumentsWriter<T>::BYTE_BLOCK_SHIFT = 15;
@@ -298,8 +298,7 @@ void SDocumentsWriter<T>::ThreadState::writeDocument() {
                 assert(bn != nullptr);
                 assert(bn->upto <= docID);
                 bn->fill(docID);
-                float_t norm = fp->boost * _parent->writer->getSimilarity()->lengthNorm(fp->fieldInfo->name, fp->length);
-                bn->add(norm);
+                bn->add(fp->length);
             }
         }
     } catch (CLuceneError &t) {
@@ -982,9 +981,11 @@ void SDocumentsWriter<T>::writeNorms(const std::string &segmentName, int32_t tot
             if (fi->isIndexed && !fi->omitNorms) {
                 BufferedNorms *n = norms[fieldIdx];
                 int64_t v;
-                if (n == nullptr)
+                if (n == nullptr) {
+                    normsOut->writeLong(0);
                     v = 0;
-                else {
+                } else {
+                    normsOut->writeLong(n->total_term_count_);
                     v = n->out.getFilePointer();
                     n->out.writeTo(normsOut);
                     n->reset();
@@ -1429,10 +1430,20 @@ void SDocumentsWriter<T>::BufferedNorms::add(float_t norm) {
     out.writeByte(b);
     upto++;
 }
+
+template<typename T>
+void SDocumentsWriter<T>::BufferedNorms::add(int32_t norm) {
+    total_term_count_ += norm;
+    uint8_t b = search::Similarity::encodeNorm(norm);
+    out.writeByte(b);
+    upto++;
+}
+
 template<typename T>
 void SDocumentsWriter<T>::BufferedNorms::reset() {
     out.reset();
     upto = 0;
+    total_term_count_ = 0;
 }
 template<typename T>
 void SDocumentsWriter<T>::BufferedNorms::fill(int32_t docID) {
