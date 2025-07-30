@@ -53,13 +53,13 @@ public:
 	* Not implemented.
 	* @throws UnsupportedOperationException
 	*/
-	void seek(Term*, bool);
+	void seek(Term*);
 
 	/**
 	* Not implemented.
 	* @throws UnsupportedOperationException
 	*/
-	void seek(TermEnum*, bool);
+	void seek(TermEnum*);
 
 	/**
 	* Not implemented.

@@ -37,6 +37,10 @@ TermPositions *SegmentTermDocs::__asTermPositions() {
     return NULL;
 }
 
+void SegmentTermDocs::setLoadStats(bool load_stats) {
+    load_stats_ = load_stats;
+}
+
 void SegmentTermDocs::setIoContext(const void* io_ctx) {
     if (freqStream) {
         freqStream->setIoContext(io_ctx);
@@ -58,13 +62,13 @@ int32_t SegmentTermDocs::docNorm() {
     return 0;
 }
 
-void SegmentTermDocs::seek(Term *term, bool load_stats) {
+void SegmentTermDocs::seek(Term *term) {
     TermInfo *ti = parent->tis->get(term, io_ctx_);
-    seek(ti, term, load_stats);
+    seek(ti, term);
     _CLDELETE(ti);
 }
 
-void SegmentTermDocs::seek(TermEnum *termEnum, bool load_stats) {
+void SegmentTermDocs::seek(TermEnum *termEnum) {
     TermInfo *ti = NULL;
     Term *term = NULL;
 
@@ -79,15 +83,15 @@ void SegmentTermDocs::seek(TermEnum *termEnum, bool load_stats) {
         ti = parent->tis->get(term);
     }
 
-    seek(ti, term, load_stats);
+    seek(ti, term);
     _CLDELETE(ti);
 }
-void SegmentTermDocs::seek(const TermInfo *ti, Term *term, bool load_stats) {
+void SegmentTermDocs::seek(const TermInfo *ti, Term *term) {
     count = 0;
     FieldInfo *fi = parent->_fieldInfos->fieldInfo(term->field());
     currentFieldStoresPayloads = (fi != NULL) ? fi->storePayloads : false;
-    buffer_.needLoadStats(load_stats);
-    if (load_stats && fi != NULL && fi->isIndexed && !fi->omitNorms) {
+    buffer_.needLoadStats(load_stats_);
+    if (load_stats_ && fi != NULL && fi->isIndexed && !fi->omitNorms) {
         const TCHAR *curField = fi->name;
         norms = parent->norms(curField);
         buffer_.setAllDocNorms(norms);
@@ -356,7 +360,7 @@ void TermDocsBuffer::refillNorm(int32_t size) {
         auto doc = docs_[i];
         // avoid doc norms not set
         if (doc < maxDoc && all_doc_norms_) {
-            norms_[i] = search::Similarity::decodeNorm(all_doc_norms_[doc]);
+            norms_[i] = all_doc_norms_[doc];
         } else {
             norms_[i] = 0;
         }

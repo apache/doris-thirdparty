@@ -114,7 +114,7 @@ private:
 
   // save all doc norms in this term's field
   uint32_t maxDoc = 0;
-  uint8_t* all_doc_norms_;
+  uint8_t* all_doc_norms_ = nullptr;
 
   bool hasProx_ = false;
   bool compatibleRead_ = false;
@@ -211,6 +211,8 @@ protected:
   bool currentFieldStoresPayloads;
   bool hasProx = false;
   IndexVersion indexVersion_ = IndexVersion::kV0;
+  
+  bool load_stats_ = false;
   const void* io_ctx_ = nullptr;
 
 public:
@@ -218,9 +220,9 @@ public:
   SegmentTermDocs( const SegmentReader* Parent);
   virtual ~SegmentTermDocs();
 
-  virtual void seek(Term* term, bool load_stats = false);
-  virtual void seek(TermEnum* termEnum, bool load_stats = false);
-  virtual void seek(const TermInfo* ti,Term* term, bool load_stats = false);
+  virtual void seek(Term* term);
+  virtual void seek(TermEnum* termEnum);
+  virtual void seek(const TermInfo* ti,Term* term);
 
   virtual void close();
   virtual int32_t doc()const;
@@ -241,6 +243,7 @@ public:
 
   virtual TermPositions* __asTermPositions();
 
+  void setLoadStats(bool load_stats) override;
   void setIoContext(const void* io_ctx) override;
 
   int32_t docFreq() override;
@@ -282,10 +285,11 @@ public:
   SegmentTermPositions(const SegmentReader* Parent);
   virtual ~SegmentTermPositions();
 
+  void setLoadStats(bool load_stats) override;
   void setIoContext(const void* io_ctx) override;
 
 private:
-  void seek(const TermInfo* ti, Term* term, bool load_stats = false);
+  void seek(const TermInfo* ti, Term* term);
 
 public:
   void close();
@@ -335,8 +339,8 @@ private:
   virtual TermPositions* __asTermPositions();
 
   //resolve SegmentTermDocs/TermPositions ambiguity
-  void seek(Term* term, bool load_stats = false){ SegmentTermDocs::seek(term, load_stats); }
-  void seek(TermEnum* termEnum, bool load_stats = false){ SegmentTermDocs::seek(termEnum, load_stats); }
+  void seek(Term* term){ SegmentTermDocs::seek(term); }
+  void seek(TermEnum* termEnum){ SegmentTermDocs::seek(termEnum); }
   int32_t doc() const{ return SegmentTermDocs::doc(); }
   int32_t freq() const{ return SegmentTermDocs::freq(); }
   int32_t norm() const{ return SegmentTermDocs::norm(); }
@@ -526,9 +530,9 @@ public:
   bool isDeleted(const int32_t n);
 
   ///Returns an unpositioned TermDocs enumerator.
-  TermDocs* termDocs(const void* io_ctx = nullptr);
+  TermDocs* termDocs(bool load_stats = false, const void* io_ctx = nullptr);
   ///Returns an unpositioned TermPositions enumerator.
-  TermPositions* termPositions(const void* io_ctx = nullptr);
+  TermPositions* termPositions(bool load_stats = false, const void* io_ctx = nullptr);
 
   ///Returns the number of documents which contain the term t
   int32_t docFreq(const Term* t);

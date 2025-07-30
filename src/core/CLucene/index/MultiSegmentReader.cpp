@@ -391,16 +391,18 @@ std::optional<uint64_t> MultiSegmentReader::sumTotalTermFreq(const TCHAR* field)
     return std::nullopt;
 }
 
-TermDocs* MultiSegmentReader::termDocs(const void* io_ctx) {
+TermDocs* MultiSegmentReader::termDocs(bool load_stats, const void* io_ctx) {
     ensureOpen();
 	TermDocs* ret =  _CLNEW MultiTermDocs(subReaders, starts);
+	ret->setLoadStats(load_stats);
 	ret->setIoContext(io_ctx);
 	return ret;
 }
 
-TermPositions* MultiSegmentReader::termPositions(const void* io_ctx) {
+TermPositions* MultiSegmentReader::termPositions(bool load_stats, const void* io_ctx) {
     ensureOpen();
 	TermPositions* ret = static_cast<TermPositions*>(_CLNEW MultiTermPositions(subReaders, starts));
+	ret->setLoadStats(load_stats);
 	ret->setIoContext(io_ctx);
 	return ret;
 }
@@ -597,6 +599,10 @@ int32_t MultiTermDocs::docFreq() {
 	return docFreq;
 }
 
+void MultiTermDocs::setLoadStats(bool load_stats) {
+  load_stats_ = load_stats;
+}
+
 void MultiTermDocs::setIoContext(const void* io_ctx) {
 	io_ctx_ = io_ctx;
 }
@@ -623,11 +629,11 @@ int32_t MultiTermDocs::norm() const {
     return current->norm();
 }
 
-void MultiTermDocs::seek(TermEnum* termEnum, bool load_stats){
-	seek(termEnum->term(false), load_stats);
+void MultiTermDocs::seek(TermEnum* termEnum){
+	seek(termEnum->term(false));
 }
 
-void MultiTermDocs::seek( Term* tterm, bool load_stats) {
+void MultiTermDocs::seek( Term* tterm) {
 //Func - Resets the instance for a new search
 //Pre  - tterm != NULL
 //Post - The instance has been reset for a new search
@@ -797,10 +803,10 @@ void MultiTermDocs::close() {
 }
 
 TermDocs* MultiTermDocs::termDocs(IndexReader* reader) {
-	return reader->termDocs(io_ctx_);
+	return reader->termDocs(load_stats_, io_ctx_);
 }
 
-TermDocs* MultiTermDocs::termDocs(const int32_t i, bool local_stats) {
+TermDocs* MultiTermDocs::termDocs(const int32_t i) {
 	if (term == NULL)
 	  return NULL;
 	TermDocs* result = (*readerTermDocs)[i];
@@ -809,7 +815,7 @@ TermDocs* MultiTermDocs::termDocs(const int32_t i, bool local_stats) {
 	  readerTermDocs->values[i] = termDocs((*subReaders)[i]);
 	  result = (*readerTermDocs)[i];
 	}
-	result->seek(term, local_stats);
+	result->seek(term);
 
 	return result;
 }
@@ -993,7 +999,7 @@ TermDocs* MultiTermPositions::termDocs(IndexReader* reader) {
 // rather merely producing a SegmentTermDocs via the reader's termDocs
 // method.
 
-	TermPositions* tp = reader->termPositions(io_ctx_);
+	TermPositions* tp = reader->termPositions(load_stats_, io_ctx_);
 	TermDocs* ret = tp->__asTermDocs();
 
 	CND_CONDITION(ret != NULL,

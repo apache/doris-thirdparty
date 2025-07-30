@@ -88,8 +88,11 @@ public:
 
         BufferedNorms();
         void add(float_t norm);
+        void add(int32_t norm);
         void reset();
         void fill(int32_t docID);
+
+        int64_t total_term_count_ = 0;
     };
     template<typename T2>
     class BlockPool {

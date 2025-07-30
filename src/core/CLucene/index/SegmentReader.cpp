@@ -507,24 +507,26 @@ bool SegmentReader::isDeleted(const int32_t n) {
     return ret;
 }
 
-TermDocs *SegmentReader::termDocs(const void* io_ctx) {
+TermDocs *SegmentReader::termDocs(bool load_stats, const void* io_ctx) {
     //Func - Returns an unpositioned TermDocs enumerator.
     //Pre  - true
     //Post - An unpositioned TermDocs enumerator has been returned
 
     ensureOpen();
     auto* ret = _CLNEW SegmentTermDocs(this);
+    ret->setLoadStats(load_stats);
     ret->setIoContext(io_ctx);
     return ret;
 }
 
-TermPositions *SegmentReader::termPositions(const void* io_ctx) {
+TermPositions *SegmentReader::termPositions(bool load_stats, const void* io_ctx) {
     //Func - Returns an unpositioned TermPositions enumerator.
     //Pre  - true
     //Post - An unpositioned TermPositions enumerator has been returned
 
     ensureOpen();
     auto* ret = _CLNEW SegmentTermPositions(this);
+    ret->setLoadStats(load_stats);
     ret->setIoContext(io_ctx);
     return ret;
 }
@@ -902,28 +904,14 @@ void SegmentReader::openNorms(Directory *cfsDir, int32_t readBufferSize) {
                 normInput = d->openInput(fileName.c_str());
             }
 
+            normInput->seek(normSeek);
+            auto total_term_count = normInput->readLong();
+            sum_total_term_freq[*fi->name] = total_term_count;
+            normSeek += sizeof(int64_t);
+
             _norms[fi->name] = _CLNEW Norm(normInput, singleNormFile, fi->number, normSeek, this, segment.c_str());
 
-            // read total norm info into cache
-            std::vector<uint8_t> bytes(_maxDoc);
-            IndexInput *normStream;
-            if (_norms[fi->name]->useSingleNormStream) {
-                normStream = singleNormStream;
-            } else {
-                normStream = _norms[fi->name]->in;
-            }
-
-            ensureOpen();
-            SCOPED_LOCK_MUTEX(_norms[fi->name]->THIS_LOCK);
-            normStream->seek(_norms[fi->name]->normSeek);
-            normStream->readBytes(bytes.data(), _maxDoc);
-            uint64_t sum = 0;
-            for (int doc = 0; doc < _maxDoc; doc++) {
-                sum += Similarity::decodeNorm(bytes[doc]);
-            }
-            sum_total_term_freq[*fi->name] = sum;
-
-            nextNormSeek += _maxDoc;// increment also if some norms are separate
+            nextNormSeek += (_maxDoc + sizeof(int64_t));// increment also if some norms are separate
         }
     }
 }

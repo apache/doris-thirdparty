@@ -193,6 +193,57 @@ CL_NS_DEF(search)
 #endif
    }
 
+   int32_t number_of_leading_zeros(uint64_t value) {
+           if (value == 0) {
+                   return 64;
+           }
+#if defined(__GNUC__) || defined(__clang__)
+           return __builtin_clzll(value);
+#else
+           int32_t count = 0;
+           for (uint64_t mask = 1ULL << 63; mask != 0; mask >>= 1) {
+         if (value & mask) break;
+         ++count;
+           }
+           return count;
+#endif
+   }
+
+   uint32_t long_to_int4(uint64_t i) {
+           if (i > std::numeric_limits<uint64_t>::max()) {
+                   _CLTHROWA(CL_ERR_IllegalArgument, "Only supports positive values");
+           }
+
+           int32_t numBits = 64 - number_of_leading_zeros(i);
+           if (numBits < 4) {
+                   return static_cast<uint32_t>(i);
+           } else {
+                   int32_t shift = numBits - 4;
+                   uint32_t encoded = static_cast<uint32_t>(i >> shift) & 0x07;
+                   return encoded | ((shift + 1) << 3);
+           }
+   }
+
+   const int32_t MAX_INT32 = std::numeric_limits<int32_t>::max();
+   const uint32_t MAX_INT4 = long_to_int4(static_cast<uint64_t>(MAX_INT32));
+   const int32_t NUM_FREE_VALUES = 255 - static_cast<int>(MAX_INT4);
+
+   uint8_t int_to_byte4(int32_t i) {
+           if (i < 0) {
+                   _CLTHROWA(CL_ERR_IllegalArgument, "Only supports positive values");
+           }
+
+           if (i < NUM_FREE_VALUES) {
+                   return static_cast<uint8_t>(i);
+           } else {
+                   uint32_t encoded = long_to_int4(i - NUM_FREE_VALUES);
+                   return static_cast<uint8_t>(NUM_FREE_VALUES + encoded);
+           }
+   }
+
+   uint8_t Similarity::encodeNorm(int32_t i) {
+           return int_to_byte4(i);
+   }
 
    float_t Similarity::idf(Term* term, Searcher* searcher) {
       return idf(searcher->docFreq(term), searcher->maxDoc());

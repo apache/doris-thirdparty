@@ -342,7 +342,7 @@ void testNormEncoding(CuTest *tc) {
 	CLUCENE_ASSERT( CL_NS(search)::Similarity::encodeNorm(0)==0 );
 	CLUCENE_ASSERT( CL_NS(search)::Similarity::encodeNorm(1)==124 );
 	CLUCENE_ASSERT( CL_NS(search)::Similarity::encodeNorm(1)==124 );
-	CLUCENE_ASSERT( CL_NS(search)::Similarity::encodeNorm(7516192768.0 )==255);
+	CLUCENE_ASSERT( CL_NS(search)::Similarity::encodeNorm(7516192768.0f)==255);
 
 
 	CLUCENE_ASSERT( CL_NS(search)::Similarity::decodeNorm(124)==1 );

@@ -307,16 +307,18 @@ std::optional<uint64_t> MultiReader::sumTotalTermFreq(const TCHAR* field) {
     return std::nullopt;
 }
 
-TermDocs* MultiReader::termDocs(const void* io_ctx) {
+TermDocs* MultiReader::termDocs(bool load_stats, const void* io_ctx) {
     ensureOpen();
 	TermDocs* ret =  _CLNEW MultiTermDocs(subReaders, starts);
+  ret->setLoadStats(load_stats);
   ret->setIoContext(io_ctx);
 	return ret;
 }
 
-TermPositions* MultiReader::termPositions(const void* io_ctx) {
+TermPositions* MultiReader::termPositions(bool load_stats, const void* io_ctx) {
     ensureOpen();
 	TermPositions* ret = (TermPositions*)_CLNEW MultiTermPositions(subReaders, starts);
+  ret->setLoadStats(load_stats);
   ret->setIoContext(io_ctx);
 	return ret;
 }
