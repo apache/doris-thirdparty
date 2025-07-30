@@ -1,0 +1,303 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: Build (2.1)
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+
+jobs:
+  prerelease:
+    name: Prerelease
+    runs-on: macos-14
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+    outputs:
+      should_release: ${{ steps.check_diff.outputs.should_release }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: 'apache/doris'
+          ref: 'branch-2.1'
+          fetch-depth: 0
+
+      - name: Check Diff
+        id: check_diff
+        run: |
+          tag_name='automation-2.1'
+          title="Apache Doris Third Party Prebuilt (${tag_name/automation-/})"
+
+          if [[ -z "$(gh release list)" ]] ||
+              ! gh release list | awk -F "\t" '{ print $3 }' | grep "${tag_name}" >/dev/null; then
+            gh release create -t "${title}" "${tag_name}"
+          fi
+          last_version="$(gh release view "${tag_name}" | sed -n -E 's/Doris Version: \*(.*)\*.*/\1/p')"
+          current_version="$(git log -1 --format='%H')"
+
+          echo "Last Version: ${last_version}"
+          echo "Current Version: ${current_version}"
+
+          should_release=false
+          if [[ -z "${last_version}" ]]; then
+            echo "The first release was detected."
+            should_release=true
+          elif [[ "${last_version}" != "${current_version}" ]]; then
+            cmd="git diff --name-only ${last_version} ${current_version} | grep -E '^thirdparty/'"
+            echo "Execute: ${cmd}"
+            content="$(eval "${cmd}")" || true
+            if [[ -n "${content}" ]]; then
+              echo -e "Detect changes:\n${content}"
+              should_release=true
+            fi
+          fi
+
+          if "${should_release}"; then
+            echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*" >release_note.md
+          else
+            gh release view "${tag_name}" | sed -n '/--/,$p' | awk '{ if (NR > 1) print $0 }' | sed "{
+              s/Update Time:.*/Update Time: *$(date)*/
+              s/Doris Version:.*/Doris Version: *${current_version}*/
+            }" >release_note.md
+          fi
+          gh release edit -F release_note.md "${tag_name}"
+
+          echo "should_release=${should_release}" >> $GITHUB_OUTPUT
+
+      - name: Download Source and Upload
+        if: steps.check_diff.outputs.should_release == 'true'
+        run: |
+          tag_name='automation-2.1'
+
+          cd thirdparty
+          sed '/# unpacking thirdpart archives/,$d' download-thirdparty.sh | bash -
+
+          tar -zcvf doris-thirdparty-source.tgz src
+
+          gh release upload --clobber "${tag_name}" doris-thirdparty-source.tgz
+
+  build:
+    name: Build
+    needs: prerelease
+    if: needs.prerelease.outputs.should_release == 'true'
+    strategy:
+      matrix:
+        config:
+          - name: macOS-x86_64
+            os: macos-13
+            packages: >-
+              'm4'
+              'automake'
+              'autoconf'
+              'libtool'
+              'pkg-config'
+              'texinfo'
+              'coreutils'
+              'gnu-getopt'
+              'python@3'
+              'ninja'
+              'ccache'
+              'bison'
+              'byacc'
+              'gettext'
+              'wget'
+              'pcre'
+              'openjdk@11'
+              'maven'
+              'node'
+              'llvm@16'
+
+          - name: macOS-arm64
+            os: macos-14
+            packages: >-
+              'm4'
+              'automake'
+              'autoconf'
+              'libtool'
+              'pkg-config'
+              'texinfo'
+              'coreutils'
+              'gnu-getopt'
+              'python@3'
+              'ninja'
+              'ccache'
+              'bison'
+              'byacc'
+              'gettext'
+              'wget'
+              'pcre'
+              'openjdk@11'
+              'maven'
+              'node'
+              'llvm@16'
+
+          - name: Linux
+            os: ubuntu-22.04
+            packages: >-
+              'build-essential'
+              'automake'
+              'autoconf'
+              'libtool-bin'
+              'pkg-config'
+              'cmake=3.22.1-1ubuntu1.22.04.2'
+              'ninja-build'
+              'ccache'
+              'python-is-python3'
+              'bison'
+              'byacc'
+              'flex'
+              'binutils-dev'
+              'libiberty-dev'
+              'curl'
+              'git'
+              'zip'
+              'unzip'
+              'autopoint'
+              'openjdk-8-jdk'
+              'openjdk-8-jdk-headless'
+              'maven'
+
+    runs-on: ${{ matrix.config.os }}
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout easimon/maximize-build-space
+        if: ${{ matrix.config.name == 'Linux' }}
+        run: |
+          git clone -b v7 https://github.com/easimon/maximize-build-space
+
+      - name: Maximize build space
+        if: ${{ matrix.config.name == 'Linux' }}
+        uses: ./maximize-build-space
+        with:
+            root-reserve-mb: 4096
+            swap-size-mb: 8192
+            remove-dotnet: 'true'
+            remove-android: 'true'
+            remove-haskell: 'true'
+            remove-codeql: 'true'
+            remove-docker-images: 'true'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: 'apache/doris'
+          ref: 'branch-2.1'
+          fetch-depth: 0
+
+      - name: Download
+        run: |
+          tag_name='automation-2.1'
+
+          cd thirdparty
+          curl -L "https://github.com/${{ github.repository }}/releases/download/${tag_name}/doris-thirdparty-source.tgz" \
+            -o doris-thirdparty-source.tgz
+          tar -zxvf doris-thirdparty-source.tgz
+
+      - name: Prepare for ${{ matrix.config.os }}
+        run: |
+          if [[ "${{ matrix.config.name }}" =~ macOS-* ]]; then
+            # Install packages except cmake
+            brew install ${{ matrix.config.packages }} || true
+            # Install specific version of cmake
+            brew unlink cmake || true
+            wget https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-macos-universal.tar.gz
+            tar -xzf cmake-3.22.1-macos-universal.tar.gz
+            sudo cp -r cmake-3.22.1-macos-universal/CMake.app/Contents/* /usr/local/
+            cmake --version
+          else
+            export DEFAULT_DIR='/opt/doris'
+            export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
+
+            sudo apt update
+            sudo apt-cache policy cmake
+            sudo DEBIAN_FRONTEND=noninteractive apt install --yes ${{ matrix.config.packages }}
+
+            mkdir -p "${DEFAULT_DIR}"
+            wget https://github.com/amosbird/ldb_toolchain_gen/releases/download/v0.18/ldb_toolchain_gen.sh \
+              -q -O /tmp/ldb_toolchain_gen.sh
+            bash /tmp/ldb_toolchain_gen.sh "${DEFAULT_DIR}/ldb-toolchain"
+          fi
+
+      - name: Build and Upload
+        run: |
+          tag_name='automation-2.1'
+
+          if [[ "${{ matrix.config.name }}" == 'Linux' ]]; then
+            export DEFAULT_DIR='/opt/doris'
+            export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
+            export PATH="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 1 -type d -name 'bin'):${PATH}"
+            export JAVA_HOME="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 0)"
+            export DORIS_TOOLCHAIN=gcc
+          else
+            export MACOSX_DEPLOYMENT_TARGET=12.0
+          fi
+
+          cd thirdparty
+          ./build-thirdparty.sh -j "$(nproc)"
+
+          kernel="$(uname -s | awk '{print tolower($0)}')"
+          arch="$(uname -m)"
+          rm -rf "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
+          tar -cf - installed | xz -z -T0 - >"doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
+          gh release upload --clobber "${tag_name}" "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
+
+  success:
+    name: Success
+    needs: [prerelease, build]
+    if: needs.prerelease.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+    steps:
+      - name: Update Checksums
+        run: |
+          tag_name='automation-2.1'
+
+          gh release download "${tag_name}"
+
+          content="$(gh release view "${tag_name}" | sed -n '/Update Time:/,/Doris Version:/p')"
+          echo -ne "${content}\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          gh release edit -F release_note.md "${tag_name}"
+
+  failure:
+    name: Failure
+    needs: [build]
+    if: failure()
+    runs-on: ubuntu-latest
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+    steps:
+      - name: Update Checksums
+        run: |
+          tag_name='automation-2.1'
+
+          gh release download "${tag_name}"
+
+          echo -ne "Status: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          gh release edit -F release_note.md "${tag_name}"
