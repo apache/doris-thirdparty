@@ -311,26 +311,25 @@ public:
         _ownReader = ownReader;
     }
 
-private:
-
-    DEFINE_MUTEX(THIS_LOCK)
-    struct Internal;
-    Internal* _internal;
 protected:
 
     /** Used by Analyzers that implement reusableTokenStream
 	*  to retrieve previously saved TokenStreams for re-use
 	*  by the same thread. */
-    virtual TokenStream* getPreviousTokenStream();
+    virtual TokenStream* getPreviousTokenStream() {
+        return prev_tokenStream;
+    }
 
     /** Used by Analyzers that implement reusableTokenStream
 	*  to save a TokenStream for later re-use by the same
 	*  thread. */
-    virtual void setPreviousTokenStream(TokenStream* obj);
-
+    virtual void setPreviousTokenStream(TokenStream* obj) {
+        prev_tokenStream = obj;
+    }
     bool _lowercase = false;
     bool _ownReader = false;
     std::unordered_set<std::string_view>* _stopwords = nullptr;
+    TokenStream* prev_tokenStream{};
 
 public:
     /**
