@@ -527,6 +527,32 @@ public class SSLChannelFactory implements DataChannelFactory {
     }
 
     /**
+     * Finds the truststore password based on the input config.
+     */
+    private static char[] getTrustStorePassword(InstanceContext context) {
+
+        final ReplicationSSLConfig config =
+            (ReplicationSSLConfig) context.getRepNetConfig();
+
+        char[] ksPw = null;
+
+        String ksPwProp = config.getSSLTrustStorePassword();
+        if (ksPwProp == null || ksPwProp.isEmpty()) {
+            /*
+             * Finally, consider the standard Java Keystore
+             * password system property
+             */
+            ksPwProp =
+                System.getProperty("javax.net.ssl.trustStorePassword");
+        }
+        if (ksPwProp != null) {
+            ksPw = ksPwProp.toCharArray();
+        }
+
+        return ksPw;
+    }
+
+    /**
      * Based on the input config, read the configured TrustStore into memory.
      */
     private static KeyStoreInfo readTrustStoreInfo(InstanceContext context) {
@@ -553,12 +579,12 @@ public class SSLChannelFactory implements DataChannelFactory {
         /*
          * Build a TrustStore, if specified
          */
+        final char[] tsPw = getTrustStorePassword(context);
 
         if (tsProp != null) {
-            final KeyStore ts =
-                loadStore(tsProp, null, "truststore", tsTypeProp);
+            final KeyStore ts = loadStore(tsProp, tsPw, "truststore", tsTypeProp);
 
-            return new KeyStoreInfo(tsProp, ts, null);
+            return new KeyStoreInfo(tsProp, ts, tsPw);
         }
 
         return null;

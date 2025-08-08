@@ -1383,6 +1383,16 @@ public class RepParams {
                         true);               // forReplication
 
     /**
+     * SSL TrustStore password
+     * @see ReplicationSSLConfig#SSL_TRUSTSTORE_PASSWORD
+     */
+    public static final ConfigParam SSL_TRUSTSTORE_PASSWORD =
+        new ConfigParam(ReplicationSSLConfig.SSL_TRUSTSTORE_PASSWORD,
+                        "",                  // default
+                        false,               // mutable
+                        true);               // forReplication
+
+    /**
      * SSL TrustStore file
      * @see ReplicationSSLConfig#SSL_TRUSTSTORE_FILE
      */
