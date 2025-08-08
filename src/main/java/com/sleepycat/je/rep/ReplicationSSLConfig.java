@@ -96,6 +96,7 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
      *   {@link #SSL_SERVER_KEY_ALIAS je.rep.ssl.serverKeyAlias}
      *   {@link #SSL_TRUSTSTORE_FILE je.rep.ssl.trustStoreFile}
      *   {@link #SSL_TRUSTSTORE_TYPE je.rep.ssl.trustStoreType}
+     *   {@link #SSL_KEYSTORE_PASSWORD je.rep.ssl.keyStorePassword}
      *   {@link #SSL_CIPHER_SUITES je.rep.ssl.cipherSuites}
      *   {@link #SSL_PROTOCOLS je.rep.ssl.protocols}
      *   {@link #SSL_AUTHENTICATOR je.rep.ssl.authenticator}
@@ -242,6 +243,25 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
      */
     public static final String SSL_CLIENT_KEY_ALIAS =
         EnvironmentParams.REP_PARAM_PREFIX + "ssl.clientKeyAlias";
+
+    /**
+     * The password for accessing the Java truststore file for SSL data channnel
+     * factories. If this parameter is not set or has an empty value, the Java
+     * system property <code>javax.net.ssl.trustStorePassword</code> is used.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>String</td>
+     * <td>No</td>
+     * <td>""</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_TRUSTSTORE_PASSWORD =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.trustStorePassword";
 
     /**
      * The path to the Java truststore file for SSL data channel factories.
@@ -501,6 +521,7 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
         repSSLProperties.add(SSL_KEYSTORE_TYPE);
         repSSLProperties.add(SSL_SERVER_KEY_ALIAS);
         repSSLProperties.add(SSL_CLIENT_KEY_ALIAS);
+        repSSLProperties.add(SSL_TRUSTSTORE_PASSWORD);
         repSSLProperties.add(SSL_TRUSTSTORE_FILE);
         repSSLProperties.add(SSL_TRUSTSTORE_TYPE);
         repSSLProperties.add(SSL_CIPHER_SUITES);
@@ -803,6 +824,40 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
     public void setSSLClientKeyAliasVoid(String alias) {
 
         DbConfigManager.setVal(props, RepParams.SSL_CLIENT_KEY_ALIAS, alias,
+                               validateParams);
+    }
+
+    /**
+     * Returns the password for the Java TrustStore file to be used for SSL key
+     * pair retrieval.
+     *
+     * @return the TrustStore password
+     */
+    public String getSSLTrustStorePassword() {
+        return DbConfigManager.getVal(props, RepParams.SSL_TRUSTSTORE_PASSWORD);
+    }
+
+    /**
+     * Sets the password for the Java TrustStore file to be used when creating
+     * SSL connections.
+     *
+     * @param password the TrustStore password
+     *
+     * @return this
+     */
+    public ReplicationNetworkConfig setSSLTrustStorePassword(String password) {
+
+        setSSLTrustStorePasswordVoid(password);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLTrustStorePasswordVoid(String password) {
+
+        DbConfigManager.setVal(props, RepParams.SSL_TRUSTSTORE_PASSWORD, password,
                                validateParams);
     }
 
