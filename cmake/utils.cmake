@@ -430,7 +430,7 @@ function(GenerateNamedObjects sources_in)
       configure_file(${new_source_file}.tmp ${new_source_file} COPYONLY)
       file(REMOVE ${new_source_file}.tmp)
       list(APPEND SRC_LIST_OUT ${new_source_file})
-      message (STATUS ${new_source_file})
+      # message (STATUS ${new_source_file})  # Commented out to reduce build output
       if (DEFINED HAVE_FMA3)
         if ( ${new_source_file} MATCHES "(s|d?)rot_k.*c")
 		set_source_files_properties(${new_source_file} PROPERTIES COMPILE_OPTIONS "-mfma")
