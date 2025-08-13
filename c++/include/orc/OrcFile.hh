@@ -36,6 +36,12 @@ namespace orc {
    */
   class InputStream {
    public:
+    enum class CacheType {
+      FILE,
+      STRIPE,
+      ROW_GROUP_INDEX,
+    };
+
     virtual ~InputStream();
 
     /**
@@ -65,6 +71,7 @@ namespace orc {
 
     virtual void beforeReadStripe(std::unique_ptr<StripeInformation> currentStripeInformation,
                                   std::vector<bool>& selectedColumns);
+    virtual void preadCache(CacheType cacheType, uint64_t offset, uint64_t length);
   };
 
   /**
