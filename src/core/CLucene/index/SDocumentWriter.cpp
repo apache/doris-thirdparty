@@ -632,10 +632,6 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
 
 template<typename T>
 void SDocumentsWriter<T>::ThreadState::FieldData::invertField(Field *field, Analyzer *sanalyzer, const int32_t maxFieldLength) {
-
-    if (length > 0)
-        position += sanalyzer->getPositionIncrementGap(fieldInfo->name);
-
     if (!field->isTokenized()) {// un-tokenized field
         const T *stringValue = (T *) field->rawStringValue();
         const size_t valueLength = field->getFieldDataLength();
@@ -649,6 +645,9 @@ void SDocumentsWriter<T>::ThreadState::FieldData::invertField(Field *field, Anal
         offset += valueLength;
         length++;
     } else {// tokenized field
+        if (length > 0) {
+            position += sanalyzer->getPositionIncrementGap(fieldInfo->name);
+        }
         TokenStream *stream;
         TokenStream *streamValue = field->tokenStreamValue();
 
