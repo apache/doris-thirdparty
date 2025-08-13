@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## bdbje-18.3.15-doris-SNAPSHOT (20250813)
+
+1. fix TrustStore can't set password
+
 ## bdbje-18.3.14-doris-SNAPSHOT (20221116)
 
 1. support ipv6 address parsing
