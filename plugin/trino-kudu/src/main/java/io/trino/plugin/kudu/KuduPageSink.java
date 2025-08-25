@@ -157,7 +157,7 @@ public class KuduPageSink
             row.addDate(destChannel, epochDaysToSqlDate(INTEGER.getInt(block, position)));
         }
         else if (TIMESTAMP_MILLIS.equals(type)) {
-            row.addLong(destChannel, truncateEpochMicrosToMillis(TIMESTAMP_MILLIS.getLong(block, position)));
+            row.addLong(destChannel, truncateEpochMicrosToMillis(TIMESTAMP_MILLIS.getLong(block, position)) - (TimestampHelper.getTimeZoneOffset() * 1_000));
         }
         else if (REAL.equals(type)) {
             row.addFloat(destChannel, REAL.getFloat(block, position));

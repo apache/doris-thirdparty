@@ -56,6 +56,9 @@ kudu.client.master-addresses=localhost
 
 ## Assign Kudu splits to replica host if worker and kudu share the same cluster
 #kudu.allow-local-scheduling = false
+
+## Optional timezone used for TIMESTAMP values (default: UTC)
+#kudu.timezone = UTC
 ```
 
 ## Kerberos support

@@ -173,7 +173,7 @@ public final class TypeHelper
         }
         if (type.equals(TIMESTAMP_MILLIS)) {
             // Kudu's native format is in microseconds
-            return nativeValue;
+            return ((Long) nativeValue) - (TimestampHelper.getTimeZoneOffset() * 1_000);
         }
         throw new IllegalStateException("Back conversion not implemented for " + type);
     }
@@ -215,7 +215,7 @@ public final class TypeHelper
             return row.getInt(field);
         }
         if (type.equals(TIMESTAMP_MILLIS)) {
-            return truncateEpochMicrosToMillis(row.getLong(field));
+            return truncateEpochMicrosToMillis(row.getLong(field)) + (TimestampHelper.getTimeZoneOffset() * 1_000);
         }
         throw new IllegalStateException("getLong not implemented for " + type);
     }
