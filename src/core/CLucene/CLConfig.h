@@ -31,7 +31,7 @@
 //disable hashmap/set usage. Just use map and set.
 //this has been shown to be quicker than the hash equivalents in some impementations
 #ifndef LUCENE_DISABLE_HASHING
-    #define LUCENE_DISABLE_HASHING
+    #define LUCENE_DISABLE_HASHING 1
 #endif
 //
 ////////////////////////////////////////////////////////////////////
