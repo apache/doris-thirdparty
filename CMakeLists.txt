@@ -70,7 +70,15 @@ option(FAISS_USE_LTO "Enable Link-Time optimization" OFF)
 # compile error:
 # simdlib_avx2.h:695:25: error: always_inline function '_mm256_fmadd_ps' requires target feature 'fma', but would be inlined into function 'fmadd' that is compiled without support for 'fma'
 # if fixed by -mfma
-add_compile_options(-Wno-everything -mfma)
+
+# Suppress warnings everywhere
+add_compile_options(-Wno-everything)
+
+# Only add -mfma on x86_64
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    add_compile_options(-mfma)
+endif()
+
 if(FAISS_ENABLE_GPU)
   if(FAISS_ENABLE_ROCM)
     enable_language(HIP)
