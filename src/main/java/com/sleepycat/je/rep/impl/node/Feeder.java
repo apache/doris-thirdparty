@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channel;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -1752,5 +1753,37 @@ final public class Feeder {
         }
 
         throw new ReplicationSecurityException(err, replica, null);
+    }
+
+    /**
+     * Refer to https://github.com/StarRocks/starrocks-bdb-je/pull/17
+     * Check whether the channel is available by monitoring the change of lastHeartbeatTime,
+     * the loop will break when:
+     * 1. feeder is shutdown
+     * 2. channel is not open
+     * 3. lastHeartbeatTime changed
+     * 4. FEEDER_TIMEOUT reached
+     */
+    public boolean isChannelAvailable() {
+        long baseTime = this.lastHeartbeatTime;
+        long startNs = System.nanoTime();
+        long timeoutNs = repNode.getConfigManager().getDuration(RepParams.FEEDER_TIMEOUT) * 1000000L;
+        while (System.nanoTime() - startNs < timeoutNs) {
+            if (shutdown.get() || !feederReplicaChannel.isOpen()) {
+                return false;
+            }
+
+            if (baseTime < lastHeartbeatTime) {
+                return true;
+            }
+
+            try {
+                TimeUnit.MILLISECONDS.sleep(500);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        return false;
     }
 }
