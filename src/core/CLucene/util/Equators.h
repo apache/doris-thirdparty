@@ -216,6 +216,18 @@ public:
 			_CLDELETE_CaARRAY(arr);
 		}
 	};
+
+	// When using this class, we must ensure that the key is obtained via strdup or allocated using malloc
+	class CLUCENE_INLINE_EXPORT cacArray: public AbstractDeletor{
+	public:
+		void Delete(void* arr){
+			doDelete((const char*)arr);
+		}
+		static void doDelete(const char* arr){
+			auto temp = const_cast<char*>(arr);
+			_CLDELETE_CaARRAY(temp);
+		}
+	};
 	
 	template<typename _kt>
 	class CLUCENE_INLINE_EXPORT Object: public AbstractDeletor{
