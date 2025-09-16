@@ -28,6 +28,9 @@ import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import static java.util.logging.Level.INFO;
+import static java.util.logging.Level.WARNING;
+
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -61,7 +64,7 @@ public class SSLChannelFactory implements DataChannelFactory {
      * a connection is established based on enabled protocol settings for
      * both client and server.
      */
-    private static final String SSL_CONTEXT_PROTOCOL = "TLS";
+    private static final String SSL_CONTEXT_PROTOCOL = "TLSv1.2";
 
     /**
      * A system property to allow users to specify the correct X509 certificate
@@ -79,13 +82,13 @@ public class SSLChannelFactory implements DataChannelFactory {
      * An SSLContext that will hold all the interesting connection parameter
      * information for session creation in server mode.
      */
-    private final SSLContext serverSSLContext;
+    private volatile SSLContext serverSSLContext;
 
     /**
      * An SSLContext that will hold all the interesting connection parameter
      * information for session creation in client mode.
      */
-    private final SSLContext clientSSLContext;
+    private volatile SSLContext clientSSLContext;
 
     /**
      * The base SSLParameters for use in channel creation.
@@ -107,9 +110,20 @@ public class SSLChannelFactory implements DataChannelFactory {
     private final InstanceLogger logger;
 
     /**
+     * Instance parameters used for SSL context reconstruction during certificate reload
+     */
+    private final InstanceParams instanceParams;
+
+    /**
+     * Certificate file watcher for monitoring certificate file changes
+     */
+    private CertificateFileWatcher certificateWatcher;
+
+    /**
      * Constructor for use during creating based on access configuration
      */
     public SSLChannelFactory(InstanceParams params) {
+        this.instanceParams = params;
         serverSSLContext = constructSSLContext(params, false);
         clientSSLContext = constructSSLContext(params, true);
         baseSSLParameters =
@@ -118,6 +132,9 @@ public class SSLChannelFactory implements DataChannelFactory {
         sslAuthenticator = constructSSLAuthenticator(params);
         sslHostVerifier = constructSSLHostVerifier(params);
         logger = params.getContext().getLoggerFactory().getLogger(getClass());
+
+        // Initialize certificate file monitoring
+        initializeCertificateWatcher();
     }
 
     /**
@@ -131,6 +148,7 @@ public class SSLChannelFactory implements DataChannelFactory {
                              HostnameVerifier sslHostVerifier,
                              InstanceLogger logger) {
 
+        this.instanceParams = null; // No automatic reloading for pre-configured contexts
         this.serverSSLContext = serverSSLContext;
         this.clientSSLContext = clientSSLContext;
         this.baseSSLParameters =
@@ -260,6 +278,120 @@ public class SSLChannelFactory implements DataChannelFactory {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Initialize certificate file watcher for automatic reloading.
+     */
+    private void initializeCertificateWatcher() {
+        if (instanceParams == null) {
+            return;
+        }
+
+        try {
+            final ReplicationSSLConfig config =
+                (ReplicationSSLConfig) instanceParams.getContext().getRepNetConfig();
+
+            // Get the refresh interval from configuration
+            long refreshInterval = config.getSSLCertRefreshIntervalSeconds();
+
+            // If refresh interval is 0, disable certificate monitoring
+            if (refreshInterval == 0) {
+                logger.log(INFO, "Certificate file monitoring disabled (refresh interval = 0)");
+                return;
+            }
+
+            certificateWatcher = new CertificateFileWatcher(logger, refreshInterval);
+
+            // Watch keystore file if configured
+            String keystorePath = config.getSSLKeyStore();
+            if (keystorePath == null || keystorePath.isEmpty()) {
+                keystorePath = System.getProperty("javax.net.ssl.keyStore");
+            }
+            if (keystorePath != null && !keystorePath.isEmpty()) {
+                certificateWatcher.registerFile(keystorePath, this::reloadCertificates);
+            }
+
+            // Watch truststore file if configured
+            String truststorePath = config.getSSLTrustStore();
+            if (truststorePath == null || truststorePath.isEmpty()) {
+                truststorePath = System.getProperty("javax.net.ssl.trustStore");
+            }
+            if (truststorePath != null && !truststorePath.isEmpty()) {
+                certificateWatcher.registerFile(truststorePath, this::reloadCertificates);
+            }
+
+            logger.log(INFO, "Certificate file monitoring initialized with " + refreshInterval + " second interval");
+
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to initialize certificate file watcher: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Reload certificates when file changes are detected.
+     *
+     * @param changedFilePath the path of the file that changed
+     */
+    private void reloadCertificates(String changedFilePath) {
+        if (instanceParams == null) {
+            logger.log(WARNING, "Cannot reload certificates: instance parameters not available");
+            return;
+        }
+
+        logger.log(INFO, "Reloading SSL certificates due to file change: " + changedFilePath);
+
+        try {
+            // Reconstruct SSL contexts with new certificates
+            SSLContext newServerContext = constructSSLContext(instanceParams, false);
+            SSLContext newClientContext = constructSSLContext(instanceParams, true);
+
+            // Atomically update the contexts
+            this.serverSSLContext = newServerContext;
+            this.clientSSLContext = newClientContext;
+
+            // Reload mirror matcher principals if they exist
+            reloadMirrorMatcherPrincipals();
+
+            logger.log(INFO, "SSL certificates successfully reloaded");
+
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to reload SSL certificates: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Reload principals for mirror authenticators and verifiers.
+     * Note: DN-based authenticators/verifiers don't need explicit reloading
+     * as they re-evaluate peer certificates on each SSL handshake.
+     */
+    private void reloadMirrorMatcherPrincipals() {
+        try {
+            // Reload authenticator principal if it's a mirror authenticator
+            if (sslAuthenticator instanceof SSLMirrorAuthenticator) {
+                ((SSLMirrorAuthenticator) sslAuthenticator).reloadPrincipal();
+            }
+
+            // Reload host verifier principal if it's a mirror host verifier
+            if (sslHostVerifier instanceof SSLMirrorHostVerifier) {
+                ((SSLMirrorHostVerifier) sslHostVerifier).reloadPrincipal();
+            }
+
+            // DN-based authenticators and verifiers automatically handle
+            // certificate changes during SSL handshake validation, no action needed
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to reload mirror matcher principals: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Stop the certificate file watcher and clean up resources.
+     */
+    public void shutdown() {
+        if (certificateWatcher != null) {
+            certificateWatcher.stop();
+            certificateWatcher = null;
+        }
     }
 
     /**
