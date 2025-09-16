@@ -510,6 +510,27 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
     public static final String SSL_HOST_VERIFIER_PARAMS =
         EnvironmentParams.REP_PARAM_PREFIX + "ssl.hostVerifierParams";
 
+    /**
+     * The interval in seconds for checking certificate file changes.
+     * The certificate file watcher will check for file modifications at this
+     * frequency. A smaller value provides faster certificate reload response
+     * but consumes more system resources. A value of 0 disables certificate
+     * file monitoring completely.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>Long</td>
+     * <td>No</td>
+     * <td>30</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_CERT_REFRESH_INTERVAL_SECONDS =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.certRefreshIntervalSeconds";
+
     /* The set of Replication properties specific to this class */
     private static Set<String> repSSLProperties;
     static {
@@ -532,6 +553,7 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
         repSSLProperties.add(SSL_HOST_VERIFIER);
         repSSLProperties.add(SSL_HOST_VERIFIER_CLASS);
         repSSLProperties.add(SSL_HOST_VERIFIER_PARAMS);
+        repSSLProperties.add(SSL_CERT_REFRESH_INTERVAL_SECONDS);
         /* Nail the set down */
         repSSLProperties = Collections.unmodifiableSet(repSSLProperties);
     }
@@ -1227,6 +1249,45 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
 
         DbConfigManager.setVal(props, RepParams.SSL_HOST_VERIFIER_PARAMS,
                                hostVerifierParams, validateParams);
+    }
+
+    /**
+     * Returns the certificate file refresh interval in seconds.
+     *
+     * @return the refresh interval in seconds, or 0 if monitoring is disabled
+     */
+    public long getSSLCertRefreshIntervalSeconds() {
+        return DbConfigManager.getLongVal(props, RepParams.SSL_CERT_REFRESH_INTERVAL_SECONDS);
+    }
+
+    /**
+     * Sets the certificate file refresh interval in seconds.
+     * The certificate file watcher will check for file modifications at this
+     * frequency. A smaller value provides faster certificate reload response
+     * but consumes more system resources. A value of 0 disables certificate
+     * file monitoring completely.
+     *
+     * @param intervalSeconds the refresh interval in seconds (0 to disable)
+     *
+     * @return this
+     *
+     * @throws IllegalArgumentException if intervalSeconds is negative
+     */
+    public ReplicationNetworkConfig setSSLCertRefreshIntervalSeconds(long intervalSeconds) {
+        setSSLCertRefreshIntervalSecondsVoid(intervalSeconds);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLCertRefreshIntervalSecondsVoid(long intervalSeconds) {
+        if (intervalSeconds < 0) {
+            throw new IllegalArgumentException("Certificate refresh interval cannot be negative");
+        }
+        DbConfigManager.setVal(props, RepParams.SSL_CERT_REFRESH_INTERVAL_SECONDS,
+                               Long.toString(intervalSeconds), validateParams);
     }
 
     /**

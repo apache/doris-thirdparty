@@ -1519,6 +1519,18 @@ public class RepParams {
                         true);               // forReplication
 
     /**
+     * SSL certificate refresh interval in seconds
+     * @see ReplicationSSLConfig#SSL_CERT_REFRESH_INTERVAL_SECONDS
+     */
+    public static final LongConfigParam SSL_CERT_REFRESH_INTERVAL_SECONDS =
+        new LongConfigParam(ReplicationSSLConfig.SSL_CERT_REFRESH_INTERVAL_SECONDS,
+                            0L,        // min
+                            Long.valueOf(Long.MAX_VALUE), // max
+                            30L,         // default
+                            false,           // mutable
+                            true);           // forReplication
+
+    /**
      * Override the current JE version, for testing only.
      */
     public static final ConfigParam TEST_JE_VERSION = new ConfigParam(
