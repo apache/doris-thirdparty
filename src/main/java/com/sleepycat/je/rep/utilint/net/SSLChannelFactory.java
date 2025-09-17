@@ -22,6 +22,7 @@ import java.nio.channels.SocketChannel;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
@@ -58,6 +59,27 @@ import com.sleepycat.je.rep.utilint.net.DataChannelFactoryBuilder.CtorArgSpec;
  */
 public class SSLChannelFactory implements DataChannelFactory {
 
+    /**
+     * Immutable wrapper for SSL contexts to ensure atomic updates
+     */
+    private static final class SSLContextPair {
+        private final SSLContext serverContext;
+        private final SSLContext clientContext;
+
+        public SSLContextPair(SSLContext serverContext, SSLContext clientContext) {
+            this.serverContext = serverContext;
+            this.clientContext = clientContext;
+        }
+
+        public SSLContext getServerContext() {
+            return serverContext;
+        }
+
+        public SSLContext getClientContext() {
+            return clientContext;
+        }
+    }
+
     /*
      * Protocol to use in call to SSLContext.getInstance.  This isn't a
      * protocol per-se.  Actual protocol selection is chosen at the time
@@ -79,16 +101,14 @@ public class SSLChannelFactory implements DataChannelFactory {
     private static final String X509_ALGO_NAME = getX509AlgoName();
 
     /**
-     * An SSLContext that will hold all the interesting connection parameter
-     * information for session creation in server mode.
+     * SSL contexts pair for atomic server and client context updates
      */
-    private volatile SSLContext serverSSLContext;
+    private volatile SSLContextPair sslContexts;
 
     /**
-     * An SSLContext that will hold all the interesting connection parameter
-     * information for session creation in client mode.
+     * Lock for certificate reload operations to ensure thread safety
      */
-    private volatile SSLContext clientSSLContext;
+    private final Object reloadLock = new Object();
 
     /**
      * The base SSLParameters for use in channel creation.
@@ -120,18 +140,37 @@ public class SSLChannelFactory implements DataChannelFactory {
     private CertificateFileWatcher certificateWatcher;
 
     /**
+     * SSL context manager for graceful certificate migration
+     */
+    private SSLContextManager contextManager;
+
+    /**
+     * Connection pool manager for tracking active connections
+     */
+    private ConnectionPoolManager connectionPoolManager;
+
+    /**
+     * SSL migration monitor for comprehensive system monitoring
+     */
+    private SSLMigrationMonitor migrationMonitor;
+
+    /**
      * Constructor for use during creating based on access configuration
      */
     public SSLChannelFactory(InstanceParams params) {
         this.instanceParams = params;
-        serverSSLContext = constructSSLContext(params, false);
-        clientSSLContext = constructSSLContext(params, true);
+        SSLContext serverContext = constructSSLContext(params, false);
+        SSLContext clientContext = constructSSLContext(params, true);
+        this.sslContexts = new SSLContextPair(serverContext, clientContext);
         baseSSLParameters =
             filterSSLParameters(constructSSLParameters(params),
-                                serverSSLContext);
+                                serverContext);
         sslAuthenticator = constructSSLAuthenticator(params);
         sslHostVerifier = constructSSLHostVerifier(params);
         logger = params.getContext().getLoggerFactory().getLogger(getClass());
+
+        // Initialize graceful migration components
+        initializeGracefulMigration();
 
         // Initialize certificate file monitoring
         initializeCertificateWatcher();
@@ -149,13 +188,15 @@ public class SSLChannelFactory implements DataChannelFactory {
                              InstanceLogger logger) {
 
         this.instanceParams = null; // No automatic reloading for pre-configured contexts
-        this.serverSSLContext = serverSSLContext;
-        this.clientSSLContext = clientSSLContext;
+        this.sslContexts = new SSLContextPair(serverSSLContext, clientSSLContext);
         this.baseSSLParameters =
             filterSSLParameters(baseSSLParameters, serverSSLContext);
         this.sslAuthenticator = sslAuthenticator;
         this.sslHostVerifier = sslHostVerifier;
         this.logger = logger;
+
+        // Initialize graceful migration components (limited functionality without instanceParams)
+        initializeGracefulMigration();
     }
 
     /**
@@ -177,7 +218,7 @@ public class SSLChannelFactory implements DataChannelFactory {
         }
 
         final SSLEngine engine =
-            serverSSLContext.createSSLEngine(host,
+            sslContexts.getServerContext().createSSLEngine(host,
                                              socketChannel.socket().getPort());
         engine.setSSLParameters(baseSSLParameters);
         engine.setUseClientMode(false);
@@ -185,8 +226,21 @@ public class SSLChannelFactory implements DataChannelFactory {
             engine.setWantClientAuth(true);
         }
 
-        return new SSLDataChannel(socketChannel, engine, null, null,
-                                  sslAuthenticator, logger);
+        // Create migratable channel if graceful migration is enabled
+        if (connectionPoolManager != null) {
+            String connectionId = generateConnectionId(socketChannel, false);
+            MigratableSSLDataChannel migratableChannel = new MigratableSSLDataChannel(
+                socketChannel, engine, host, sslHostVerifier, sslAuthenticator, logger, connectionId);
+
+            // Register with connection pool
+            connectionPoolManager.registerConnection(connectionId, migratableChannel);
+
+            return migratableChannel;
+        } else {
+            // Fallback to original implementation
+            return new SSLDataChannel(socketChannel, engine, null, null,
+                                      sslAuthenticator, logger);
+        }
     }
 
     /**
@@ -213,12 +267,25 @@ public class SSLChannelFactory implements DataChannelFactory {
         }
 
         final SSLEngine engine =
-            clientSSLContext.createSSLEngine(host, addr.getPort());
+            sslContexts.getClientContext().createSSLEngine(host, addr.getPort());
         engine.setSSLParameters(baseSSLParameters);
         engine.setUseClientMode(true);
 
-        return new SSLDataChannel(
-            socketChannel, engine, host, sslHostVerifier, null, logger);
+        // Create migratable channel if graceful migration is enabled
+        if (connectionPoolManager != null) {
+            String connectionId = generateConnectionId(socketChannel, true);
+            MigratableSSLDataChannel migratableChannel = new MigratableSSLDataChannel(
+                socketChannel, engine, host, sslHostVerifier, null, logger, connectionId);
+
+            // Register with connection pool
+            connectionPoolManager.registerConnection(connectionId, migratableChannel);
+
+            return migratableChannel;
+        } else {
+            // Fallback to original implementation
+            return new SSLDataChannel(
+                socketChannel, engine, host, sslHostVerifier, null, logger);
+        }
     }
 
     /**
@@ -281,8 +348,91 @@ public class SSLChannelFactory implements DataChannelFactory {
     }
 
     /**
-     * Initialize certificate file watcher for automatic reloading.
+     * Initialize graceful migration components
      */
+    private void initializeGracefulMigration() {
+        try {
+            // Initialize SSL context manager
+            contextManager = new SSLContextManager(logger);
+
+            // Register initial contexts
+            SSLContextPair contexts = sslContexts;
+            if (contexts != null && contexts.getServerContext() != null && contexts.getClientContext() != null) {
+                contextManager.registerNewContext(contexts.getServerContext(), contexts.getClientContext());
+            }
+
+            // Initialize connection pool manager
+            connectionPoolManager = new ConnectionPoolManager(logger);
+
+            // Initialize comprehensive monitoring
+            migrationMonitor = new SSLMigrationMonitor(connectionPoolManager, contextManager, logger);
+
+            // Add migration callback for logging
+            connectionPoolManager.addMigrationCallback(new ConnectionPoolManager.MigrationCallback() {
+                @Override
+                public void onMigrationStart(String connectionId) {
+                    logger.log(INFO, "Starting SSL migration for connection: " + connectionId);
+                }
+
+                @Override
+                public void onMigrationSuccess(String connectionId) {
+                    logger.log(INFO, "SSL migration succeeded for connection: " + connectionId);
+                }
+
+                @Override
+                public void onMigrationFailure(String connectionId, Exception cause) {
+                    logger.log(WARNING, "SSL migration failed for connection " + connectionId, cause);
+                }
+
+                @Override
+                public void onMigrationComplete(String connectionId, boolean success) {
+                    logger.log(INFO, "SSL migration completed for connection " + connectionId + ", success: " + success);
+                }
+            });
+
+            logger.log(INFO, "Graceful SSL migration system initialized");
+
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to initialize graceful migration system", e);
+            // Graceful degradation - system will work without migration capabilities
+            contextManager = null;
+            connectionPoolManager = null;
+        }
+    }
+
+    /**
+     * Generate privacy-aware connection ID by hashing sensitive network information
+     */
+    private String generateConnectionId(SocketChannel socketChannel, boolean clientMode) {
+        String mode = clientMode ? "client" : "server";
+        String remoteAddr = socketChannel.socket().getRemoteSocketAddress().toString();
+        String localAddr = socketChannel.socket().getLocalSocketAddress().toString();
+        long timestamp = System.currentTimeMillis();
+
+        try {
+            // Hash the network addresses to protect privacy
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String addressInfo = localAddr + ":" + remoteAddr;
+            byte[] hashBytes = digest.digest(addressInfo.getBytes("UTF-8"));
+
+            // Convert to hex string (take first 8 chars for readability)
+            StringBuilder hexString = new StringBuilder();
+            for (int i = 0; i < Math.min(4, hashBytes.length); i++) {
+                String hex = Integer.toHexString(0xff & hashBytes[i]);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+
+            return String.format("%s-%s-%d", mode, hexString.toString(), timestamp);
+
+        } catch (Exception e) {
+            // Fallback to timestamp-only ID if hashing fails
+            logger.log(WARNING, "Failed to hash connection info for privacy", e);
+            return String.format("%s-conn-%d", mode, timestamp);
+        }
+    }
     private void initializeCertificateWatcher() {
         if (instanceParams == null) {
             return;
@@ -324,12 +474,12 @@ public class SSLChannelFactory implements DataChannelFactory {
             logger.log(INFO, "Certificate file monitoring initialized with " + refreshInterval + " second interval");
 
         } catch (Exception e) {
-            logger.log(WARNING, "Failed to initialize certificate file watcher: " + e.getMessage());
+            logger.log(WARNING, "Failed to initialize certificate file watcher", e);
         }
     }
 
     /**
-     * Reload certificates when file changes are detected.
+     * Reload certificates when file changes are detected with thread safety protection.
      *
      * @param changedFilePath the path of the file that changed
      */
@@ -339,24 +489,43 @@ public class SSLChannelFactory implements DataChannelFactory {
             return;
         }
 
-        logger.log(INFO, "Reloading SSL certificates due to file change: " + changedFilePath);
+        // Synchronize to prevent concurrent reloads and ensure consistency
+        synchronized (reloadLock) {
+            logger.log(INFO, "Reloading SSL certificates due to file change: " + changedFilePath);
 
-        try {
-            // Reconstruct SSL contexts with new certificates
-            SSLContext newServerContext = constructSSLContext(instanceParams, false);
-            SSLContext newClientContext = constructSSLContext(instanceParams, true);
+            try {
+                // Reconstruct SSL contexts with new certificates
+                SSLContext newServerContext = constructSSLContext(instanceParams, false);
+                SSLContext newClientContext = constructSSLContext(instanceParams, true);
 
-            // Atomically update the contexts
-            this.serverSSLContext = newServerContext;
-            this.clientSSLContext = newClientContext;
+                // Use graceful migration if available
+                if (contextManager != null && connectionPoolManager != null) {
+                    // Register new context version
+                    int newVersion = contextManager.registerNewContext(newServerContext, newClientContext);
 
-            // Reload mirror matcher principals if they exist
-            reloadMirrorMatcherPrincipals();
+                    // Update factory's current contexts atomically (for new connections)
+                    this.sslContexts = new SSLContextPair(newServerContext, newClientContext);
 
-            logger.log(INFO, "SSL certificates successfully reloaded");
+                    // Trigger graceful migration for existing connections
+                    connectionPoolManager.triggerBatchMigration(contextManager);
 
-        } catch (Exception e) {
-            logger.log(WARNING, "Failed to reload SSL certificates: " + e.getMessage());
+                    logger.log(INFO, "SSL certificates reloaded with graceful migration to version " + newVersion);
+
+                } else {
+                    // Fallback to atomic update (original behavior)
+                    this.sslContexts = new SSLContextPair(newServerContext, newClientContext);
+
+                    logger.log(INFO, "SSL certificates reloaded (atomic update - no graceful migration)");
+                }
+
+                // Reload mirror matcher principals if they exist
+                reloadMirrorMatcherPrincipals();
+
+                logger.log(INFO, "SSL certificates successfully reloaded");
+
+            } catch (Exception e) {
+                logger.log(WARNING, "Failed to reload SSL certificates", e);
+            }
         }
     }
 
@@ -380,7 +549,102 @@ public class SSLChannelFactory implements DataChannelFactory {
             // DN-based authenticators and verifiers automatically handle
             // certificate changes during SSL handshake validation, no action needed
         } catch (Exception e) {
-            logger.log(WARNING, "Failed to reload mirror matcher principals: " + e.getMessage());
+            logger.log(WARNING, "Failed to reload mirror matcher principals", e);
+        }
+    }
+
+    /**
+     * Get comprehensive SSL migration system status
+     */
+    public SSLMigrationMonitor.SystemStatus getSystemStatus() {
+        if (migrationMonitor != null) {
+            return migrationMonitor.getSystemStatus();
+        } else {
+            // Return basic status for legacy mode
+            Map<String, Object> details = new java.util.HashMap<>();
+            details.put("legacyMode", true);
+            details.put("gracefulMigration", false);
+            return new SSLMigrationMonitor.SystemStatus(
+                SSLMigrationMonitor.HealthStatus.UNKNOWN,
+                "Legacy mode - graceful migration disabled",
+                details
+            );
+        }
+    }
+
+    /**
+     * Perform comprehensive health check
+     */
+    public String performHealthCheck() {
+        if (migrationMonitor != null) {
+            return migrationMonitor.performHealthCheck();
+        } else {
+            return "Health Check Results:\n" +
+                   "Status: LEGACY MODE\n" +
+                   "Summary: Graceful migration system not available\n" +
+                   "Note: Using traditional SSL context replacement\n";
+        }
+    }
+
+    /**
+     * Get detailed migration system report
+     */
+    public String getDetailedMigrationReport() {
+        if (migrationMonitor != null) {
+            return migrationMonitor.getDetailedReport();
+        } else {
+            return "SSL Migration System Report:\n" +
+                   "Mode: LEGACY\n" +
+                   "Graceful Migration: DISABLED\n" +
+                   "Certificate reloads use atomic context replacement.\n";
+        }
+    }
+
+    /**
+     * Get active migration summary
+     */
+    public String getActiveMigrationSummary() {
+        if (migrationMonitor != null) {
+            return migrationMonitor.getActiveMigrationSummary();
+        } else {
+            return "Active Migration Summary: Not available (legacy mode)";
+        }
+    }
+
+    /**
+     * Get comprehensive migration statistics (deprecated - use getDetailedMigrationReport)
+     * @deprecated Use getDetailedMigrationReport() for more comprehensive information
+     */
+    @Deprecated
+    public String getMigrationStatistics() {
+        StringBuilder stats = new StringBuilder();
+        stats.append("SSL Migration System Statistics:\n");
+
+        if (contextManager != null) {
+            stats.append("SSL Context Manager:\n");
+            stats.append(contextManager.getStatistics());
+            stats.append("\n");
+        }
+
+        if (connectionPoolManager != null) {
+            stats.append("Connection Pool Manager:\n");
+            stats.append(connectionPoolManager.getStatistics());
+        } else {
+            stats.append("Graceful Migration: DISABLED (legacy mode)\n");
+        }
+
+        return stats.toString();
+    }
+
+    /**
+     * Force trigger migration for all connections (for testing/admin purposes)
+     */
+    public void forceMigrationForAllConnections() {
+        if (connectionPoolManager != null && contextManager != null) {
+            logger.log(INFO, "Forcing migration for all connections (admin command)");
+            connectionPoolManager.triggerBatchMigration(contextManager);
+        } else {
+            logger.log(WARNING, "Cannot force migration - graceful migration system not available");
         }
     }
 
@@ -388,10 +652,32 @@ public class SSLChannelFactory implements DataChannelFactory {
      * Stop the certificate file watcher and clean up resources.
      */
     public void shutdown() {
+        logger.log(INFO, "Shutting down SSLChannelFactory...");
+
+        // Shutdown certificate file watcher
         if (certificateWatcher != null) {
             certificateWatcher.stop();
             certificateWatcher = null;
         }
+
+        // Shutdown graceful migration components
+        if (connectionPoolManager != null) {
+            connectionPoolManager.shutdown();
+            connectionPoolManager = null;
+        }
+
+        if (contextManager != null) {
+            contextManager.shutdown();
+            contextManager = null;
+        }
+
+        // Clean up migration monitor
+        if (migrationMonitor != null) {
+            migrationMonitor = null;
+            logger.log(INFO, "SSL migration monitor cleaned up");
+        }
+
+        logger.log(INFO, "SSLChannelFactory shutdown completed");
     }
 
     /**
@@ -796,7 +1082,7 @@ public class SSLChannelFactory implements DataChannelFactory {
     }
 
     /**
-     * Return the intersection of configChoices and supported
+     * Return the intersection of configChoices and supported with case-insensitive matching
      */
     private static String[] filterConfig(String[] configChoices,
                                          String[] supported) {
@@ -804,8 +1090,9 @@ public class SSLChannelFactory implements DataChannelFactory {
         ArrayList<String> keep = new ArrayList<>();
         for (String choice : configChoices) {
             for (String supp : supported) {
-                if (choice.equals(supp)) {
-                    keep.add(choice);
+                // Use case-insensitive comparison for cipher suites and protocols
+                if (choice.equalsIgnoreCase(supp)) {
+                    keep.add(choice); // Keep original case from configuration
                     break;
                 }
             }
