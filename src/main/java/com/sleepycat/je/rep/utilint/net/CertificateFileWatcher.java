@@ -159,7 +159,7 @@ public class CertificateFileWatcher {
                 start();
             }
         } catch (IOException e) {
-            logger.log(WARNING, "Failed to register file for watching: " + filePath, e);
+            logger.log(WARNING, "Failed to register file for watching: " + filePath + ": " + e.getMessage());
             throw e;
         }
     }
@@ -201,7 +201,7 @@ public class CertificateFileWatcher {
         } catch (IllegalThreadStateException e) {
             // Thread was already started, reset running flag
             running.set(false);
-            logger.log(WARNING, "Certificate file watcher thread was already started", e);
+            logger.log(WARNING, "Certificate file watcher thread was already started: " + e.getMessage());
             throw new IllegalStateException("Watcher thread was already started", e);
         }
     }
@@ -220,7 +220,7 @@ public class CertificateFileWatcher {
         try {
             watchService.close();
         } catch (IOException e) {
-            logger.log(WARNING, "Error closing watch service", e);
+            logger.log(WARNING, "Error closing watch service: " + e.getMessage());
         }
 
         // Cancel all registered watch keys to clean up resources
@@ -228,7 +228,7 @@ public class CertificateFileWatcher {
             try {
                 key.cancel();
             } catch (Exception e) {
-                logger.log(WARNING, "Error canceling watch key", e);
+                logger.log(WARNING, "Error canceling watch key: " + e.getMessage());
             }
         }
 
@@ -290,47 +290,48 @@ public class CertificateFileWatcher {
                     }
 
                     CertificateReloadListener listener = listeners.get(fullPath);
-                    if (listener != null) {
-                        // Get per-file debounce time
-                        AtomicLong fileLastNotificationTime = fileLastNotificationTimes.get(fullPath);
-                        if (fileLastNotificationTime == null) {
-                            // File was unregistered, skip processing
-                            continue;
-                        }
+                    if (listener == null) {
+                        continue;
+                    }
+                    // Get per-file debounce time
+                    AtomicLong fileLastNotificationTime = fileLastNotificationTimes.get(fullPath);
+                    if (fileLastNotificationTime == null) {
+                        // File was unregistered, skip processing
+                        continue;
+                    }
 
-                        // Per-file debounce check (1 second)
-                        long currentTime = System.currentTimeMillis();
-                        long lastTime = fileLastNotificationTime.get();
+                    // Per-file debounce check (1 second)
+                    long currentTime = System.currentTimeMillis();
+                    long lastTime = fileLastNotificationTime.get();
 
-                        if (currentTime - lastTime > 1000) {
-                            if (fileLastNotificationTime.compareAndSet(lastTime, currentTime)) {
-                                FileChangeType changeType = getChangeType(kind);
+                    if (currentTime - lastTime <= 1000) {
+                        // Debounced - log at FINE level to reduce noise
+                        logger.log(java.util.logging.Level.FINE,
+                                    "Certificate file change debounced: " + fullPath +
+                                    " (" + getChangeType(kind).toString().toLowerCase() + ")");
+                        continue;
+                    }
+                    if (fileLastNotificationTime.compareAndSet(lastTime, currentTime)) {
+                        FileChangeType changeType = getChangeType(kind);
 
-                                try {
-                                    if (changeType == FileChangeType.DELETED) {
-                                        logger.log(WARNING, "Certificate file was deleted: " + fullPath);
-                                        // For delete events, still notify listener but don't check file existence
-                                        listener.onCertificateFileChanged(fullPath.toString(), changeType);
-                                    } else {
-                                        // For create/modify events, check if file still exists
-                                        if (fullPath.toFile().exists()) {
-                                            logger.log(INFO, "Certificate file " + changeType.toString().toLowerCase() +
-                                                      ", triggering reload: " + fullPath);
-                                            listener.onCertificateFileChanged(fullPath.toString(), changeType);
-                                        } else {
-                                            logger.log(WARNING, "Certificate file no longer exists during " +
-                                                      changeType.toString().toLowerCase() + " event: " + fullPath);
-                                        }
-                                    }
-                                } catch (Exception e) {
-                                    logger.log(WARNING, "Error during certificate reload for " + fullPath, e);
+                        try {
+                            if (changeType == FileChangeType.DELETED) {
+                                logger.log(WARNING, "Certificate file was deleted: " + fullPath);
+                                // For delete events, still notify listener but don't check file existence
+                                listener.onCertificateFileChanged(fullPath.toString(), changeType);
+                            } else {
+                                // For create/modify events, check if file still exists
+                                if (fullPath.toFile().exists()) {
+                                    logger.log(INFO, "Certificate file " + changeType.toString().toLowerCase() +
+                                                ", triggering reload: " + fullPath);
+                                    listener.onCertificateFileChanged(fullPath.toString(), changeType);
+                                } else {
+                                    logger.log(WARNING, "Certificate file no longer exists during " +
+                                                changeType.toString().toLowerCase() + " event: " + fullPath);
                                 }
                             }
-                        } else {
-                            // Debounced - log at FINE level to reduce noise
-                            logger.log(java.util.logging.Level.FINE,
-                                      "Certificate file change debounced: " + fullPath +
-                                      " (" + getChangeType(kind).toString().toLowerCase() + ")");
+                        } catch (Exception e) {
+                            logger.log(WARNING, "Error during certificate reload for " + fullPath + ": " + e.getMessage());
                         }
                     }
                 }
@@ -361,13 +362,12 @@ public class CertificateFileWatcher {
                 Thread.currentThread().interrupt();
                 logger.log(INFO, "Certificate file watcher interrupted, exiting watch loop");
                 break;
+            } catch (OutOfMemoryError | StackOverflowError e) {
+                logger.log(WARNING, "Critical error in file watcher, exiting: " + e.getClass().getSimpleName());
+                break;
             } catch (Exception e) {
-                logger.log(WARNING, "Unexpected error in certificate file watcher", e);
+                logger.log(WARNING, "Unexpected error in certificate file watcher: " + e.getMessage());
                 // Continue running unless it's a critical error
-                if (e instanceof OutOfMemoryError || e instanceof StackOverflowError) {
-                    logger.log(WARNING, "Critical error in file watcher, exiting: " + e.getClass().getSimpleName());
-                    break;
-                }
             }
         }
         logger.log(INFO, "Certificate file watcher loop exited");

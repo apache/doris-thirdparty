@@ -14,6 +14,7 @@
 package com.sleepycat.je.rep.utilint.net;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -23,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Collections;
+import java.util.Iterator;
 import java.time.Instant;
 import java.time.Duration;
 import java.util.OptionalInt;
@@ -487,14 +489,16 @@ public class SSLContextManager {
             int removedCount = 0;
             int currentVersion = getCurrentVersion();
 
-            // Remove all deprecated contexts except current
-            removedCount = (int) contexts.entrySet().removeIf(entry -> {
+            // Count and remove all deprecated contexts except current
+            Iterator<Map.Entry<Integer, ContextVersion>> iterator = contexts.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<Integer, ContextVersion> entry = iterator.next();
                 if (entry.getKey() != currentVersion && entry.getValue().isDeprecated()) {
+                    iterator.remove();
                     logger.log(INFO, "Force removed deprecated SSL context version: " + entry.getKey());
-                    return true;
+                    removedCount++;
                 }
-                return false;
-            });
+            }
 
             logger.log(INFO, "Force cleanup removed " + removedCount + " deprecated contexts");
             return removedCount;
@@ -638,22 +642,23 @@ public class SSLContextManager {
                 ContextVersion contextVersion = entry.getValue();
 
                 // Check availability inline to avoid nested locking
-                if (contextVersion != null) {
-                    // Check if context is too old
-                    if (contextVersion.getAge().compareTo(maxContextAge) > 0) {
-                        continue;
-                    }
+                if (contextVersion == null) {
+                    continue;
+                }
+                // Check if context is too old
+                if (contextVersion.getAge().compareTo(maxContextAge) > 0) {
+                    continue;
+                }
 
-                    // Check if deprecated context has exceeded grace period
-                    if (contextVersion.isDeprecated() &&
-                        contextVersion.getTimeSinceLastUse().compareTo(deprecatedContextGracePeriod) > 0) {
-                        continue;
-                    }
+                // Check if deprecated context has exceeded grace period
+                if (contextVersion.isDeprecated() &&
+                    contextVersion.getTimeSinceLastUse().compareTo(deprecatedContextGracePeriod) > 0) {
+                    continue;
+                }
 
-                    // This version is available, check if it's the oldest so far
-                    if (oldestVersion == -1 || version < oldestVersion) {
-                        oldestVersion = version;
-                    }
+                // This version is available, check if it's the oldest so far
+                if (oldestVersion == -1 || version < oldestVersion) {
+                    oldestVersion = version;
                 }
             }
 

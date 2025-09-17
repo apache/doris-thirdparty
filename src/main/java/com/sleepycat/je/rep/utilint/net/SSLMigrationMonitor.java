@@ -250,7 +250,7 @@ public class SSLMigrationMonitor {
                     details.put("totalConnections", connectionPoolManager.getAllConnectionIds().size());
                     details.put("poolHealthy", true);
                 } catch (Exception e) {
-                    logger.log(WARNING, "Error collecting connection pool stats", e);
+                logger.log(WARNING, "Error collecting connection pool stats: " + e.getMessage());
                     details.put("poolHealthy", false);
                     details.put("poolError", e.getMessage());
                 }
@@ -274,7 +274,7 @@ public class SSLMigrationMonitor {
                     details.put("readyForNewCert", contextManager.isReadyForNewCertificate());
                     details.put("contextManagerHealthy", true);
                 } catch (Exception e) {
-                    logger.log(WARNING, "Error collecting context manager stats", e);
+                logger.log(WARNING, "Error collecting context manager stats: " + e.getMessage());
                     details.put("contextManagerHealthy", false);
                     details.put("contextError", e.getMessage());
                 }
@@ -297,7 +297,7 @@ public class SSLMigrationMonitor {
             throw critical;
         } catch (Exception e) {
             // All other exceptions - return UNKNOWN status
-            logger.log(WARNING, "Unexpected error getting system status", e);
+            logger.log(WARNING, "Unexpected error getting system status: " + e.getMessage());
             Map<String, Object> errorDetails = new java.util.HashMap<>();
             errorDetails.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
             errorDetails.put("timestamp", Instant.now().toString());
@@ -328,7 +328,7 @@ public class SSLMigrationMonitor {
                     worstStatus = HealthStatus.UNKNOWN;
                 }
             } catch (Exception e) {
-                logger.log(WARNING, "Error in health checker: " + checker.getDescription(), e);
+                logger.log(WARNING, "Error in health checker: " + checker.getDescription() + ": " + e.getMessage());
                 if (worstStatus == HealthStatus.HEALTHY) {
                     worstStatus = HealthStatus.UNKNOWN;
                 }
@@ -516,22 +516,23 @@ public class SSLMigrationMonitor {
 
         for (String id : connectionIds) {
             ConnectionPoolManager.ConnectionInfo info = connectionPoolManager.getConnection(id);
-            if (info != null) {
-                switch (info.getState()) {
-                    case MIGRATING:
-                        migratingCount++;
-                        summary.append("  ").append(id).append(": MIGRATING (attempt ")
-                               .append(info.getMigrationAttempts()).append(")\n");
-                        break;
-                    case FAILED:
-                        failedCount++;
-                        summary.append("  ").append(id).append(": FAILED - ")
-                               .append(info.getErrorMessage()).append("\n");
-                        break;
-                    case MIGRATED:
-                        migratedCount++;
-                        break;
-                }
+            if (info == null) {
+                continue;
+            }
+            switch (info.getState()) {
+                case MIGRATING:
+                    migratingCount++;
+                    summary.append("  ").append(id).append(": MIGRATING (attempt ")
+                            .append(info.getMigrationAttempts()).append(")\n");
+                    break;
+                case FAILED:
+                    failedCount++;
+                    summary.append("  ").append(id).append(": FAILED - ")
+                            .append(info.getErrorMessage()).append("\n");
+                    break;
+                case MIGRATED:
+                    migratedCount++;
+                    break;
             }
         }
 

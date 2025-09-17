@@ -28,6 +28,7 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Map;
 
 import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
@@ -381,7 +382,7 @@ public class SSLChannelFactory implements DataChannelFactory {
 
                 @Override
                 public void onMigrationFailure(String connectionId, Exception cause) {
-                    logger.log(WARNING, "SSL migration failed for connection " + connectionId, cause);
+                    logger.log(WARNING, "SSL migration failed for connection " + connectionId + ": " + cause.getMessage());
                 }
 
                 @Override
@@ -393,7 +394,7 @@ public class SSLChannelFactory implements DataChannelFactory {
             logger.log(INFO, "Graceful SSL migration system initialized");
 
         } catch (Exception e) {
-            logger.log(WARNING, "Failed to initialize graceful migration system", e);
+            logger.log(WARNING, "Failed to initialize graceful migration system: " + e.getMessage());
             // Graceful degradation - system will work without migration capabilities
             contextManager = null;
             connectionPoolManager = null;
@@ -429,7 +430,7 @@ public class SSLChannelFactory implements DataChannelFactory {
 
         } catch (Exception e) {
             // Fallback to timestamp-only ID if hashing fails
-            logger.log(WARNING, "Failed to hash connection info for privacy", e);
+            logger.log(WARNING, "Failed to hash connection info for privacy: " + e.getMessage());
             return String.format("%s-conn-%d", mode, timestamp);
         }
     }
@@ -474,7 +475,7 @@ public class SSLChannelFactory implements DataChannelFactory {
             logger.log(INFO, "Certificate file monitoring initialized with " + refreshInterval + " second interval");
 
         } catch (Exception e) {
-            logger.log(WARNING, "Failed to initialize certificate file watcher", e);
+            logger.log(WARNING, "Failed to initialize certificate file watcher: " + e.getMessage());
         }
     }
 
@@ -483,7 +484,7 @@ public class SSLChannelFactory implements DataChannelFactory {
      *
      * @param changedFilePath the path of the file that changed
      */
-    private void reloadCertificates(String changedFilePath) {
+    private void reloadCertificates(String changedFilePath, CertificateFileWatcher.FileChangeType changeType) {
         if (instanceParams == null) {
             logger.log(WARNING, "Cannot reload certificates: instance parameters not available");
             return;
@@ -524,7 +525,7 @@ public class SSLChannelFactory implements DataChannelFactory {
                 logger.log(INFO, "SSL certificates successfully reloaded");
 
             } catch (Exception e) {
-                logger.log(WARNING, "Failed to reload SSL certificates", e);
+                logger.log(WARNING, "Failed to reload SSL certificates: " + e.getMessage());
             }
         }
     }
@@ -549,7 +550,7 @@ public class SSLChannelFactory implements DataChannelFactory {
             // DN-based authenticators and verifiers automatically handle
             // certificate changes during SSL handshake validation, no action needed
         } catch (Exception e) {
-            logger.log(WARNING, "Failed to reload mirror matcher principals", e);
+            logger.log(WARNING, "Failed to reload mirror matcher principals: " + e.getMessage());
         }
     }
 

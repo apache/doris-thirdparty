@@ -14,6 +14,8 @@
 package com.sleepycat.je.rep.utilint.net;
 
 import java.io.IOException;
+import java.net.Socket;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.atomic.AtomicReference;
@@ -27,6 +29,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLEngineResult;
+import javax.net.ssl.SSLParameters;
 
 import com.sleepycat.je.rep.net.DataChannel;
 import com.sleepycat.je.rep.net.InstanceLogger;
@@ -276,41 +279,42 @@ public class MigratableSSLDataChannel implements DataChannel {
     private void copySSLParameters(SSLEngine newEngine) {
         try {
             SSLDataChannel currentChannel = primaryChannel.get();
-            if (currentChannel != null) {
-                // Unfortunately, SSLDataChannel doesn't expose the internal SSLEngine
-                // So we'll copy from the factory's base parameters instead
-                // This could be improved by exposing getSSLEngine() in SSLDataChannel
-
-                // For now, we'll use a best-effort approach with common parameters
-                SSLEngine currentEngine = getCurrentSSLEngine();
-                if (currentEngine != null) {
-                    SSLParameters currentParams = currentEngine.getSSLParameters();
-
-                    // Create new parameters based on current ones
-                    SSLParameters newParams = new SSLParameters(
-                        currentParams.getCipherSuites(),
-                        currentParams.getProtocols()
-                    );
-
-                    newParams.setWantClientAuth(currentParams.getWantClientAuth());
-                    newParams.setNeedClientAuth(currentParams.getNeedClientAuth());
-                    newParams.setUseCipherSuitesOrder(currentParams.getUseCipherSuitesOrder());
-
-                    // Copy endpoint identification algorithm if available
-                    try {
-                        newParams.setEndpointIdentificationAlgorithm(
-                            currentParams.getEndpointIdentificationAlgorithm());
-                    } catch (Exception e) {
-                        // Ignore if not supported in this JVM version
-                    }
-
-                    newEngine.setSSLParameters(newParams);
-
-                    logger.log(FINE, "Copied SSL parameters from current engine to new engine");
-                } else {
-                    logger.log(WARNING, "Could not copy SSL parameters - current engine not available");
-                }
+            if (currentChannel == null) {
+                return;
             }
+            // Unfortunately, SSLDataChannel doesn't expose the internal SSLEngine
+            // So we'll copy from the factory's base parameters instead
+            // This could be improved by exposing getSSLEngine() in SSLDataChannel
+
+            // For now, we'll use a best-effort approach with common parameters
+            SSLEngine currentEngine = getCurrentSSLEngine();
+            if (currentEngine != null) {
+                logger.log(WARNING, "Could not copy SSL parameters - current engine not available");
+                return;
+            }
+            SSLParameters currentParams = currentEngine.getSSLParameters();
+
+            // Create new parameters based on current ones
+            SSLParameters newParams = new SSLParameters(
+                currentParams.getCipherSuites(),
+                currentParams.getProtocols()
+            );
+
+            newParams.setWantClientAuth(currentParams.getWantClientAuth());
+            newParams.setNeedClientAuth(currentParams.getNeedClientAuth());
+            newParams.setUseCipherSuitesOrder(currentParams.getUseCipherSuitesOrder());
+
+            // Copy endpoint identification algorithm if available
+            try {
+                newParams.setEndpointIdentificationAlgorithm(
+                    currentParams.getEndpointIdentificationAlgorithm());
+            } catch (Exception e) {
+                // Ignore if not supported in this JVM version
+            }
+
+            newEngine.setSSLParameters(newParams);
+
+            logger.log(FINE, "Copied SSL parameters from current engine to new engine");
         } catch (Exception e) {
             logger.log(WARNING, "Failed to copy SSL parameters: " + e.getMessage());
             // Continue without copying - new engine will use default parameters
@@ -648,16 +652,16 @@ public class MigratableSSLDataChannel implements DataChannel {
     }
 
     @Override
-    public boolean isBlocking() throws IOException {
+    public boolean isBlocking() {
         return socketChannel.isBlocking();
     }
 
     @Override
-    public DataChannel configureBlocking(boolean block) throws IOException {
+    public void configureBlocking(boolean block) throws IOException {
         migrationLock.readLock().lock();
         try {
             SSLDataChannel channel = getActiveChannelOrThrow();
-            return channel.configureBlocking(block);
+            channel.configureBlocking(block);
         } finally {
             migrationLock.readLock().unlock();
         }
@@ -853,6 +857,26 @@ public class MigratableSSLDataChannel implements DataChannel {
             clientMode,
             isHealthy()
         );
+    }
+
+    @Override
+    public SocketChannel getSocketChannel() {
+        return socketChannel;
+    }
+
+    @Override
+    public SocketAddress getRemoteAddress() throws IOException {
+        return socketChannel.getRemoteAddress();
+    }
+
+    @Override
+    public Socket socket() {
+        return socketChannel.socket();
+    }
+
+    @Override
+    public boolean isConnected() {
+        return socketChannel.isConnected();
     }
 
     @Override

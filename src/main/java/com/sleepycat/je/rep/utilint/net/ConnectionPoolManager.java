@@ -13,6 +13,7 @@
 
 package com.sleepycat.je.rep.utilint.net;
 
+import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
@@ -235,33 +236,34 @@ public class ConnectionPoolManager {
      */
     public void unregisterConnection(String connectionId) {
         ConnectionInfo info = connections.remove(connectionId);
-        if (info != null) {
-            // Decrement total connections counter
-            totalConnections.decrementAndGet();
-
-            // Try to atomically set state to CLOSED
-            // This prevents races with ongoing migrations
-            ConnectionState oldState = info.getState();
-            if (info.compareAndSetState(oldState, ConnectionState.CLOSED)) {
-                // Close the channel to prevent resource leaks
-                try {
-                    info.getChannel().closeForcefully();
-                } catch (IOException e) {
-                    logger.log(WARNING, "Error closing channel during unregistration for " +
-                              connectionId, e);
-                } catch (Exception e) {
-                    logger.log(WARNING, "Unexpected error closing channel for " +
-                              connectionId, e);
-                }
-
-                logger.log(FINE, "Unregistered and closed connection: " + connectionId +
-                          " (was in " + oldState + " state)");
-            } else {
-                // State was changed concurrently, but we still removed it from pool
-                logger.log(FINE, "Unregistered connection: " + connectionId +
-                          " (state changed during removal)");
-            }
+        if (info == null) {
+            return;
         }
+        // Decrement total connections counter
+        totalConnections.decrementAndGet();
+
+        // Try to atomically set state to CLOSED
+        // This prevents races with ongoing migrations
+        ConnectionState oldState = info.getState();
+        if (!info.compareAndSetState(oldState, ConnectionState.CLOSED)) {
+            // State was changed concurrently, but we still removed it from pool
+            logger.log(FINE, "Unregistered connection: " + connectionId +
+                        " (state changed during removal)");
+            return;
+        }
+        // Close the channel to prevent resource leaks
+        try {
+            info.getChannel().closeForcefully();
+        } catch (IOException e) {
+            logger.log(WARNING, "Error closing channel during unregistration for " +
+                        connectionId + ": " + e.getMessage());
+        } catch (Exception e) {
+            logger.log(WARNING, "Unexpected error closing channel for " +
+                        connectionId + ": " + e.getMessage());
+        }
+
+        logger.log(FINE, "Unregistered and closed connection: " + connectionId +
+                    " (was in " + oldState + " state)");
     }
 
     /**
@@ -385,16 +387,16 @@ public class ConnectionPoolManager {
                 logger.log(INFO, "Successfully migrated connection: " + connectionId);
 
                 // Notify migration success
+                final boolean finalSuccess = success;
                 notifyMigrationCallbacks(callback -> callback.onMigrationSuccess(connectionId));
 
                 // Exit successfully, skip catch block
-                notifyMigrationCallbacks(callback -> callback.onMigrationComplete(connectionId, success));
+                notifyMigrationCallbacks(callback -> callback.onMigrationComplete(connectionId, finalSuccess));
                 return;
-            } else {
-                // Handle migration failure without throwing exception to avoid thread pool stress
-                logger.log(WARNING, "Migration failed for connection: " + connectionId + " (returned false)");
-                info.setErrorMessage("Migration operation returned false");
             }
+            // Handle migration failure without throwing exception to avoid thread pool stress
+            logger.log(WARNING, "Migration failed for connection: " + connectionId + " (returned false)");
+            info.setErrorMessage("Migration operation returned false");
 
         } catch (Exception e) {
             lastException = e;
@@ -419,8 +421,9 @@ public class ConnectionPoolManager {
                           (lastException != null ? lastException.getMessage() : "returned false"));
 
                 // Notify migration failure
-                if (lastException != null) {
-                    notifyMigrationCallbacks(callback -> callback.onMigrationFailure(connectionId, lastException));
+                final Exception finalException = lastException;
+                if (finalException != null) {
+                    notifyMigrationCallbacks(callback -> callback.onMigrationFailure(connectionId, finalException));
                 } else {
                     notifyMigrationCallbacks(callback -> callback.onMigrationFailure(connectionId,
                         new RuntimeException("Migration operation returned false")));
@@ -428,7 +431,8 @@ public class ConnectionPoolManager {
             }
 
             // Notify migration complete
-            notifyMigrationCallbacks(callback -> callback.onMigrationComplete(connectionId, success));
+            final boolean finalSuccess = success;
+            notifyMigrationCallbacks(callback -> callback.onMigrationComplete(connectionId, finalSuccess));
         }
     }
 
@@ -482,7 +486,7 @@ public class ConnectionPoolManager {
 
         } catch (Exception e) {
             logger.log(WARNING, "Exception during connection migration for " +
-                      info.getConnectionId(), e);
+                      info.getConnectionId() + ": " + e.getMessage());
             throw e;
         }
     }
@@ -551,7 +555,7 @@ public class ConnectionPoolManager {
             try {
                 action.accept(callback);
             } catch (Exception e) {
-                logger.log(WARNING, "Error in migration callback", e);
+                logger.log(WARNING, "Error in migration callback: " + e.getMessage());
             }
         }
     }
@@ -617,10 +621,10 @@ public class ConnectionPoolManager {
                             info.getChannel().closeForcefully();
                         } catch (IOException e) {
                             logger.log(WARNING, "Error closing channel in health check for " +
-                                      entry.getKey(), e);
+                                      entry.getKey() + ": " + e.getMessage());
                         } catch (Exception e) {
                             logger.log(WARNING, "Unexpected error closing channel in health check for " +
-                                      entry.getKey(), e);
+                                      entry.getKey() + ": " + e.getMessage());
                         }
 
                         removedCount++;
@@ -638,7 +642,7 @@ public class ConnectionPoolManager {
             }
 
         } catch (Exception e) {
-            logger.log(WARNING, "Error during health check", e);
+            logger.log(WARNING, "Error during health check: " + e.getMessage());
         }
     }
 
@@ -806,10 +810,10 @@ public class ConnectionPoolManager {
                 info.getChannel().closeForcefully();
             } catch (IOException e) {
                 logger.log(WARNING, "Error closing channel during shutdown for " +
-                          info.getConnectionId(), e);
+                          info.getConnectionId() + ": " + e.getMessage());
             } catch (Exception e) {
                 logger.log(WARNING, "Unexpected error closing channel during shutdown for " +
-                          info.getConnectionId(), e);
+                          info.getConnectionId() + ": " + e.getMessage());
             }
             info.setState(ConnectionState.CLOSED);
         }
