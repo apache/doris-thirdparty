@@ -531,6 +531,26 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
     public static final String SSL_CERT_REFRESH_INTERVAL_SECONDS =
         EnvironmentParams.REP_PARAM_PREFIX + "ssl.certRefreshIntervalSeconds";
 
+    /**
+     * The timeout in seconds for smooth certificate transition.
+     * During certificate reload, the system will keep backup certificates
+     * for this duration to ensure smooth transition without connection
+     * disruption. After this timeout, backup certificates will be cleaned up.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>Long</td>
+     * <td>No</td>
+     * <td>30</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_CERT_TRANSITION_TIMEOUT_SECONDS =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.certTransitionTimeoutSeconds";
+
     /* The set of Replication properties specific to this class */
     private static Set<String> repSSLProperties;
     static {
@@ -554,6 +574,7 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
         repSSLProperties.add(SSL_HOST_VERIFIER_CLASS);
         repSSLProperties.add(SSL_HOST_VERIFIER_PARAMS);
         repSSLProperties.add(SSL_CERT_REFRESH_INTERVAL_SECONDS);
+        repSSLProperties.add(SSL_CERT_TRANSITION_TIMEOUT_SECONDS);
         /* Nail the set down */
         repSSLProperties = Collections.unmodifiableSet(repSSLProperties);
     }
@@ -1288,6 +1309,44 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
         }
         DbConfigManager.setVal(props, RepParams.SSL_CERT_REFRESH_INTERVAL_SECONDS,
                                Long.toString(intervalSeconds), validateParams);
+    }
+
+    /**
+     * Returns the certificate transition timeout in seconds.
+     *
+     * @return the transition timeout in seconds
+     */
+    public long getSSLCertTransitionTimeoutSeconds() {
+        return DbConfigManager.getLongVal(props, RepParams.SSL_CERT_TRANSITION_TIMEOUT_SECONDS);
+    }
+
+    /**
+     * Sets the certificate transition timeout in seconds.
+     * During certificate reload, the system will keep backup certificates
+     * for this duration to ensure smooth transition without connection
+     * disruption. After this timeout, backup certificates will be cleaned up.
+     *
+     * @param timeoutSeconds the transition timeout in seconds
+     *
+     * @return this
+     *
+     * @throws IllegalArgumentException if timeoutSeconds is negative
+     */
+    public ReplicationNetworkConfig setSSLCertTransitionTimeoutSeconds(long timeoutSeconds) {
+        setSSLCertTransitionTimeoutSecondsVoid(timeoutSeconds);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLCertTransitionTimeoutSecondsVoid(long timeoutSeconds) {
+        if (timeoutSeconds < 0) {
+            throw new IllegalArgumentException("Certificate transition timeout cannot be negative");
+        }
+        DbConfigManager.setVal(props, RepParams.SSL_CERT_TRANSITION_TIMEOUT_SECONDS,
+                               Long.toString(timeoutSeconds), validateParams);
     }
 
     /**

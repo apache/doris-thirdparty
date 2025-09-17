@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 import com.sleepycat.je.rep.net.InstanceLogger;
 import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
+import static java.util.logging.Level.FINE;
 
 /**
  * A file watcher that monitors certificate files for changes and notifies
@@ -38,10 +39,62 @@ public class CertificateFileWatcher {
 
     private final WatchService watchService;
     private final ConcurrentHashMap<String, CertificateReloadListener> listeners;
+    private final ConcurrentHashMap<String, FileState> fileStates;
     private final AtomicBoolean running;
     private final Thread watcherThread;
     private final InstanceLogger logger;
     private final long refreshIntervalSeconds;
+
+    /**
+     * Tracks the state of a monitored file to detect delete-then-recreate scenarios.
+     */
+    private static class FileState {
+        final String filePath;
+        volatile boolean exists;
+        volatile long lastModified;
+        volatile long size;
+
+        FileState(String filePath) {
+            this.filePath = filePath;
+            updateFromFile();
+        }
+
+        void updateFromFile() {
+            File file = new File(filePath);
+            this.exists = file.exists();
+            this.lastModified = exists ? file.lastModified() : 0;
+            this.size = exists ? file.length() : 0;
+        }
+
+        boolean hasChanged() {
+            File file = new File(filePath);
+            boolean currentExists = file.exists();
+            long currentLastModified = currentExists ? file.lastModified() : 0;
+            long currentSize = currentExists ? file.length() : 0;
+
+            boolean changed = (currentExists != exists) ||
+                             (currentExists && (currentLastModified != lastModified || currentSize != size));
+
+            if (changed) {
+                exists = currentExists;
+                lastModified = currentLastModified;
+                size = currentSize;
+            }
+
+            return changed;
+        }
+
+        boolean wasDeletedThenRecreated() {
+            File file = new File(filePath);
+            boolean currentExists = file.exists();
+
+            // File was deleted and then recreated if:
+            // 1. Our tracked state shows it didn't exist before (exists = false)
+            // 2. It currently exists
+            // 3. This indicates a delete->create sequence
+            return !exists && currentExists;
+        }
+    }
 
     /**
      * Interface for listeners that want to be notified when certificate files change.
@@ -65,6 +118,7 @@ public class CertificateFileWatcher {
     public CertificateFileWatcher(InstanceLogger logger, long refreshIntervalSeconds) throws IOException {
         this.watchService = FileSystems.getDefault().newWatchService();
         this.listeners = new ConcurrentHashMap<>();
+        this.fileStates = new ConcurrentHashMap<>();
         this.running = new AtomicBoolean(false);
         this.logger = logger;
         this.refreshIntervalSeconds = refreshIntervalSeconds;
@@ -97,9 +151,14 @@ public class CertificateFileWatcher {
         try {
             parentDir.register(watchService,
                 StandardWatchEventKinds.ENTRY_MODIFY,
-                StandardWatchEventKinds.ENTRY_CREATE);
+                StandardWatchEventKinds.ENTRY_CREATE,
+                StandardWatchEventKinds.ENTRY_DELETE);
 
             listeners.put(filePath, listener);
+
+            // Initialize file state tracking
+            fileStates.put(filePath, new FileState(filePath));
+
             logger.log(INFO, "Registered file for certificate auto-reload: " + filePath);
 
             if (!running.get()) {
@@ -118,6 +177,7 @@ public class CertificateFileWatcher {
      */
     public void unregisterFile(String filePath) {
         listeners.remove(filePath);
+        fileStates.remove(filePath);
         logger.log(INFO, "Unregistered file from certificate auto-reload: " + filePath);
     }
 
@@ -167,10 +227,12 @@ public class CertificateFileWatcher {
                 }
 
                 if (key == null) {
-                    // Timeout occurred, continue to next iteration
+                    // Timeout occurred, check for delete-then-recreate scenarios
+                    checkForDeleteThenRecreate();
                     continue;
                 }
 
+                // Process file system events
                 for (WatchEvent<?> event : key.pollEvents()) {
                     WatchEvent.Kind<?> kind = event.kind();
 
@@ -190,16 +252,17 @@ public class CertificateFileWatcher {
                     Path fullPath = watchedDir.resolve(changedFile);
                     String fullPathStr = fullPath.toString();
 
+                    // Check if this is a file we're monitoring
                     CertificateReloadListener listener = listeners.get(fullPathStr);
-                    if (listener != null) {
-                        logger.log(INFO, "Certificate file changed, triggering reload: " + fullPathStr);
-                        try {
-                            listener.onCertificateFileChanged(fullPathStr);
-                        } catch (Exception e) {
-                            logger.log(WARNING, "Error during certificate reload: " + e.getMessage());
-                        }
+                    FileState fileState = fileStates.get(fullPathStr);
+
+                    if (listener != null && fileState != null) {
+                        handleFileEvent(kind, fullPathStr, listener, fileState);
                     }
                 }
+
+                // Also check for delete-then-recreate scenarios after processing events
+                checkForDeleteThenRecreate();
 
                 if (!key.reset()) {
                     break;
@@ -209,6 +272,68 @@ public class CertificateFileWatcher {
                 break;
             } catch (Exception e) {
                 logger.log(WARNING, "Unexpected error in certificate file watcher: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Handle a specific file system event.
+     */
+    private void handleFileEvent(WatchEvent.Kind<?> kind, String fullPath,
+                                CertificateReloadListener listener, FileState fileState) {
+        try {
+            if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
+                logger.log(FINE, "Certificate file deleted: " + fullPath);
+                // Mark as deleted but don't update other fields yet
+                // This allows wasDeletedThenRecreated() to work correctly
+                fileState.exists = false;
+
+            } else if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
+                // Check if this is a recreation after deletion
+                if (fileState.wasDeletedThenRecreated()) {
+                    logger.log(INFO, "Certificate file recreated after deletion, triggering reload: " + fullPath);
+                    fileState.updateFromFile(); // Update all fields now
+                    listener.onCertificateFileChanged(fullPath);
+                } else {
+                    logger.log(FINE, "Certificate file created: " + fullPath);
+                    fileState.updateFromFile();
+                }
+
+            } else if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
+                // Standard modification - only trigger if file actually changed
+                if (fileState.hasChanged()) {
+                    logger.log(INFO, "Certificate file modified, triggering reload: " + fullPath);
+                    listener.onCertificateFileChanged(fullPath);
+                }
+            }
+        } catch (Exception e) {
+            logger.log(WARNING, "Error handling file event for " + fullPath + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Check all monitored files for delete-then-recreate scenarios.
+     * This handles cases where the file system events might be missed
+     * or when polling is used instead of blocking wait.
+     */
+    private void checkForDeleteThenRecreate() {
+        for (String filePath : fileStates.keySet()) {
+            FileState fileState = fileStates.get(filePath);
+            CertificateReloadListener listener = listeners.get(filePath);
+
+            if (fileState != null && listener != null) {
+                try {
+                    if (fileState.wasDeletedThenRecreated()) {
+                        logger.log(INFO, "Detected delete-then-recreate scenario for: " + filePath);
+                        fileState.updateFromFile();
+                        listener.onCertificateFileChanged(filePath);
+                    } else if (fileState.hasChanged()) {
+                        logger.log(FINE, "Detected file changes during polling for: " + filePath);
+                        listener.onCertificateFileChanged(filePath);
+                    }
+                } catch (Exception e) {
+                    logger.log(WARNING, "Error checking file state for " + filePath + ": " + e.getMessage());
+                }
             }
         }
     }

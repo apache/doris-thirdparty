@@ -27,9 +27,11 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
+import static java.util.logging.Level.FINE;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.KeyManager;
@@ -89,6 +91,22 @@ public class SSLChannelFactory implements DataChannelFactory {
      * information for session creation in client mode.
      */
     private volatile SSLContext clientSSLContext;
+
+    /**
+     * Backup SSL contexts for graceful certificate transitions.
+     * These contexts hold the previous certificates during smooth certificate migration.
+     */
+    private volatile SSLContext backupServerSSLContext;
+    private volatile SSLContext backupClientSSLContext;
+
+    /**
+     * Certificate transition management.
+     * Controls smooth transition from old to new certificates.
+     * We use a queue-based approach to handle multiple certificate changes.
+     */
+    private volatile boolean inCertificateTransition = false;
+    private volatile long transitionStartTime = 0;
+    private final ConcurrentHashMap<String, Long> pendingReloads = new ConcurrentHashMap<>();
 
     /**
      * The base SSLParameters for use in channel creation.
@@ -330,6 +348,7 @@ public class SSLChannelFactory implements DataChannelFactory {
 
     /**
      * Reload certificates when file changes are detected.
+     * This method implements smart certificate transition that handles multiple file changes efficiently.
      *
      * @param changedFilePath the path of the file that changed
      */
@@ -339,25 +358,194 @@ public class SSLChannelFactory implements DataChannelFactory {
             return;
         }
 
-        logger.log(INFO, "Reloading SSL certificates due to file change: " + changedFilePath);
+        logger.log(INFO, "Starting smart certificate reload due to file change: " + changedFilePath);
+
+        // Record this file change with timestamp
+        pendingReloads.put(changedFilePath, System.currentTimeMillis());
 
         try {
-            // Reconstruct SSL contexts with new certificates
-            SSLContext newServerContext = constructSSLContext(instanceParams, false);
-            SSLContext newClientContext = constructSSLContext(instanceParams, true);
-
-            // Atomically update the contexts
-            this.serverSSLContext = newServerContext;
-            this.clientSSLContext = newClientContext;
-
-            // Reload mirror matcher principals if they exist
-            reloadMirrorMatcherPrincipals();
-
-            logger.log(INFO, "SSL certificates successfully reloaded");
+            // Start or continue the certificate transition process
+            smartCertificateTransition();
 
         } catch (Exception e) {
             logger.log(WARNING, "Failed to reload SSL certificates: " + e.getMessage());
+            // Remove from pending if failed
+            pendingReloads.remove(changedFilePath);
         }
+    }
+
+    /**
+     * Smart certificate transition that handles multiple file changes efficiently.
+     * This approach:
+     * 1. Collects multiple certificate changes in a short time window
+     * 2. Performs a single reload operation for all changes
+     * 3. Avoids redundant SSL context reconstruction
+     * 4. Supports independent processing of different certificate files
+     */
+    private void smartCertificateTransition() {
+        synchronized (this) {
+            if (inCertificateTransition) {
+                // Already in progress, the pending changes will be picked up
+                logger.log(INFO, "Certificate transition in progress, queuing additional changes");
+                return;
+            }
+
+            if (pendingReloads.isEmpty()) {
+                return;
+            }
+
+            inCertificateTransition = true;
+            transitionStartTime = System.currentTimeMillis();
+        }
+
+        // Use a background thread to handle the actual transition
+        Thread transitionThread = new Thread(this::performCertificateTransition, "SSLCertTransition");
+        transitionThread.setDaemon(true);
+        transitionThread.start();
+    }
+
+    /**
+     * Perform the actual certificate transition in a background thread.
+     */
+    private void performCertificateTransition() {
+        try {
+            // Wait a short time to collect multiple file changes
+            Thread.sleep(100); // 100ms debounce window
+
+            ConcurrentHashMap<String, Long> currentPendingReloads;
+            synchronized (this) {
+                if (pendingReloads.isEmpty()) {
+                    inCertificateTransition = false;
+                    return;
+                }
+
+                // Take a snapshot of pending reloads
+                currentPendingReloads = new ConcurrentHashMap<>(pendingReloads);
+                pendingReloads.clear();
+            }
+
+            logger.log(INFO, "Processing certificate changes for " + currentPendingReloads.size() + " files: " +
+                      String.join(", ", currentPendingReloads.keySet()));
+
+            logger.log(FINE, "Pre-loading new SSL certificates in background");
+
+            // Step 1: Pre-construct new SSL contexts (lightweight validation)
+            SSLContext candidateServerContext = constructSSLContext(instanceParams, false);
+            SSLContext candidateClientContext = constructSSLContext(instanceParams, true);
+
+            // Step 2: Validate new contexts by creating a test SSL engine
+            validateSSLContext(candidateServerContext, "server");
+            validateSSLContext(candidateClientContext, "client");
+
+            logger.log(FINE, "New SSL certificates validated successfully");
+
+            // Step 3: Store current contexts as backup for graceful fallback
+            backupServerSSLContext = serverSSLContext;
+            backupClientSSLContext = clientSSLContext;
+
+            // Step 4: Atomically switch to new contexts (this is the actual lightweight transition)
+            this.serverSSLContext = candidateServerContext;
+            this.clientSSLContext = candidateClientContext;
+
+            // Step 5: Update mirror matcher principals for new certificates
+            reloadMirrorMatcherPrincipals();
+
+            logger.log(INFO, "Smart SSL certificate transition completed successfully");
+
+            // Step 6: Schedule backup cleanup after transition timeout
+            scheduleBackupCleanup();
+
+            // Step 7: Check if there are new pending changes while we were processing
+            synchronized (this) {
+                if (!pendingReloads.isEmpty()) {
+                    logger.log(INFO, "Additional certificate changes detected during transition, scheduling another round");
+                    // Reset transition state and trigger another round
+                    inCertificateTransition = false;
+                    smartCertificateTransition();
+                    return;
+                }
+                inCertificateTransition = false;
+            }
+
+        } catch (Exception e) {
+            logger.log(WARNING, "Smart certificate transition failed, maintaining current certificates: " + e.getMessage());
+            rollbackCertificateTransition();
+        }
+    }
+
+    /**
+     * Lightweight SSL context validation to ensure new certificates are valid
+     * before committing to the transition.
+     */
+    private void validateSSLContext(SSLContext context, String mode) throws Exception {
+        if (context == null) {
+            throw new IllegalStateException("SSL context is null for mode: " + mode);
+        }
+
+        // Create a test SSL engine to validate the context
+        javax.net.ssl.SSLEngine testEngine = context.createSSLEngine();
+        if (testEngine == null) {
+            throw new IllegalStateException("Failed to create SSL engine for mode: " + mode);
+        }
+
+        // Validate that we can retrieve supported cipher suites
+        String[] cipherSuites = testEngine.getSupportedCipherSuites();
+        if (cipherSuites == null || cipherSuites.length == 0) {
+            throw new IllegalStateException("No cipher suites available for mode: " + mode);
+        }
+
+        logger.log(FINE, "SSL context validation passed for " + mode + " mode with " +
+                   cipherSuites.length + " cipher suites");
+    }
+
+    /**
+     * Rollback to backup SSL contexts if transition fails.
+     */
+    private void rollbackCertificateTransition() {
+        synchronized (this) {
+            if (backupServerSSLContext != null && backupClientSSLContext != null) {
+                logger.log(INFO, "Rolling back to previous SSL certificates");
+                this.serverSSLContext = backupServerSSLContext;
+                this.clientSSLContext = backupClientSSLContext;
+            }
+
+            // Clean up backup contexts and pending changes
+            backupServerSSLContext = null;
+            backupClientSSLContext = null;
+            pendingReloads.clear();
+            inCertificateTransition = false;
+        }
+    }
+
+    /**
+     * Schedule cleanup of backup contexts after transition timeout.
+     * This prevents memory leaks from holding old SSL contexts indefinitely.
+     */
+    private void scheduleBackupCleanup() {
+        final ReplicationSSLConfig config =
+            (ReplicationSSLConfig) instanceParams.getContext().getRepNetConfig();
+        final long timeoutMs = config.getSSLCertTransitionTimeoutSeconds() * 1000;
+
+        // Use a simple approach with a daemon thread for cleanup
+        Thread cleanupThread = new Thread(() -> {
+            try {
+                Thread.sleep(timeoutMs);
+                synchronized (this) {
+                    if (inCertificateTransition &&
+                        (System.currentTimeMillis() - transitionStartTime) >= timeoutMs) {
+                        logger.log(FINE, "Cleaning up backup SSL contexts after transition timeout");
+                        backupServerSSLContext = null;
+                        backupClientSSLContext = null;
+                        inCertificateTransition = false;
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, "SSLCertificateCleanup");
+
+        cleanupThread.setDaemon(true);
+        cleanupThread.start();
     }
 
     /**
@@ -392,6 +580,96 @@ public class SSLChannelFactory implements DataChannelFactory {
             certificateWatcher.stop();
             certificateWatcher = null;
         }
+
+        // Clean up any ongoing certificate transition
+        synchronized (this) {
+            if (inCertificateTransition) {
+                logger.log(FINE, "Cleaning up certificate transition during shutdown");
+                backupServerSSLContext = null;
+                backupClientSSLContext = null;
+                pendingReloads.clear();
+                inCertificateTransition = false;
+            }
+        }
+    }
+
+    /**
+     * Manually trigger smart certificate transition.
+     * This can be called programmatically to reload certificates without
+     * waiting for file system events.
+     *
+     * @return true if transition was initiated successfully, false otherwise
+     */
+    public boolean triggerCertificateTransition() {
+        if (instanceParams == null) {
+            logger.log(WARNING, "Cannot trigger certificate transition: instance parameters not available");
+            return false;
+        }
+
+        try {
+            logger.log(INFO, "Manually triggered certificate transition");
+            // Add a manual trigger entry
+            pendingReloads.put("MANUAL_TRIGGER", System.currentTimeMillis());
+            smartCertificateTransition();
+            return true;
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to trigger certificate transition: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check if a certificate transition is currently in progress.
+     *
+     * @return true if transition is in progress, false otherwise
+     */
+    public boolean isInCertificateTransition() {
+        return inCertificateTransition;
+    }
+
+    /**
+     * Diagnose current SSL certificate configuration and status.
+     * This method provides detailed information about certificate files,
+     * monitoring status, and current certificate fingerprints.
+     */
+    public void diagnoseCertificateConfiguration() {
+        if (instanceParams == null) {
+            logger.log(WARNING, "Cannot diagnose: instance parameters not available");
+            return;
+        }
+
+        try {
+            final ReplicationSSLConfig config =
+                (ReplicationSSLConfig) instanceParams.getContext().getRepNetConfig();
+
+            SSLCertificateDiagnostics diagnostics = new SSLCertificateDiagnostics(logger, config);
+            diagnostics.diagnose();
+
+            // Additional status information
+            logger.log(INFO, "Certificate watcher status: " +
+                      (certificateWatcher != null ? "ACTIVE" : "INACTIVE"));
+            logger.log(INFO, "In certificate transition: " + inCertificateTransition);
+
+            if (inCertificateTransition) {
+                long elapsed = System.currentTimeMillis() - transitionStartTime;
+                logger.log(INFO, "Transition elapsed time: " + elapsed + " ms");
+            }
+
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to run certificate diagnostics: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Force certificate reload immediately, bypassing file monitoring.
+     * This method is useful for troubleshooting or when automatic monitoring
+     * is not working properly.
+     *
+     * @return true if reload was successful, false otherwise
+     */
+    public boolean forceReloadCertificates() {
+        logger.log(INFO, "Force reloading SSL certificates (bypassing file monitoring)");
+        return triggerCertificateTransition();
     }
 
     /**

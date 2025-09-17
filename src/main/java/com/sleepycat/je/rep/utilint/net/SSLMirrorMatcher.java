@@ -112,18 +112,31 @@ class SSLMirrorMatcher {
 
     /**
      * Reload the local principal when certificates change.
+     * This method provides graceful certificate principal updates during smooth transitions.
      */
     public void reloadPrincipal() {
         try {
+            Principal oldPrincipal = ourPrincipal;
             Principal newPrincipal = determinePrincipal(context, clientMode);
+
             if (newPrincipal != null) {
-                ourPrincipal = newPrincipal;
-                logger.log(INFO, "SSL mirror matcher principal reloaded successfully");
+                if (!newPrincipal.equals(oldPrincipal)) {
+                    logger.log(INFO, String.format(
+                        "SSL mirror matcher principal updated from %s to %s",
+                        oldPrincipal != null ? oldPrincipal.getName() : "null",
+                        newPrincipal.getName()));
+                    ourPrincipal = newPrincipal;
+                } else {
+                    logger.log(FINE, "SSL mirror matcher principal unchanged after reload");
+                }
             } else {
-                logger.log(WARNING, "Failed to reload SSL mirror matcher principal: no principal found");
+                // Maintain current principal if new one cannot be determined
+                logger.log(WARNING,
+                    "Failed to reload SSL mirror matcher principal: no principal found, keeping current principal");
             }
         } catch (Exception e) {
-            logger.log(WARNING, "Failed to reload SSL mirror matcher principal: " + e.getMessage());
+            logger.log(WARNING,
+                "Failed to reload SSL mirror matcher principal: " + e.getMessage() + ", keeping current principal");
         }
     }
 
