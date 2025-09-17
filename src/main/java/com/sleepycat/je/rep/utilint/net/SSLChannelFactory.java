@@ -14,6 +14,7 @@
 package com.sleepycat.je.rep.utilint.net;
 
 import java.io.FileInputStream;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -29,6 +30,11 @@ import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
@@ -154,6 +160,16 @@ public class SSLChannelFactory implements DataChannelFactory {
      * SSL migration monitor for comprehensive system monitoring
      */
     private SSLMigrationMonitor migrationMonitor;
+
+    /**
+     * Scheduled executor for delayed certificate reload operations
+     */
+    private ScheduledExecutorService delayedReloadExecutor;
+
+    /**
+     * Map to track pending delayed reloads to avoid duplicate scheduling
+     */
+    private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingDelayedReloads = new ConcurrentHashMap<>();
 
     /**
      * Constructor for use during creating based on access configuration
@@ -368,6 +384,13 @@ public class SSLChannelFactory implements DataChannelFactory {
             // Initialize comprehensive monitoring
             migrationMonitor = new SSLMigrationMonitor(connectionPoolManager, contextManager, logger);
 
+            // Initialize delayed reload executor
+            delayedReloadExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "SSL-DelayedReload");
+                t.setDaemon(true);
+                return t;
+            });
+
             // Add migration callback for logging
             connectionPoolManager.addMigrationCallback(new ConnectionPoolManager.MigrationCallback() {
                 @Override
@@ -490,11 +513,28 @@ public class SSLChannelFactory implements DataChannelFactory {
             return;
         }
 
+        // Handle DELETE events with delayed processing
+        if (changeType == CertificateFileWatcher.FileChangeType.DELETED) {
+            logger.log(WARNING, "Certificate file was deleted: " + changedFilePath +
+                      ", scheduling delayed reload in 2 seconds to wait for replacement");
+            scheduleDelayedReload(changedFilePath, 2000);
+            return;
+        }
+
+        // For CREATE/MODIFY events, cancel any pending delayed reload for this file
+        cancelPendingDelayedReload(changedFilePath);
+
         // Synchronize to prevent concurrent reloads and ensure consistency
         synchronized (reloadLock) {
             logger.log(INFO, "Reloading SSL certificates due to file change: " + changedFilePath);
 
             try {
+                // Validate all required certificate files exist before reloading
+                if (!validateCertificateFiles()) {
+                    logger.log(WARNING, "Certificate validation failed, keeping current SSL contexts");
+                    return;
+                }
+
                 // Reconstruct SSL contexts with new certificates
                 SSLContext newServerContext = constructSSLContext(instanceParams, false);
                 SSLContext newClientContext = constructSSLContext(instanceParams, true);
@@ -526,6 +566,7 @@ public class SSLChannelFactory implements DataChannelFactory {
 
             } catch (Exception e) {
                 logger.log(WARNING, "Failed to reload SSL certificates: " + e.getMessage());
+                // Keep existing SSL contexts - don't break current functionality
             }
         }
     }
@@ -678,7 +719,168 @@ public class SSLChannelFactory implements DataChannelFactory {
             logger.log(INFO, "SSL migration monitor cleaned up");
         }
 
+        // Shutdown delayed reload executor and cancel pending tasks
+        if (delayedReloadExecutor != null) {
+            // Cancel all pending delayed reload tasks
+            for (ScheduledFuture<?> future : pendingDelayedReloads.values()) {
+                future.cancel(true);
+            }
+            pendingDelayedReloads.clear();
+
+            delayedReloadExecutor.shutdown();
+            try {
+                if (!delayedReloadExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    delayedReloadExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                delayedReloadExecutor.shutdownNow();
+            }
+            delayedReloadExecutor = null;
+            logger.log(INFO, "Delayed reload executor shutdown completed");
+        }
+
         logger.log(INFO, "SSLChannelFactory shutdown completed");
+    }
+
+    /**
+     * Schedule a delayed certificate reload for handling DELETE events
+     */
+    private void scheduleDelayedReload(String filePath, long delayMs) {
+        if (delayedReloadExecutor == null) {
+            logger.log(WARNING, "Cannot schedule delayed reload - executor not available");
+            return;
+        }
+
+        // Cancel any existing delayed reload for this file
+        cancelPendingDelayedReload(filePath);
+
+        // Schedule new delayed reload
+        ScheduledFuture<?> future = delayedReloadExecutor.schedule(() -> {
+            // Remove from pending map
+            pendingDelayedReloads.remove(filePath);
+
+            // Perform the actual reload with validation
+            performDelayedReload(filePath);
+        }, delayMs, TimeUnit.MILLISECONDS);
+
+        // Track the scheduled task
+        pendingDelayedReloads.put(filePath, future);
+
+        logger.log(INFO, "Scheduled delayed reload for " + filePath + " in " + delayMs + "ms");
+    }
+
+    /**
+     * Cancel pending delayed reload for a specific file
+     */
+    private void cancelPendingDelayedReload(String filePath) {
+        ScheduledFuture<?> existingFuture = pendingDelayedReloads.remove(filePath);
+        if (existingFuture != null && !existingFuture.isDone()) {
+            existingFuture.cancel(false);
+            logger.log(INFO, "Cancelled pending delayed reload for " + filePath);
+        }
+    }
+
+    /**
+     * Perform delayed reload with validation
+     */
+    private void performDelayedReload(String originalFilePath) {
+        logger.log(INFO, "Executing delayed reload for " + originalFilePath);
+
+        try {
+            // Validate that required certificate files now exist
+            if (!validateCertificateFiles()) {
+                logger.log(WARNING, "Certificate files still missing after delayed reload wait, skipping reload");
+                return;
+            }
+
+            // Perform the actual certificate reload
+            synchronized (reloadLock) {
+                // Reconstruct SSL contexts with new certificates
+                SSLContext newServerContext = constructSSLContext(instanceParams, false);
+                SSLContext newClientContext = constructSSLContext(instanceParams, true);
+
+                // Use graceful migration if available
+                if (contextManager != null && connectionPoolManager != null) {
+                    // Register new context version
+                    int newVersion = contextManager.registerNewContext(newServerContext, newClientContext);
+
+                    // Update factory's current contexts atomically (for new connections)
+                    this.sslContexts = new SSLContextPair(newServerContext, newClientContext);
+
+                    // Trigger graceful migration for existing connections
+                    connectionPoolManager.triggerBatchMigration(contextManager);
+
+                    logger.log(INFO, "Delayed SSL certificate reload completed with graceful migration to version " + newVersion);
+
+                } else {
+                    // Fallback to atomic update (original behavior)
+                    this.sslContexts = new SSLContextPair(newServerContext, newClientContext);
+
+                    logger.log(INFO, "Delayed SSL certificate reload completed (atomic update - no graceful migration)");
+                }
+
+                // Reload mirror matcher principals if they exist
+                reloadMirrorMatcherPrincipals();
+
+                logger.log(INFO, "Delayed SSL certificate reload successful");
+            }
+        } catch (Exception e) {
+            logger.log(WARNING, "Delayed SSL certificate reload failed: " + e.getMessage());
+            // Keep existing SSL contexts - don't break current functionality
+        }
+    }
+
+    /**
+     * Validate that all required certificate files exist and are accessible
+     */
+    private boolean validateCertificateFiles() {
+        if (instanceParams == null) {
+            return false;
+        }
+
+        try {
+            final ReplicationSSLConfig config =
+                (ReplicationSSLConfig) instanceParams.getContext().getRepNetConfig();
+
+            // Check keystore file
+            String keystorePath = config.getSSLKeyStore();
+            if (keystorePath == null || keystorePath.isEmpty()) {
+                keystorePath = System.getProperty("javax.net.ssl.keyStore");
+            }
+            if (keystorePath != null && !keystorePath.isEmpty()) {
+                File keystoreFile = new File(keystorePath);
+                if (!keystoreFile.exists() || !keystoreFile.canRead()) {
+                    logger.log(WARNING, "Keystore file not accessible: " + keystorePath);
+                    return false;
+                }
+            }
+
+            // Check truststore file
+            String truststorePath = config.getSSLTrustStore();
+            if (truststorePath == null || truststorePath.isEmpty()) {
+                truststorePath = System.getProperty("javax.net.ssl.trustStore");
+            }
+            if (truststorePath != null && !truststorePath.isEmpty()) {
+                File truststoreFile = new File(truststorePath);
+                if (!truststoreFile.exists() || !truststoreFile.canRead()) {
+                    logger.log(WARNING, "Truststore file not accessible: " + truststorePath);
+                    return false;
+                }
+            }
+
+            return true;
+        } catch (Exception e) {
+            logger.log(WARNING, "Error validating certificate files: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get the count of pending delayed reload tasks (for monitoring)
+     */
+    public int getPendingDelayedReloadCount() {
+        return pendingDelayedReloads.size();
     }
 
     /**

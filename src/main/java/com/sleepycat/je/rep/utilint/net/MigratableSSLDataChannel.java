@@ -140,6 +140,12 @@ public class MigratableSSLDataChannel implements DataChannel {
             return false;
         }
 
+        // Pre-migration health check: verify connection is still alive
+        if (!isConnectionHealthy()) {
+            logger.log(WARNING, "Channel for connection " + connectionId + " is not healthy, skipping migration");
+            return false;
+        }
+
         // Acquire write lock and perform all checks inside it to prevent race conditions
         migrationLock.writeLock().lock();
         try {
@@ -152,6 +158,12 @@ public class MigratableSSLDataChannel implements DataChannel {
 
             if (migrationInProgress) {
                 return false; // Double-check under lock
+            }
+
+            // Double-check connection health under lock
+            if (!isConnectionHealthy()) {
+                logger.log(WARNING, "Channel for connection " + connectionId + " was closed during migration attempt");
+                return false;
             }
 
             // Prevent any further migration attempts while this one is running
@@ -828,6 +840,41 @@ public class MigratableSSLDataChannel implements DataChannel {
         return channel.isOpen() &&
                migrationState.get() != MigrationState.MIGRATION_FAILED &&
                !migrationInProgress;
+    }
+
+    /**
+     * Check if the connection is healthy enough for migration
+     * This is more strict than isHealthy() and includes socket-level checks
+     */
+    private boolean isConnectionHealthy() {
+        try {
+            // Check if socket channel is still open and connected
+            if (socketChannel == null || !socketChannel.isOpen() || !socketChannel.isConnected()) {
+                return false;
+            }
+
+            // Check if the active SSL channel is available and open
+            SSLDataChannel channel = getActiveChannel();
+            if (channel == null || !channel.isOpen()) {
+                return false;
+            }
+
+            // Check migration state - avoid migrating already failed connections
+            MigrationState state = migrationState.get();
+            if (state == MigrationState.MIGRATION_FAILED) {
+                return false;
+            }
+
+            // Check if migration is already in progress
+            if (migrationInProgress) {
+                return false;
+            }
+
+            return true;
+        } catch (Exception e) {
+            logger.log(WARNING, "Error checking connection health for " + connectionId + ": " + e.getMessage());
+            return false;
+        }
     }
 
     /**

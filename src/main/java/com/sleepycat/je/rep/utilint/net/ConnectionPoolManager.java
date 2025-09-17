@@ -320,20 +320,24 @@ public class ConnectionPoolManager {
     }
 
     /**
-     * Trigger batch connection migration with optimized lock-free snapshot
+     * Trigger batch connection migration with proactive cleanup and health filtering
      */
     public void triggerBatchMigration(SSLContextManager contextManager) {
-        // Create snapshot without any locks - ConcurrentHashMap.values() provides weakly consistent view
+        // Proactively clean up dead connections before migration to reduce failures
+        cleanupDeadConnections();
+
+        // Create snapshot with health filtering - only migrate healthy, active connections
         List<ConnectionInfo> snapshot = connections.values().stream()
                 .filter(info -> info.getState() == ConnectionState.ACTIVE)
+                .filter(info -> isConnectionHealthy(info))  // Add health check
                 .collect(Collectors.toList());
 
         if (snapshot.isEmpty()) {
-            logger.log(INFO, "No active connections to migrate");
+            logger.log(INFO, "No healthy active connections to migrate");
             return;
         }
 
-        logger.log(INFO, "Starting batch migration for " + snapshot.size() + " connections");
+        logger.log(INFO, "Starting batch migration for " + snapshot.size() + " healthy connections");
 
         // Submit migration tasks without holding any locks
         for (ConnectionInfo info : snapshot) {
@@ -342,10 +346,77 @@ public class ConnectionPoolManager {
     }
 
     /**
+     * Comprehensive pre-migration validation to prevent doomed migration attempts
+     */
+    private boolean preMigrationValidation(ConnectionInfo info, SSLContextManager contextManager) {
+        String connectionId = info.getConnectionId();
+
+        // Validate connection still exists in pool
+        if (!connections.containsKey(connectionId)) {
+            logger.log(FINE, "Connection " + connectionId + " no longer exists in pool, skipping migration");
+            return false;
+        }
+
+        // Validate connection state is suitable for migration
+        ConnectionState state = info.getState();
+        if (state != ConnectionState.ACTIVE && state != ConnectionState.RETRYING) {
+            logger.log(FINE, "Connection " + connectionId + " is in unsuitable state " + state + " for migration");
+            return false;
+        }
+
+        // Validate connection health
+        if (!isConnectionHealthy(info)) {
+            logger.log(WARNING, "Connection " + connectionId + " failed health check, skipping migration");
+            return false;
+        }
+
+        // Validate SSL context manager availability
+        if (contextManager == null) {
+            logger.log(WARNING, "SSL context manager is null, cannot migrate connection " + connectionId);
+            return false;
+        }
+
+        // Validate that a newer context version is available
+        try {
+            int currentContextVersion = contextManager.getCurrentVersion();
+            if (currentContextVersion <= 0) {
+                logger.log(WARNING, "No valid SSL context version available for migration of " + connectionId);
+                return false;
+            }
+
+            // Validate the context manager has available contexts
+            if (!contextManager.hasAvailableContexts()) {
+                logger.log(WARNING, "SSL context manager has no available contexts for migration of " + connectionId);
+                return false;
+            }
+
+        } catch (Exception e) {
+            logger.log(WARNING, "Error validating SSL context for migration of " + connectionId + ": " + e.getMessage());
+            return false;
+        }
+
+        // Validate retry attempts haven't been exceeded (for retrying connections)
+        if (state == ConnectionState.RETRYING && info.getMigrationAttempts() >= maxMigrationRetries) {
+            logger.log(WARNING, "Connection " + connectionId + " has exceeded max retry attempts (" +
+                      info.getMigrationAttempts() + "/" + maxMigrationRetries + "), marking as failed");
+            info.setState(ConnectionState.FAILED);
+            failedMigrations.incrementAndGet();
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Migrate a single connection with CAS state protection against duplicate migrations
      */
     private void migrateConnection(ConnectionInfo info, SSLContextManager contextManager) {
         String connectionId = info.getConnectionId();
+
+        // Pre-migration validation - comprehensive checks before attempting state transition
+        if (!preMigrationValidation(info, contextManager)) {
+            return;
+        }
 
         // Use CAS to atomically transition from ACTIVE or RETRYING to MIGRATING
         // This prevents multiple threads from migrating the same connection
@@ -823,5 +894,85 @@ public class ConnectionPoolManager {
         totalConnections.set(0);
 
         logger.log(INFO, "ConnectionPoolManager shutdown completed");
+    }
+
+    /**
+     * Check if a connection is healthy enough for migration
+     * This performs comprehensive health checks before attempting migration
+     */
+    private boolean isConnectionHealthy(ConnectionInfo info) {
+        if (info == null) {
+            return false;
+        }
+
+        try {
+            // Check connection state - only migrate ACTIVE connections
+            if (info.getState() != ConnectionState.ACTIVE) {
+                return false;
+            }
+
+            // Check if channel is available and healthy
+            MigratableSSLDataChannel channel = info.getChannel();
+            if (channel == null) {
+                return false;
+            }
+
+            // Use the channel's built-in health check
+            if (!channel.isHealthy()) {
+                return false;
+            }
+
+            // Additional check: verify channel is still open and connected
+            if (!channel.isOpen() || !channel.isConnected()) {
+                return false;
+            }
+
+            // Check if connection hasn't been idle too long
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - info.getLastActivityTime() > connectionTimeoutMs) {
+                return false;
+            }
+
+            return true;
+        } catch (Exception e) {
+            logger.log(WARNING, "Error checking connection health for " + info.getConnectionId() + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Proactively clean up dead connections before migration
+     * This reduces the number of failed migration attempts
+     */
+    public void cleanupDeadConnections() {
+        int cleanupCount = 0;
+
+        Iterator<Map.Entry<String, ConnectionInfo>> iterator = connections.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, ConnectionInfo> entry = iterator.next();
+            ConnectionInfo info = entry.getValue();
+
+            if (!isConnectionHealthy(info)) {
+                // Try to set state to CLOSED atomically
+                ConnectionState currentState = info.getState();
+                if (info.compareAndSetState(currentState, ConnectionState.CLOSED)) {
+                    iterator.remove();
+                    totalConnections.decrementAndGet();
+
+                    try {
+                        info.getChannel().closeForcefully();
+                    } catch (Exception e) {
+                        // Ignore errors during cleanup
+                    }
+
+                    cleanupCount++;
+                    logger.log(FINE, "Proactively cleaned up dead connection: " + info.getConnectionId());
+                }
+            }
+        }
+
+        if (cleanupCount > 0) {
+            logger.log(INFO, "Proactively cleaned up " + cleanupCount + " dead connections");
+        }
     }
 }
