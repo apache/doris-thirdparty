@@ -10,6 +10,7 @@
 #include "CLucene/store/IndexInput.h"
 #include "CLucene/store/_RAMDirectory.h"
 #include "CLucene/util/Array.h"
+#include "CLucene/index/IndexVersion.h"
 
 CL_NS_DEF(index)
 
@@ -107,6 +108,10 @@ private:
   int64_t curProxPointer{-1};
 
   bool hasProx = false;
+  IndexVersion indexVersion = IndexVersion::kV0;
+
+  int32_t maxBlockFreq = 0;
+  int32_t maxBlockNorm = 0;
   
 protected:
 
@@ -115,7 +120,7 @@ protected:
 public:
 	
     DefaultSkipListWriter(int32_t skipInterval, int32_t numberOfSkipLevels, int32_t docCount,
-    CL_NS(store)::IndexOutput* freqOutput, CL_NS(store)::IndexOutput* proxOutput);
+    CL_NS(store)::IndexOutput* freqOutput, CL_NS(store)::IndexOutput* proxOutput, IndexVersion indexVersion);
     ~DefaultSkipListWriter();
 
     friend class SegmentMerger;
@@ -123,7 +128,7 @@ public:
     /**
    * Sets the values for the current skip data.
    */
-    void setSkipData(int32_t doc, bool storePayloads, int32_t payloadLength);
+    void setSkipData(int32_t doc, bool storePayloads, int32_t payloadLength, int32_t maxBlockFreq = 0, int32_t maxBlockNorm = 0);
     void resetSkip();
 };
 

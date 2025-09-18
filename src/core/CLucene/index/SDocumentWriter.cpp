@@ -1032,9 +1032,8 @@ void SDocumentsWriter<T>::writeSegment(std::vector<std::string> &flushedFiles) {
     std::sort(allFields.begin(), allFields.end(), ThreadState::FieldData::sort);
     const int32_t numAllFields = allFields.size();
 
-    skipListWriter = _CLNEW DefaultSkipListWriter(termsOut->skipInterval,
-                                                  termsOut->maxSkipLevels,
-                                         numDocsInRAM, freqOut, proxOut);
+    skipListWriter = _CLNEW DefaultSkipListWriter(termsOut->skipInterval, termsOut->maxSkipLevels,
+                                                  numDocsInRAM, freqOut, proxOut, indexVersion_);
 
     int32_t start = 0;
     while (start < numAllFields) {

@@ -574,9 +574,9 @@ void DocumentsWriter::writeSegment(std::vector<std::string> &flushedFiles) {
     std::sort(allFields.begin(), allFields.end(), ThreadState::FieldData::sort);
     const int32_t numAllFields = allFields.size();
 
-    skipListWriter = _CLNEW DefaultSkipListWriter(termsOut->skipInterval,
-                                                  termsOut->maxSkipLevels,
-                                                  numDocsInRAM, freqOut, proxOut);
+    skipListWriter =
+            _CLNEW DefaultSkipListWriter(termsOut->skipInterval, termsOut->maxSkipLevels,
+                                         numDocsInRAM, freqOut, proxOut, IndexVersion::kV0);
 
     int32_t start = 0;
     while (start < numAllFields) {
