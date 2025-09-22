@@ -12,6 +12,7 @@
 #include "CLucene/LuceneThreads.h"
 #include "CLucene/util/CLStreams.h"
 
+#include <memory>
 #include <unordered_set>
 
 CL_CLASS_DEF(util,Reader)
@@ -290,6 +291,10 @@ public:
 	field name for backward compatibility. */
     virtual TokenStream* tokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader)=0;
 
+    virtual TokenStream* tokenStream(const TCHAR* fieldName, const std::shared_ptr<CL_NS(util)::Reader>& reader) {
+        return tokenStream(fieldName, reader.get());
+    }
+
     /** Creates a TokenStream that is allowed to be re-used
 	*  from the previous time that the same thread called
 	*  this method.  Callers that do not need to use more
@@ -298,6 +303,10 @@ public:
 	*  performance.
 	*/
     virtual TokenStream* reusableTokenStream(const TCHAR* fieldName, CL_NS(util)::Reader* reader);
+
+    virtual TokenStream* reusableTokenStream(const TCHAR* fieldName, const std::shared_ptr<CL_NS(util)::Reader>& reader) {
+        return reusableTokenStream(fieldName, reader.get());
+    }
 
     virtual void set_lowercase(bool lowercase) {
         _lowercase = lowercase;
