@@ -551,6 +551,82 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
     public static final String SSL_CERT_TRANSITION_TIMEOUT_SECONDS =
         EnvironmentParams.REP_PARAM_PREFIX + "ssl.certTransitionTimeoutSeconds";
 
+    /**
+     * The path to the PEM certificate file for SSL data channel factories.
+     * The specified path must be absolute.
+     * When both PEM and P12 configurations are present, P12 takes precedence.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>String</td>
+     * <td>No</td>
+     * <td>""</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_PEM_CERT_FILE =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.pemCertFile";
+
+    /**
+     * The path to the PEM private key file for SSL data channel factories.
+     * The specified path must be absolute.
+     * When both PEM and P12 configurations are present, P12 takes precedence.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>String</td>
+     * <td>No</td>
+     * <td>""</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_PEM_KEY_FILE =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.pemKeyFile";
+
+    /**
+     * The password for the PEM private key file (if encrypted).
+     * If this parameter is not set or has an empty value, the key is
+     * assumed to be unencrypted.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>String</td>
+     * <td>No</td>
+     * <td>""</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_PEM_KEY_PASSWORD =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.pemKeyPassword";
+
+    /**
+     * The path to the PEM CA certificate file for SSL trust verification.
+     * The specified path must be absolute.
+     * When both PEM and P12 configurations are present, P12 takes precedence.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>String</td>
+     * <td>No</td>
+     * <td>""</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_PEM_CA_CERT_FILE =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.pemCaCertFile";
+
     /* The set of Replication properties specific to this class */
     private static Set<String> repSSLProperties;
     static {
@@ -575,6 +651,10 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
         repSSLProperties.add(SSL_HOST_VERIFIER_PARAMS);
         repSSLProperties.add(SSL_CERT_REFRESH_INTERVAL_SECONDS);
         repSSLProperties.add(SSL_CERT_TRANSITION_TIMEOUT_SECONDS);
+        repSSLProperties.add(SSL_PEM_CERT_FILE);
+        repSSLProperties.add(SSL_PEM_KEY_FILE);
+        repSSLProperties.add(SSL_PEM_KEY_PASSWORD);
+        repSSLProperties.add(SSL_PEM_CA_CERT_FILE);
         /* Nail the set down */
         repSSLProperties = Collections.unmodifiableSet(repSSLProperties);
     }
@@ -1347,6 +1427,122 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
         }
         DbConfigManager.setVal(props, RepParams.SSL_CERT_TRANSITION_TIMEOUT_SECONDS,
                                Long.toString(timeoutSeconds), validateParams);
+    }
+
+    /**
+     * Returns the path to the PEM certificate file.
+     *
+     * @return the PEM certificate file path
+     */
+    public String getSSLPemCertFile() {
+        return DbConfigManager.getVal(props, RepParams.SSL_PEM_CERT_FILE);
+    }
+
+    /**
+     * Sets the path to the PEM certificate file.
+     *
+     * @param pemCertFile the PEM certificate file path
+     *
+     * @return this
+     */
+    public ReplicationNetworkConfig setSSLPemCertFile(String pemCertFile) {
+        setSSLPemCertFileVoid(pemCertFile);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLPemCertFileVoid(String pemCertFile) {
+        DbConfigManager.setVal(props, RepParams.SSL_PEM_CERT_FILE, pemCertFile, validateParams);
+    }
+
+    /**
+     * Returns the path to the PEM private key file.
+     *
+     * @return the PEM private key file path
+     */
+    public String getSSLPemKeyFile() {
+        return DbConfigManager.getVal(props, RepParams.SSL_PEM_KEY_FILE);
+    }
+
+    /**
+     * Sets the path to the PEM private key file.
+     *
+     * @param pemKeyFile the PEM private key file path
+     *
+     * @return this
+     */
+    public ReplicationNetworkConfig setSSLPemKeyFile(String pemKeyFile) {
+        setSSLPemKeyFileVoid(pemKeyFile);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLPemKeyFileVoid(String pemKeyFile) {
+        DbConfigManager.setVal(props, RepParams.SSL_PEM_KEY_FILE, pemKeyFile, validateParams);
+    }
+
+    /**
+     * Returns the password for the PEM private key file.
+     *
+     * @return the PEM private key password
+     */
+    public String getSSLPemKeyPassword() {
+        return DbConfigManager.getVal(props, RepParams.SSL_PEM_KEY_PASSWORD);
+    }
+
+    /**
+     * Sets the password for the PEM private key file.
+     *
+     * @param pemKeyPassword the PEM private key password
+     *
+     * @return this
+     */
+    public ReplicationNetworkConfig setSSLPemKeyPassword(String pemKeyPassword) {
+        setSSLPemKeyPasswordVoid(pemKeyPassword);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLPemKeyPasswordVoid(String pemKeyPassword) {
+        DbConfigManager.setVal(props, RepParams.SSL_PEM_KEY_PASSWORD, pemKeyPassword, validateParams);
+    }
+
+    /**
+     * Returns the path to the PEM CA certificate file.
+     *
+     * @return the PEM CA certificate file path
+     */
+    public String getSSLPemCaCertFile() {
+        return DbConfigManager.getVal(props, RepParams.SSL_PEM_CA_CERT_FILE);
+    }
+
+    /**
+     * Sets the path to the PEM CA certificate file.
+     *
+     * @param pemCaCertFile the PEM CA certificate file path
+     *
+     * @return this
+     */
+    public ReplicationNetworkConfig setSSLPemCaCertFile(String pemCaCertFile) {
+        setSSLPemCaCertFileVoid(pemCaCertFile);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLPemCaCertFileVoid(String pemCaCertFile) {
+        DbConfigManager.setVal(props, RepParams.SSL_PEM_CA_CERT_FILE, pemCaCertFile, validateParams);
     }
 
     /**

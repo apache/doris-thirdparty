@@ -16,23 +16,37 @@ package com.sleepycat.je.rep.utilint.net;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.SocketChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.Key;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
+import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
 import static java.util.logging.Level.FINE;
 
+import javax.crypto.Cipher;
+import javax.crypto.EncryptedPrivateKeyInfo;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -321,22 +335,42 @@ public class SSLChannelFactory implements DataChannelFactory {
 
             certificateWatcher = new CertificateFileWatcher(logger, refreshInterval);
 
-            // Watch keystore file if configured
+            // Watch keystore file if configured, otherwise track PEM material
             String keystorePath = config.getSSLKeyStore();
             if (keystorePath == null || keystorePath.isEmpty()) {
                 keystorePath = System.getProperty("javax.net.ssl.keyStore");
             }
             if (keystorePath != null && !keystorePath.isEmpty()) {
-                certificateWatcher.registerFile(keystorePath, this::reloadCertificates);
+                certificateWatcher.registerFile(keystorePath,
+                                                this::reloadCertificates);
+            } else {
+                final String pemCert = config.getSSLPemCertFile();
+                final String pemKey = config.getSSLPemKeyFile();
+                if (pemCert != null && !pemCert.isEmpty()) {
+                    certificateWatcher.registerFile(pemCert,
+                                                    this::reloadCertificates);
+                }
+                if (pemKey != null && !pemKey.isEmpty()) {
+                    certificateWatcher.registerFile(pemKey,
+                                                    this::reloadCertificates);
+                }
             }
 
-            // Watch truststore file if configured
+            // Watch truststore file if configured, otherwise track PEM CA cert
             String truststorePath = config.getSSLTrustStore();
             if (truststorePath == null || truststorePath.isEmpty()) {
-                truststorePath = System.getProperty("javax.net.ssl.trustStore");
+                truststorePath =
+                    System.getProperty("javax.net.ssl.trustStore");
             }
             if (truststorePath != null && !truststorePath.isEmpty()) {
-                certificateWatcher.registerFile(truststorePath, this::reloadCertificates);
+                certificateWatcher.registerFile(truststorePath,
+                                                this::reloadCertificates);
+            } else {
+                final String pemCa = config.getSSLPemCaCertFile();
+                if (pemCa != null && !pemCa.isEmpty()) {
+                    certificateWatcher.registerFile(pemCa,
+                                                    this::reloadCertificates);
+                }
             }
 
             logger.log(INFO, "Certificate file monitoring initialized with " + refreshInterval + " second interval");
@@ -832,39 +866,63 @@ public class SSLChannelFactory implements DataChannelFactory {
             (ReplicationSSLConfig) context.getRepNetConfig();
 
         /*
-         * Determine what KeyStore file to access
+         * Determine what KeyStore file to access. P12 configuration takes
+         * precedence over PEM.
          */
         String ksProp = config.getSSLKeyStore();
         if (ksProp == null || ksProp.isEmpty()) {
             ksProp = System.getProperty("javax.net.ssl.keyStore");
         }
 
-        if (ksProp == null) {
-            return null;
+        if (ksProp != null && !ksProp.isEmpty()) {
+
+            /*
+             * Determine what type of keystore to assume. If not specified
+             * loadStore determines the default
+             */
+            final String ksTypeProp = config.getSSLKeyStoreType();
+
+            final char[] ksPw = getKeyStorePassword(context);
+            try {
+                if (ksPw == null) {
+                    throw new IllegalArgumentException(
+                        "Unable to open keystore without a password");
+                }
+
+                /*
+                 * Get a KeyStore instance
+                 */
+                final KeyStore ks =
+                    loadStore(ksProp, ksPw, "keystore", ksTypeProp);
+
+                return new KeyStoreInfo(ksProp, ks, ksPw);
+            } finally {
+                if (ksPw != null) {
+                    Arrays.fill(ksPw, ' ');
+                }
+            }
         }
 
         /*
-         * Determine what type of keystore to assume.  If not specified
-         * loadStore determines the default
+         * No keystore file configured, fall back to PEM material if provided.
          */
-        final String ksTypeProp = config.getSSLKeyStoreType();
+        final String pemCert = config.getSSLPemCertFile();
+        final String pemKey = config.getSSLPemKeyFile();
+        if (pemCert == null || pemCert.isEmpty() ||
+            pemKey == null || pemKey.isEmpty()) {
+            return null;
+        }
 
-        final char[] ksPw = getKeyStorePassword(context);
+        final char[] pemPassword = pemPasswordToChars(config.getSSLPemKeyPassword());
         try {
-            if (ksPw == null) {
-                throw new IllegalArgumentException(
-                    "Unable to open keystore without a password");
-            }
-
-            /*
-             * Get a KeyStore instance
-             */
-            final KeyStore ks = loadStore(ksProp, ksPw, "keystore", ksTypeProp);
-
-            return new KeyStoreInfo(ksProp, ks, ksPw);
+            final KeyStore ks = loadKeyStore(pemCert, pemKey, pemPassword);
+            return new KeyStoreInfo(pemCert, ks, pemPassword);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                "Error loading PEM key material from " + pemCert, e);
         } finally {
-            if (ksPw != null) {
-                Arrays.fill(ksPw, ' ');
+            if (pemPassword != null) {
+                Arrays.fill(pemPassword, ' ');
             }
         }
     }
@@ -971,33 +1029,58 @@ public class SSLChannelFactory implements DataChannelFactory {
             (ReplicationSSLConfig) context.getRepNetConfig();
 
         /*
-         * Determine what truststore file, if any, to use
+         * Determine what truststore file, if any, to use. P12 configuration
+         * takes precedence over PEM.
          */
         String tsProp = config.getSSLTrustStore();
         if (tsProp == null || tsProp.isEmpty()) {
             tsProp = System.getProperty("javax.net.ssl.trustStore");
         }
 
-        /*
-         * Determine what type of truststore to assume
-         */
-        String tsTypeProp = config.getSSLTrustStoreType();
-        if (tsTypeProp == null || tsTypeProp.isEmpty()) {
-            tsTypeProp = KeyStore.getDefaultType();
-        }
+        if (tsProp != null && !tsProp.isEmpty()) {
 
-        /*
-         * Build a TrustStore, if specified
-         */
-        final char[] tsPw = getTrustStorePassword(context);
+            /*
+             * Determine what type of truststore to assume
+             */
+            String tsTypeProp = config.getSSLTrustStoreType();
+            if (tsTypeProp == null || tsTypeProp.isEmpty()) {
+                tsTypeProp = KeyStore.getDefaultType();
+            }
 
-        if (tsProp != null) {
-            final KeyStore ts = loadStore(tsProp, tsPw, "truststore", tsTypeProp);
+            /*
+             * Build a TrustStore, if specified
+             */
+            final char[] tsPw = getTrustStorePassword(context);
+
+            final KeyStore ts =
+                loadStore(tsProp, tsPw, "truststore", tsTypeProp);
 
             return new KeyStoreInfo(tsProp, ts, tsPw);
         }
 
-        return null;
+        /*
+         * No truststore file configured, fall back to PEM CA if provided.
+         */
+        final String pemCa = config.getSSLPemCaCertFile();
+        if (pemCa == null || pemCa.isEmpty()) {
+            return null;
+        }
+
+        try {
+            final KeyStore ts = loadTrustStore(pemCa);
+            return new KeyStoreInfo(pemCa, ts, null);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                "Error loading PEM CA certificate from " + pemCa, e);
+        }
+    }
+
+    private static char[] pemPasswordToChars(String password) {
+
+        if (password == null || password.isEmpty()) {
+            return new char[0];
+        }
+        return password.toCharArray();
     }
 
     /**
@@ -1408,6 +1491,64 @@ public class SSLChannelFactory implements DataChannelFactory {
             if (ksPwd != null) {
                 Arrays.fill(ksPwd, ' ');
             }
+        }
+    }
+
+    public static KeyStore loadKeyStore(String certPath,
+                                        String keyPath,
+                                        char[] password)
+        throws Exception {
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+        Certificate cert;
+        try (InputStream in = new FileInputStream(certPath)) {
+            cert = cf.generateCertificate(in);
+        }
+
+        PrivateKey privateKey = loadPrivateKey(keyPath, password);
+
+        KeyStore ks = KeyStore.getInstance("PKCS12");
+        ks.load(null, null);
+        ks.setKeyEntry("cert", privateKey, password, new Certificate[]{cert});
+        return ks;
+    }
+
+    public static KeyStore loadTrustStore(String caCertPath) throws Exception {
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+        Certificate ca;
+        try (InputStream in = new FileInputStream(caCertPath)) {
+            ca = cf.generateCertificate(in);
+        }
+        KeyStore ts = KeyStore.getInstance("PKCS12");
+        ts.load(null, null);
+        ts.setCertificateEntry("ca", ca);
+        return ts;
+    }
+
+    public static PrivateKey loadPrivateKey(String keyPath, char []password)
+        throws Exception {
+        if (password == null) {
+            password = new char[0];
+        }
+        String pem = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(keyPath)));
+        pem = pem.replaceAll("-----BEGIN (.*)-----", "")
+                .replaceAll("-----END (.*)-----", "")
+                .replaceAll("\\s", "");
+        byte[] decoded = Base64.getDecoder().decode(pem);
+
+        try {
+            // try parser PKCS#8 with password
+            EncryptedPrivateKeyInfo encryptedInfo = new EncryptedPrivateKeyInfo(decoded);
+            Cipher cipher = Cipher.getInstance(encryptedInfo.getAlgName());
+            PBEKeySpec pbeKeySpec = new PBEKeySpec(password);
+            SecretKeyFactory skf = SecretKeyFactory.getInstance(encryptedInfo.getAlgName());
+            Key key = skf.generateSecret(pbeKeySpec);
+            cipher.init(Cipher.DECRYPT_MODE, key, encryptedInfo.getAlgParameters());
+            PKCS8EncodedKeySpec keySpec = encryptedInfo.getKeySpec(cipher);
+            return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
+        } catch (IOException e) {
+            // private key is plaintext
+            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
+            return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
         }
     }
 }
