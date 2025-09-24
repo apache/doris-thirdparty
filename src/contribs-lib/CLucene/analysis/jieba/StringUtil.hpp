@@ -115,6 +115,7 @@ namespace limonp {
 
    inline void Split(const string& src, vector<string>& res, const string& pattern, size_t maxsplit = string::npos) {
        res.clear();
+       res.reserve(src.size());
        size_t Start = 0;
        size_t end = 0;
        string sub;

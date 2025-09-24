@@ -124,6 +124,7 @@ class MixSegment: public SegmentTagged {
 
   void LoadStopWordDict(const string& filePath) {
     ifstream ifs(filePath.c_str());
+    stopWordList_.reserve(1000);
     if (ifs.is_open()) {
       string line;
         while (getline(ifs, line)) {
