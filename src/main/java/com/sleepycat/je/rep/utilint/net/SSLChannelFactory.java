@@ -37,7 +37,10 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
@@ -107,22 +110,6 @@ public class SSLChannelFactory implements DataChannelFactory {
     private volatile SSLContext clientSSLContext;
 
     /**
-     * Backup SSL contexts for graceful certificate transitions.
-     * These contexts hold the previous certificates during smooth certificate migration.
-     */
-    private volatile SSLContext backupServerSSLContext;
-    private volatile SSLContext backupClientSSLContext;
-
-    /**
-     * Certificate transition management.
-     * Controls smooth transition from old to new certificates.
-     * We use a queue-based approach to handle multiple certificate changes.
-     */
-    private volatile boolean inCertificateTransition = false;
-    private volatile long transitionStartTime = 0;
-    private final ConcurrentHashMap<String, Long> pendingReloads = new ConcurrentHashMap<>();
-
-    /**
      * The base SSLParameters for use in channel creation.
      */
     private final SSLParameters baseSSLParameters;
@@ -147,9 +134,9 @@ public class SSLChannelFactory implements DataChannelFactory {
     private final InstanceParams instanceParams;
 
     /**
-     * Certificate file watcher for monitoring certificate file changes
+     * Scheduled executor service for periodic certificate checking
      */
-    private CertificateFileWatcher certificateWatcher;
+    private ScheduledExecutorService certificateCheckExecutor;
 
     /**
      * Constructor for use during creating based on access configuration
@@ -165,8 +152,8 @@ public class SSLChannelFactory implements DataChannelFactory {
         sslHostVerifier = constructSSLHostVerifier(params);
         logger = params.getContext().getLoggerFactory().getLogger(getClass());
 
-        // Initialize certificate file monitoring
-        initializeCertificateWatcher();
+        // Initialize certificate monitoring
+        initializeCertificateMonitoring();
     }
 
     /**
@@ -313,9 +300,9 @@ public class SSLChannelFactory implements DataChannelFactory {
     }
 
     /**
-     * Initialize certificate file watcher for automatic reloading.
+     * Initialize certificate monitoring using scheduled executor for periodic checks.
      */
-    private void initializeCertificateWatcher() {
+    private void initializeCertificateMonitoring() {
         if (instanceParams == null) {
             return;
         }
@@ -328,258 +315,239 @@ public class SSLChannelFactory implements DataChannelFactory {
             long refreshInterval = config.getSSLCertRefreshIntervalSeconds();
 
             // If refresh interval is 0, disable certificate monitoring
-            if (refreshInterval == 0) {
-                logger.log(INFO, "Certificate file monitoring disabled (refresh interval = 0)");
+            if (refreshInterval <= 0) {
+                logger.log(INFO, "Certificate monitoring disabled (refresh interval = 0)");
                 return;
             }
 
-            certificateWatcher = new CertificateFileWatcher(logger, refreshInterval);
+            // Only monitor PEM configuration
+            final String pemCert = config.getSSLPemCertFile();
+            final String pemKey = config.getSSLPemKeyFile();
+            final String pemCa = config.getSSLPemCaCertFile();
 
-            // Watch keystore file if configured, otherwise track PEM material
-            String keystorePath = config.getSSLKeyStore();
-            if (keystorePath == null || keystorePath.isEmpty()) {
-                keystorePath = System.getProperty("javax.net.ssl.keyStore");
-            }
-            if (keystorePath != null && !keystorePath.isEmpty()) {
-                certificateWatcher.registerFile(keystorePath,
-                                                this::reloadCertificates);
-            } else {
-                final String pemCert = config.getSSLPemCertFile();
-                final String pemKey = config.getSSLPemKeyFile();
-                if (pemCert != null && !pemCert.isEmpty()) {
-                    certificateWatcher.registerFile(pemCert,
-                                                    this::reloadCertificates);
-                }
-                if (pemKey != null && !pemKey.isEmpty()) {
-                    certificateWatcher.registerFile(pemKey,
-                                                    this::reloadCertificates);
-                }
-            }
+            // Create scheduled executor for periodic certificate checking
+            certificateCheckExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "SSL-Certificate-Monitor");
+                t.setDaemon(true);
+                return t;
+            });
 
-            // Watch truststore file if configured, otherwise track PEM CA cert
-            String truststorePath = config.getSSLTrustStore();
-            if (truststorePath == null || truststorePath.isEmpty()) {
-                truststorePath =
-                    System.getProperty("javax.net.ssl.trustStore");
-            }
-            if (truststorePath != null && !truststorePath.isEmpty()) {
-                certificateWatcher.registerFile(truststorePath,
-                                                this::reloadCertificates);
-            } else {
-                final String pemCa = config.getSSLPemCaCertFile();
-                if (pemCa != null && !pemCa.isEmpty()) {
-                    certificateWatcher.registerFile(pemCa,
-                                                    this::reloadCertificates);
-                }
-            }
+            // Schedule periodic certificate checks
+            certificateCheckExecutor.scheduleAtFixedRate(
+                this::checkAndReloadCertificates,
+                refreshInterval,
+                refreshInterval,
+                TimeUnit.SECONDS
+            );
 
-            logger.log(INFO, "Certificate file monitoring initialized with " + refreshInterval + " second interval");
+            // Initialize file modification times
+            initializeFileModificationTimes(config);
+
+            logger.log(INFO, "Certificate monitoring initialized with " + refreshInterval + " second interval");
 
         } catch (Exception e) {
-            logger.log(WARNING, "Failed to initialize certificate file watcher: " + e.getMessage());
+            logger.log(WARNING, "Failed to initialize certificate monitoring: " + e.getMessage());
         }
     }
 
     /**
-     * Reload certificates when file changes are detected.
-     * This method implements smart certificate transition that handles multiple file changes efficiently.
-     *
-     * @param changedFilePath the path of the file that changed
+     * Initialize file modification times on startup.
      */
-    private void reloadCertificates(String changedFilePath) {
+    private void initializeFileModificationTimes(ReplicationSSLConfig config) {
+        try {
+            caLastModified = Files.getLastModifiedTime(Paths.get(config.getSSLPemCaCertFile())).toMillis();
+            keyLastModified = Files.getLastModifiedTime(Paths.get(config.getSSLPemKeyFile())).toMillis();
+            certLastModified = Files.getLastModifiedTime(Paths.get(config.getSSLPemCertFile())).toMillis();
+            logger.log(INFO, "Certificate timestamps initialized");
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to initialize file modification times: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Check and reload certificates if any PEM files have changed.
+     * Uses bit operations to determine reload necessity:
+     * - If CA changes: check_num |= 1 << 2 (bit 2)
+     * - If key changes: check_num |= 1 << 1 (bit 1)
+     * - If cert changes: check_num |= 1 (bit 0)
+     *
+     * Valid reload scenarios:
+     * - CA + cert + key changed: check_num = 7 (111)
+     * - CA + cert changed: check_num = 5 (101)
+     * - Key + cert changed: check_num = 3 (011)
+     * - Only cert changed: check_num = 1 (001)
+     *
+     * Rule: Reload when check_num is odd (cert file changed)
+     * Only update modification times after successful reload.
+     */
+    private void checkAndReloadCertificates() {
         if (instanceParams == null) {
-            logger.log(WARNING, "Cannot reload certificates: instance parameters not available");
             return;
         }
 
-        logger.log(INFO, "Starting smart certificate reload due to file change: " + changedFilePath);
+        try {
+            final ReplicationSSLConfig config =
+                (ReplicationSSLConfig) instanceParams.getContext().getRepNetConfig();
 
-        // Record this file change with timestamp
-        pendingReloads.put(changedFilePath, System.currentTimeMillis());
+            // Use AtomicReference to hold temporary modification times
+            AtomicReference<Long> caModified = new AtomicReference<>(caLastModified);
+            AtomicReference<Long> keyModified = new AtomicReference<>(keyLastModified);
+            AtomicReference<Long> certModified = new AtomicReference<>(certLastModified);
+
+            int check_num = 0;
+
+            // Check CA certificate file
+            if (checkCertificateFile(config.getSSLPemCaCertFile(), caModified.get(),
+                    caModified::set, "CA certificate")) {
+                check_num |= 1 << 2;
+            }
+
+            // Check private key file
+            if (checkCertificateFile(config.getSSLPemKeyFile(), keyModified.get(),
+                    keyModified::set, "private key")) {
+                check_num |= 1 << 1;
+            }
+
+            // Check certificate file
+            if (checkCertificateFile(config.getSSLPemCertFile(), certModified.get(),
+                    certModified::set, "certificate")) {
+                check_num |= 1;
+            }
+
+            // Reload certificates when check_num is odd (certificate file changed)
+            if ((check_num & 1) == 1) {
+                // Try to reload certificates
+                if (reloadSSLContexts()) {
+                    // Only update modification times after successful reload
+                    caLastModified = caModified.get();
+                    keyLastModified = keyModified.get();
+                    certLastModified = certModified.get();
+                    logger.log(INFO, "Certificate modification times updated after successful reload");
+                } else {
+                    logger.log(WARNING, "Certificate reload failed, keeping previous modification times for retry");
+                }
+            }
+
+        } catch (Exception e) {
+            logger.log(WARNING, "Error checking certificate files: " + e.getMessage());
+        }
+    }
+
+    /**
+     * File modification time tracking for change detection.
+     * Initialize to -1 to distinguish from 0 (which could be a valid timestamp)
+     */
+    private volatile long caLastModified = -1;
+    private volatile long keyLastModified = -1;
+    private volatile long certLastModified = -1;
+
+    /**
+     * Check if a certificate file has been modified and update the stored modification time.
+     */
+    private boolean checkCertificateFile(String filePath, long lastModified,
+                                       java.util.function.Consumer<Long> timeUpdater,
+                                       String fileType) {
+        if (filePath == null || filePath.isEmpty()) {
+            return false;
+        }
 
         try {
-            // Start or continue the certificate transition process
-            smartCertificateTransition();
+            java.io.File file = new java.io.File(filePath);
+
+            // Check if file was deleted
+            if (!file.exists()) {
+                logger.log(WARNING, fileType + " file was deleted: " + filePath +
+                          ", waiting for recreation...");
+                if (waitForFileRecreation(file, fileType, filePath, timeUpdater)) {
+                    return true; // File was recreated, trigger reload
+                } else {
+                    return false; // File not recreated, skip reload
+                }
+            }
+
+            long currentModTime = Files.getLastModifiedTime(Paths.get(filePath)).toMillis();
+
+            if (lastModified == -1 || currentModTime != lastModified) {
+                timeUpdater.accept(currentModTime);
+                if (lastModified != -1) { // Don't trigger reload on first check
+                    logger.log(INFO, fileType + " file changed: " + filePath +
+                              " (old: " + lastModified + ", new: " + currentModTime + ")");
+                    return true;
+                } else {
+                    logger.log(INFO, fileType + " file initialized: " + filePath +
+                              " (timestamp: " + currentModTime + ")");
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to check " + fileType + " file modification time for " +
+                      filePath + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Wait for file recreation when a certificate file is deleted.
+     * This handles the case where certificates are updated by deleting the old file
+     * and creating a new one.
+     */
+    private boolean waitForFileRecreation(java.io.File file, String fileType, String filePath,
+                                        java.util.function.Consumer<Long> updateTime) {
+        int waitSeconds = 30;
+        int checkInterval = 1;
+
+        for (int i = 0; i < waitSeconds; i += checkInterval) {
+            try {
+                Thread.sleep(checkInterval * 1000);
+                if (file.exists()) {
+                    long newModified = Files.getLastModifiedTime(file.toPath()).toMillis();
+                    updateTime.accept(newModified);
+                    logger.log(INFO, fileType + " file recreated and detected: " + filePath);
+                    return true;
+                }
+            } catch (Exception e) {
+                logger.log(WARNING, "Error while waiting for " + fileType + " file recreation: " +
+                          filePath + ", " + e.getMessage());
+            }
+        }
+
+        logger.log(WARNING, fileType + " file was deleted and not recreated within " + waitSeconds +
+                  " seconds, certificate reload cancelled: " + filePath);
+        return false;
+    }
+
+    /**
+     * Reload SSL contexts using only PEM configuration.
+     * @return true if reload was successful, false otherwise
+     */
+    private boolean reloadSSLContexts() {
+        try {
+            logger.log(INFO, "Reloading SSL contexts with new PEM certificates");
+
+            // Construct new SSL contexts
+            SSLContext newServerContext = constructSSLContext(instanceParams, false);
+            SSLContext newClientContext = constructSSLContext(instanceParams, true);
+
+            // Validate new contexts
+            if (newServerContext != null && newClientContext != null) {
+                // Atomically switch to new contexts
+                this.serverSSLContext = newServerContext;
+                this.clientSSLContext = newClientContext;
+
+                // Update mirror matcher principals for new certificates
+                reloadMirrorMatcherPrincipals();
+
+                logger.log(INFO, "SSL certificate reload completed successfully");
+                return true;
+            } else {
+                logger.log(WARNING, "Failed to create new SSL contexts during reload");
+                return false;
+            }
 
         } catch (Exception e) {
             logger.log(WARNING, "Failed to reload SSL certificates: " + e.getMessage());
-            // Remove from pending if failed
-            pendingReloads.remove(changedFilePath);
+            return false;
         }
-    }
-
-    /**
-     * Smart certificate transition that handles multiple file changes efficiently.
-     * This approach:
-     * 1. Collects multiple certificate changes in a short time window
-     * 2. Performs a single reload operation for all changes
-     * 3. Avoids redundant SSL context reconstruction
-     * 4. Supports independent processing of different certificate files
-     */
-    private void smartCertificateTransition() {
-        synchronized (this) {
-            if (inCertificateTransition) {
-                // Already in progress, the pending changes will be picked up
-                logger.log(INFO, "Certificate transition in progress, queuing additional changes");
-                return;
-            }
-
-            if (pendingReloads.isEmpty()) {
-                return;
-            }
-
-            inCertificateTransition = true;
-            transitionStartTime = System.currentTimeMillis();
-        }
-
-        // Use a background thread to handle the actual transition
-        Thread transitionThread = new Thread(this::performCertificateTransition, "SSLCertTransition");
-        transitionThread.setDaemon(true);
-        transitionThread.start();
-    }
-
-    /**
-     * Perform the actual certificate transition in a background thread.
-     */
-    private void performCertificateTransition() {
-        try {
-            // Wait a short time to collect multiple file changes
-            Thread.sleep(100); // 100ms debounce window
-
-            ConcurrentHashMap<String, Long> currentPendingReloads;
-            synchronized (this) {
-                if (pendingReloads.isEmpty()) {
-                    inCertificateTransition = false;
-                    return;
-                }
-
-                // Take a snapshot of pending reloads
-                currentPendingReloads = new ConcurrentHashMap<>(pendingReloads);
-                pendingReloads.clear();
-            }
-
-            logger.log(INFO, "Processing certificate changes for " + currentPendingReloads.size() + " files: " +
-                      String.join(", ", currentPendingReloads.keySet()));
-
-            logger.log(FINE, "Pre-loading new SSL certificates in background");
-
-            // Step 1: Pre-construct new SSL contexts (lightweight validation)
-            SSLContext candidateServerContext = constructSSLContext(instanceParams, false);
-            SSLContext candidateClientContext = constructSSLContext(instanceParams, true);
-
-            // Step 2: Validate new contexts by creating a test SSL engine
-            validateSSLContext(candidateServerContext, "server");
-            validateSSLContext(candidateClientContext, "client");
-
-            logger.log(FINE, "New SSL certificates validated successfully");
-
-            // Step 3: Store current contexts as backup for graceful fallback
-            backupServerSSLContext = serverSSLContext;
-            backupClientSSLContext = clientSSLContext;
-
-            // Step 4: Atomically switch to new contexts (this is the actual lightweight transition)
-            this.serverSSLContext = candidateServerContext;
-            this.clientSSLContext = candidateClientContext;
-
-            // Step 5: Update mirror matcher principals for new certificates
-            reloadMirrorMatcherPrincipals();
-
-            logger.log(INFO, "Smart SSL certificate transition completed successfully");
-
-            // Step 6: Schedule backup cleanup after transition timeout
-            scheduleBackupCleanup();
-
-            // Step 7: Check if there are new pending changes while we were processing
-            synchronized (this) {
-                if (!pendingReloads.isEmpty()) {
-                    logger.log(INFO, "Additional certificate changes detected during transition, scheduling another round");
-                    // Reset transition state and trigger another round
-                    inCertificateTransition = false;
-                    smartCertificateTransition();
-                    return;
-                }
-                inCertificateTransition = false;
-            }
-
-        } catch (Exception e) {
-            logger.log(WARNING, "Smart certificate transition failed, maintaining current certificates: " + e.getMessage());
-            rollbackCertificateTransition();
-        }
-    }
-
-    /**
-     * Lightweight SSL context validation to ensure new certificates are valid
-     * before committing to the transition.
-     */
-    private void validateSSLContext(SSLContext context, String mode) throws Exception {
-        if (context == null) {
-            throw new IllegalStateException("SSL context is null for mode: " + mode);
-        }
-
-        // Create a test SSL engine to validate the context
-        javax.net.ssl.SSLEngine testEngine = context.createSSLEngine();
-        if (testEngine == null) {
-            throw new IllegalStateException("Failed to create SSL engine for mode: " + mode);
-        }
-
-        // Validate that we can retrieve supported cipher suites
-        String[] cipherSuites = testEngine.getSupportedCipherSuites();
-        if (cipherSuites == null || cipherSuites.length == 0) {
-            throw new IllegalStateException("No cipher suites available for mode: " + mode);
-        }
-
-        logger.log(FINE, "SSL context validation passed for " + mode + " mode with " +
-                   cipherSuites.length + " cipher suites");
-    }
-
-    /**
-     * Rollback to backup SSL contexts if transition fails.
-     */
-    private void rollbackCertificateTransition() {
-        synchronized (this) {
-            if (backupServerSSLContext != null && backupClientSSLContext != null) {
-                logger.log(INFO, "Rolling back to previous SSL certificates");
-                this.serverSSLContext = backupServerSSLContext;
-                this.clientSSLContext = backupClientSSLContext;
-            }
-
-            // Clean up backup contexts and pending changes
-            backupServerSSLContext = null;
-            backupClientSSLContext = null;
-            pendingReloads.clear();
-            inCertificateTransition = false;
-        }
-    }
-
-    /**
-     * Schedule cleanup of backup contexts after transition timeout.
-     * This prevents memory leaks from holding old SSL contexts indefinitely.
-     */
-    private void scheduleBackupCleanup() {
-        final ReplicationSSLConfig config =
-            (ReplicationSSLConfig) instanceParams.getContext().getRepNetConfig();
-        final long timeoutMs = config.getSSLCertTransitionTimeoutSeconds() * 1000;
-
-        // Use a simple approach with a daemon thread for cleanup
-        Thread cleanupThread = new Thread(() -> {
-            try {
-                Thread.sleep(timeoutMs);
-                synchronized (this) {
-                    if (inCertificateTransition &&
-                        (System.currentTimeMillis() - transitionStartTime) >= timeoutMs) {
-                        logger.log(FINE, "Cleaning up backup SSL contexts after transition timeout");
-                        backupServerSSLContext = null;
-                        backupClientSSLContext = null;
-                        inCertificateTransition = false;
-                    }
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }, "SSLCertificateCleanup");
-
-        cleanupThread.setDaemon(true);
-        cleanupThread.start();
     }
 
     /**
@@ -607,107 +575,48 @@ public class SSLChannelFactory implements DataChannelFactory {
     }
 
     /**
-     * Stop the certificate file watcher and clean up resources.
+     * Stop the certificate monitoring executor and clean up resources.
      */
     public void shutdown() {
-        if (certificateWatcher != null) {
-            certificateWatcher.stop();
-            certificateWatcher = null;
-        }
-
-        // Clean up any ongoing certificate transition
-        synchronized (this) {
-            if (inCertificateTransition) {
-                logger.log(FINE, "Cleaning up certificate transition during shutdown");
-                backupServerSSLContext = null;
-                backupClientSSLContext = null;
-                pendingReloads.clear();
-                inCertificateTransition = false;
+        if (certificateCheckExecutor != null) {
+            certificateCheckExecutor.shutdown();
+            try {
+                if (!certificateCheckExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    certificateCheckExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                certificateCheckExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
             }
+            certificateCheckExecutor = null;
         }
     }
 
     /**
-     * Manually trigger smart certificate transition.
+     * Manually trigger certificate reload.
      * This can be called programmatically to reload certificates without
-     * waiting for file system events.
+     * waiting for periodic checks.
      *
-     * @return true if transition was initiated successfully, false otherwise
+     * @return true if reload was initiated successfully, false otherwise
      */
-    public boolean triggerCertificateTransition() {
+    public boolean triggerCertificateReload() {
         if (instanceParams == null) {
-            logger.log(WARNING, "Cannot trigger certificate transition: instance parameters not available");
+            logger.log(WARNING, "Cannot trigger certificate reload: instance parameters not available");
             return false;
         }
 
         try {
-            logger.log(INFO, "Manually triggered certificate transition");
-            // Add a manual trigger entry
-            pendingReloads.put("MANUAL_TRIGGER", System.currentTimeMillis());
-            smartCertificateTransition();
+            logger.log(INFO, "Manually triggered certificate reload");
+            reloadSSLContexts();
             return true;
         } catch (Exception e) {
-            logger.log(WARNING, "Failed to trigger certificate transition: " + e.getMessage());
+            logger.log(WARNING, "Failed to trigger certificate reload: " + e.getMessage());
             return false;
         }
     }
 
     /**
-     * Check if a certificate transition is currently in progress.
-     *
-     * @return true if transition is in progress, false otherwise
-     */
-    public boolean isInCertificateTransition() {
-        return inCertificateTransition;
-    }
-
-    /**
-     * Diagnose current SSL certificate configuration and status.
-     * This method provides detailed information about certificate files,
-     * monitoring status, and current certificate fingerprints.
-     */
-    public void diagnoseCertificateConfiguration() {
-        if (instanceParams == null) {
-            logger.log(WARNING, "Cannot diagnose: instance parameters not available");
-            return;
-        }
-
-        try {
-            final ReplicationSSLConfig config =
-                (ReplicationSSLConfig) instanceParams.getContext().getRepNetConfig();
-
-            SSLCertificateDiagnostics diagnostics = new SSLCertificateDiagnostics(logger, config);
-            diagnostics.diagnose();
-
-            // Additional status information
-            logger.log(INFO, "Certificate watcher status: " +
-                      (certificateWatcher != null ? "ACTIVE" : "INACTIVE"));
-            logger.log(INFO, "In certificate transition: " + inCertificateTransition);
-
-            if (inCertificateTransition) {
-                long elapsed = System.currentTimeMillis() - transitionStartTime;
-                logger.log(INFO, "Transition elapsed time: " + elapsed + " ms");
-            }
-
-        } catch (Exception e) {
-            logger.log(WARNING, "Failed to run certificate diagnostics: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Force certificate reload immediately, bypassing file monitoring.
-     * This method is useful for troubleshooting or when automatic monitoring
-     * is not working properly.
-     *
-     * @return true if reload was successful, false otherwise
-     */
-    public boolean forceReloadCertificates() {
-        logger.log(INFO, "Force reloading SSL certificates (bypassing file monitoring)");
-        return triggerCertificateTransition();
-    }
-
-    /**
-     * Builds an SSLContext object for the specified access mode.
+     * Builds an SSLContext object using only PEM configuration.
      * @param params general instantiation information
      * @param clientMode set to true if the SSLContext is being created for
      * the client side of an SSL connection and false otherwise
@@ -858,7 +767,7 @@ public class SSLChannelFactory implements DataChannelFactory {
     }
 
     /**
-     * Reads a KeyStore into memory based on the config.
+     * Reads a KeyStore into memory based on PEM configuration only.
      */
     private static KeyStoreInfo readKeyStoreInfo(InstanceContext context) {
 
@@ -1021,7 +930,7 @@ public class SSLChannelFactory implements DataChannelFactory {
     }
 
     /**
-     * Based on the input config, read the configured TrustStore into memory.
+     * Based on PEM configuration, read the configured TrustStore into memory.
      */
     private static KeyStoreInfo readTrustStoreInfo(InstanceContext context) {
 
@@ -1029,37 +938,7 @@ public class SSLChannelFactory implements DataChannelFactory {
             (ReplicationSSLConfig) context.getRepNetConfig();
 
         /*
-         * Determine what truststore file, if any, to use. P12 configuration
-         * takes precedence over PEM.
-         */
-        String tsProp = config.getSSLTrustStore();
-        if (tsProp == null || tsProp.isEmpty()) {
-            tsProp = System.getProperty("javax.net.ssl.trustStore");
-        }
-
-        if (tsProp != null && !tsProp.isEmpty()) {
-
-            /*
-             * Determine what type of truststore to assume
-             */
-            String tsTypeProp = config.getSSLTrustStoreType();
-            if (tsTypeProp == null || tsTypeProp.isEmpty()) {
-                tsTypeProp = KeyStore.getDefaultType();
-            }
-
-            /*
-             * Build a TrustStore, if specified
-             */
-            final char[] tsPw = getTrustStorePassword(context);
-
-            final KeyStore ts =
-                loadStore(tsProp, tsPw, "truststore", tsTypeProp);
-
-            return new KeyStoreInfo(tsProp, ts, tsPw);
-        }
-
-        /*
-         * No truststore file configured, fall back to PEM CA if provided.
+         * Only use PEM CA configuration for truststore.
          */
         final String pemCa = config.getSSLPemCaCertFile();
         if (pemCa == null || pemCa.isEmpty()) {
