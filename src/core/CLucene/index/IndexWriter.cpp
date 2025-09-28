@@ -1391,7 +1391,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
             // skipList writer
             skipInterval = termInfosWriter->skipInterval;
             maxSkipLevels = termInfosWriter->maxSkipLevels;
-            skipListWriterList.push_back(_CLNEW DefaultSkipListWriter(skipInterval, maxSkipLevels, (int) dest_index_docs[j], freqOutputList[j], proxOutputList[j]));
+            skipListWriterList.push_back(_CLNEW DefaultSkipListWriter(skipInterval, maxSkipLevels, (int) dest_index_docs[j], freqOutputList[j], proxOutputList[j], indexVersion));
 
             if (hasNorms) {
                 // create norms output

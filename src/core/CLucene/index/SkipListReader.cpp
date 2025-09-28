@@ -6,6 +6,7 @@
 ------------------------------------------------------------------------------*/
 #include "CLucene/_ApiHeader.h"
 #include "_SkipListReader.h"
+#include <iostream>
 
 #if defined(__i386__) || defined(__x86_64__)
 #ifdef __linux__
@@ -261,8 +262,8 @@ IndexInput* MultiLevelSkipListReader::SkipBuffer::clone() const{
 
 
 
-DefaultSkipListReader::DefaultSkipListReader(CL_NS(store)::IndexInput* _skipStream, const int32_t maxSkipLevels, const int32_t _skipInterval)
-		: MultiLevelSkipListReader(_skipStream, maxSkipLevels, _skipInterval)
+DefaultSkipListReader::DefaultSkipListReader(CL_NS(store)::IndexInput* _skipStream, const int32_t maxSkipLevels, const int32_t _skipInterval, IndexVersion indexVersion)
+		: MultiLevelSkipListReader(_skipStream, maxSkipLevels, _skipInterval), indexVersion(indexVersion)
 {
 	freqPointer = _CL_NEWARRAY(int64_t,maxSkipLevels);
   proxPointer = _CL_NEWARRAY(int64_t, maxSkipLevels);
@@ -352,9 +353,23 @@ int32_t DefaultSkipListReader::readSkipData(const int32_t level, CL_NS(store)::I
 	freqPointer[level] += _skipStream->readVInt();
 	if (hasProx) {
 		proxPointer[level] += _skipStream->readVInt();
+		if (indexVersion >= IndexVersion::kV4) {
+			if (level == 0) {
+				maxBlockFreq = _skipStream->readVInt();
+				maxBlockNorm = _skipStream->readVInt();
+			}
+		}
 	}
 
 	return delta;
+}
+
+int32_t DefaultSkipListReader::getMaxBlockFreq() const {
+	return maxBlockFreq;
+}
+
+int32_t DefaultSkipListReader::getMaxBlockNorm() const {
+	return maxBlockNorm;
 }
 
 CL_NS_END

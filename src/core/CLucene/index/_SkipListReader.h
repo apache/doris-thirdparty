@@ -9,6 +9,7 @@
 
 #include "CLucene/store/IndexInput.h"
 #include "CLucene/util/Array.h"
+#include "CLucene/index/IndexVersion.h"
 
 CL_NS_DEF(index)
 
@@ -147,6 +148,7 @@ class DefaultSkipListReader: public MultiLevelSkipListReader {
 private:
 	bool currentFieldStoresPayloads;
 	bool hasProx = false;
+	IndexVersion indexVersion = IndexVersion::kV0;
 
 	int64_t* freqPointer{nullptr};
 	int64_t* proxPointer{nullptr};
@@ -156,8 +158,11 @@ private:
 	int64_t lastProxPointer{0};
 	int32_t lastPayloadLength;
 
+	int32_t maxBlockFreq = 0;
+	int32_t maxBlockNorm = 0;
+
 public:
-	DefaultSkipListReader(CL_NS(store)::IndexInput* _skipStream, const int32_t maxSkipLevels, const int32_t _skipInterval);
+	DefaultSkipListReader(CL_NS(store)::IndexInput* _skipStream, const int32_t maxSkipLevels, const int32_t _skipInterval, IndexVersion indexVersion);
 	virtual ~DefaultSkipListReader();
 
 	void init(const int64_t _skipPointer, const int64_t freqBasePointer,
@@ -176,6 +181,10 @@ public:
 	* the doc to which the last call of {@link MultiLevelSkipListReader#skipTo(int)}
 	* has skipped.  */
 	int32_t getPayloadLength() const;
+
+	int32_t getMaxBlockFreq() const;
+
+	int32_t getMaxBlockNorm() const;
 
 protected:
 	void seekChild(const int32_t level);

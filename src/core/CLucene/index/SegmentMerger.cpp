@@ -441,7 +441,7 @@ void SegmentMerger::mergeTerms() {
 
       skipInterval = termInfosWriter->skipInterval;
       maxSkipLevels = termInfosWriter->maxSkipLevels;
-      skipListWriter = _CLNEW DefaultSkipListWriter(skipInterval, maxSkipLevels, mergedDocs, freqOutput, proxOutput);
+      skipListWriter = _CLNEW DefaultSkipListWriter(skipInterval, maxSkipLevels, mergedDocs, freqOutput, proxOutput, IndexVersion::kV0);
       queue = _CLNEW SegmentMergeQueue(readers.size());
 
       //And merge the Term Infos

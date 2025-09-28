@@ -218,7 +218,7 @@ bool SegmentTermDocs::skipTo(const int32_t target) {
 
     if (df >= skipInterval) {// optimized case
         if (skipListReader == NULL) {
-            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval);// lazily clone
+            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval, indexVersion_);// lazily clone
             skipListReader->setIoContext(io_ctx_);
         }
 

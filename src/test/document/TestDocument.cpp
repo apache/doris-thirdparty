@@ -10,6 +10,7 @@
 #include "CLucene/document/FieldSelector.h"
 #include "CLucene/index/SDocumentWriter.h"
 #include <nanobench.h>
+#include <memory>
 
 //an in memory input stream for testing binary data
 class MemReader : public CL_NS(util)::Reader {

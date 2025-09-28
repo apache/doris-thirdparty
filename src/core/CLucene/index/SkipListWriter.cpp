@@ -7,6 +7,7 @@
 #include "CLucene/_ApiHeader.h"
 #include "CLucene/util/_Arrays.h"
 #include "_SkipListWriter.h"
+#include <iostream>
 
 #if defined(__i386__) || defined(__x86_64__)
 #ifdef __linux__
@@ -96,14 +97,17 @@ void MultiLevelSkipListWriter::resetSkip() {
     }
 }
 
-
-void DefaultSkipListWriter::setSkipData(int32_t doc, bool storePayloads, int32_t payloadLength) {
+void DefaultSkipListWriter::setSkipData(int32_t doc, bool storePayloads, int32_t payloadLength, int32_t maxBlockFreq, int32_t maxBlockNorm) {
     this->curDoc = doc;
     this->curStorePayloads = storePayloads;
     this->curPayloadLength = payloadLength;
     this->curFreqPointer = freqOutput->getFilePointer();
     if (hasProx) {
         this->curProxPointer = proxOutput->getFilePointer();
+        if (indexVersion == IndexVersion::kV4) {
+            this->maxBlockFreq = maxBlockFreq;
+            this->maxBlockNorm = maxBlockNorm;
+        }
     }
 }
 
@@ -113,6 +117,10 @@ void DefaultSkipListWriter::resetSkip() {
     Arrays<int32_t>::fill(lastSkipPayloadLength, numberOfSkipLevels, -1);// we don't have to write the first length in the skip list
     if (hasProx) {
         Arrays<int64_t>::fill(lastSkipProxPointer, numberOfSkipLevels, proxOutput->getFilePointer());
+        if (indexVersion == IndexVersion::kV4) {
+            maxBlockFreq = 0;
+            maxBlockNorm = 0;
+        }
     }
     Arrays<int64_t>::fill(lastSkipFreqPointer, numberOfSkipLevels, freqOutput->getFilePointer());
 }
@@ -158,6 +166,12 @@ void DefaultSkipListWriter::writeSkipData(int32_t level, IndexOutput *skipBuffer
     skipBuffer->writeVInt((int32_t) (curFreqPointer - lastSkipFreqPointer[level]));
     if (hasProx) {
         skipBuffer->writeVInt((int32_t) (curProxPointer - lastSkipProxPointer[level]));
+        if (indexVersion == IndexVersion::kV4) {            
+            if (level == 0) {
+                skipBuffer->writeVInt(maxBlockFreq);
+                skipBuffer->writeVInt(maxBlockNorm);
+            }
+        }
     }
 
     lastSkipDoc[level] = curDoc;
@@ -171,9 +185,9 @@ void DefaultSkipListWriter::writeSkipData(int32_t level, IndexOutput *skipBuffer
 
 DefaultSkipListWriter::DefaultSkipListWriter(int32_t skipInterval, int32_t numberOfSkipLevels,
                                              int32_t docCount, IndexOutput* freqOutput,
-                                             IndexOutput* proxOutput)
+                                             IndexOutput* proxOutput, IndexVersion indexVersion)
         : MultiLevelSkipListWriter(skipInterval, numberOfSkipLevels, docCount),
-          hasProx(proxOutput != nullptr) {
+          hasProx(proxOutput != nullptr), indexVersion(indexVersion) {
     this->freqOutput = freqOutput;
     this->proxOutput = proxOutput;
     this->curDoc = this->curPayloadLength = 0;
