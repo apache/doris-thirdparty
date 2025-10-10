@@ -27,6 +27,7 @@ import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.KeyFactory;
+import java.security.AlgorithmParameters;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.UnrecoverableKeyException;
@@ -34,9 +35,12 @@ import java.security.cert.CertificateException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -49,7 +53,11 @@ import static java.util.logging.Level.FINE;
 import javax.crypto.Cipher;
 import javax.crypto.EncryptedPrivateKeyInfo;
 import javax.crypto.SecretKeyFactory;
+import javax.crypto.SecretKey;
 import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.PBEParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import javax.crypto.spec.IvParameterSpec;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -1403,31 +1411,91 @@ public class SSLChannelFactory implements DataChannelFactory {
         return ts;
     }
 
-    public static PrivateKey loadPrivateKey(String keyPath, char []password)
+
+    public static PrivateKey loadPrivateKey(String keyPath, char[] password)
         throws Exception {
         if (password == null) {
             password = new char[0];
         }
-        String pem = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(keyPath)));
+        String pem = new String(Files.readAllBytes(Paths.get(keyPath)));
         pem = pem.replaceAll("-----BEGIN (.*)-----", "")
-                .replaceAll("-----END (.*)-----", "")
-                .replaceAll("\\s", "");
+                 .replaceAll("-----END (.*)-----", "")
+                 .replaceAll("\\s", "");
         byte[] decoded = Base64.getDecoder().decode(pem);
 
         try {
-            // try parser PKCS#8 with password
-            EncryptedPrivateKeyInfo encryptedInfo = new EncryptedPrivateKeyInfo(decoded);
-            Cipher cipher = Cipher.getInstance(encryptedInfo.getAlgName());
-            PBEKeySpec pbeKeySpec = new PBEKeySpec(password);
-            SecretKeyFactory skf = SecretKeyFactory.getInstance(encryptedInfo.getAlgName());
-            Key key = skf.generateSecret(pbeKeySpec);
-            cipher.init(Cipher.DECRYPT_MODE, key, encryptedInfo.getAlgParameters());
+            EncryptedPrivateKeyInfo encryptedInfo =
+                new EncryptedPrivateKeyInfo(decoded);
+            Cipher cipher = buildDecryptCipher(encryptedInfo, password);
             PKCS8EncodedKeySpec keySpec = encryptedInfo.getKeySpec(cipher);
-            return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
+            return generatePrivateKey(keySpec);
         } catch (IOException e) {
-            // private key is plaintext
             PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
-            return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
+            return generatePrivateKey(keySpec);
         }
     }
+
+    private static PrivateKey generatePrivateKey(PKCS8EncodedKeySpec keySpec)
+        throws Exception {
+        String[] keyAlgorithms = {"RSA", "EC", "DSA"};
+        Exception lastException = null;
+
+        for (String keyAlg : keyAlgorithms) {
+            try {
+                return KeyFactory.getInstance(keyAlg).generatePrivate(keySpec);
+            } catch (Exception e) {
+                lastException = e;
+            }
+        }
+
+        if (lastException != null) {
+            throw lastException;
+        }
+
+        throw new Exception(
+            "Unable to parse private key with any supported algorithm");
+    }
+
+    private static Cipher buildDecryptCipher(EncryptedPrivateKeyInfo info,
+                                             char[] password)
+        throws Exception {
+        final String algName = info.getAlgName();
+        if (algName != null && algName.toUpperCase().contains("PBES2")) {
+            AlgorithmParameters params = info.getAlgParameters();
+            if (params == null) {
+                throw new IllegalArgumentException(
+                    "Missing PBES2 algorithm parameters");
+            }
+
+            PBEParameterSpec pbeSpec =
+                params.getParameterSpec(PBEParameterSpec.class);
+            if (pbeSpec == null) {
+                throw new IllegalArgumentException(
+                    "Unsupported PBES2 parameters");
+            }
+
+            final String transformation = params.toString();
+            if (transformation == null || transformation.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "Missing PBES2 transformation");
+            }
+
+            SecretKeyFactory skf = SecretKeyFactory.getInstance(transformation);
+            SecretKey secret = skf.generateSecret(new PBEKeySpec(password,
+                                                                pbeSpec.getSalt(),
+                                                                pbeSpec.getIterationCount()));
+
+            Cipher cipher = Cipher.getInstance(transformation);
+            cipher.init(Cipher.DECRYPT_MODE, secret, pbeSpec);
+            return cipher;
+        }
+
+        Cipher cipher = Cipher.getInstance(algName);
+        PBEKeySpec pbeKeySpec = new PBEKeySpec(password);
+        SecretKeyFactory skf = SecretKeyFactory.getInstance(algName);
+        Key key = skf.generateSecret(pbeKeySpec);
+        cipher.init(Cipher.DECRYPT_MODE, key, info.getAlgParameters());
+        return cipher;
+    }
+
 }
