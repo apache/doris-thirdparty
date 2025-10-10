@@ -335,7 +335,7 @@ public class SSLChannelFactory implements DataChannelFactory {
 
             // Create scheduled executor for periodic certificate checking
             certificateCheckExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "SSL-Certificate-Monitor");
+                Thread t = new Thread(r, "BDB-SSL-Certificate-Monitor");
                 t.setDaemon(true);
                 return t;
             });
