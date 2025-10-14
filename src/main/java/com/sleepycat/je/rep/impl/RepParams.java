@@ -1519,6 +1519,70 @@ public class RepParams {
                         true);               // forReplication
 
     /**
+     * SSL certificate refresh interval in seconds
+     * @see ReplicationSSLConfig#SSL_CERT_REFRESH_INTERVAL_SECONDS
+     */
+    public static final LongConfigParam SSL_CERT_REFRESH_INTERVAL_SECONDS =
+        new LongConfigParam(ReplicationSSLConfig.SSL_CERT_REFRESH_INTERVAL_SECONDS,
+                            0L,        // min
+                            Long.valueOf(Long.MAX_VALUE), // max
+                            30L,         // default
+                            false,           // mutable
+                            true);           // forReplication
+
+    /**
+     * SSL certificate transition timeout in seconds
+     * @see ReplicationSSLConfig#SSL_CERT_TRANSITION_TIMEOUT_SECONDS
+     */
+    public static final LongConfigParam SSL_CERT_TRANSITION_TIMEOUT_SECONDS =
+        new LongConfigParam(ReplicationSSLConfig.SSL_CERT_TRANSITION_TIMEOUT_SECONDS,
+                            0L,        // min
+                            Long.valueOf(Long.MAX_VALUE), // max
+                            30L,         // default
+                            false,           // mutable
+                            true);           // forReplication
+
+    /**
+     * SSL PEM certificate file path
+     * @see ReplicationSSLConfig#SSL_PEM_CERT_FILE
+     */
+    public static final ConfigParam SSL_PEM_CERT_FILE =
+        new ConfigParam(ReplicationSSLConfig.SSL_PEM_CERT_FILE,
+                        "",             // default
+                        false,          // mutable
+                        true);          // forReplication
+
+    /**
+     * SSL PEM private key file path
+     * @see ReplicationSSLConfig#SSL_PEM_KEY_FILE
+     */
+    public static final ConfigParam SSL_PEM_KEY_FILE =
+        new ConfigParam(ReplicationSSLConfig.SSL_PEM_KEY_FILE,
+                        "",             // default
+                        false,          // mutable
+                        true);          // forReplication
+
+    /**
+     * SSL PEM private key password
+     * @see ReplicationSSLConfig#SSL_PEM_KEY_PASSWORD
+     */
+    public static final ConfigParam SSL_PEM_KEY_PASSWORD =
+        new ConfigParam(ReplicationSSLConfig.SSL_PEM_KEY_PASSWORD,
+                        "",             // default
+                        false,          // mutable
+                        true);          // forReplication
+
+    /**
+     * SSL PEM CA certificate file path
+     * @see ReplicationSSLConfig#SSL_PEM_CA_CERT_FILE
+     */
+    public static final ConfigParam SSL_PEM_CA_CERT_FILE =
+        new ConfigParam(ReplicationSSLConfig.SSL_PEM_CA_CERT_FILE,
+                        "",             // default
+                        false,          // mutable
+                        true);          // forReplication
+
+    /**
      * Override the current JE version, for testing only.
      */
     public static final ConfigParam TEST_JE_VERSION = new ConfigParam(

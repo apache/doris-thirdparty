@@ -13,9 +13,14 @@
 
 package com.sleepycat.je.rep.utilint.net;
 
+import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.INFO;
+import static java.util.logging.Level.WARNING;
 
+import java.io.InputStream;
+import java.io.IOException;
 import java.security.KeyStore;
+import java.security.GeneralSecurityException;
 import java.security.KeyStoreException;
 import java.security.Principal;
 import java.security.cert.Certificate;
@@ -40,8 +45,10 @@ class SSLMirrorMatcher {
     /*
      * The Principal that represents us when in the expected peer's ssl mode.
      */
-    final private Principal ourPrincipal;
+    private volatile Principal ourPrincipal;
     final private InstanceLogger logger;
+    final private InstanceContext context;
+    final private boolean clientMode;
 
     /**
      * Construct an SSLMirrorMatcher
@@ -56,13 +63,15 @@ class SSLMirrorMatcher {
     public SSLMirrorMatcher(InstanceParams params, boolean clientMode)
         throws IllegalArgumentException {
 
-        ourPrincipal = determinePrincipal(params.getContext(), clientMode);
+        this.context = params.getContext();
+        this.clientMode = clientMode;
+        logger = params.getContext().getLoggerFactory().getLogger(getClass());
+        ourPrincipal = determinePrincipal(context, clientMode);
         if (ourPrincipal == null) {
             throw new IllegalArgumentException(
                 "Unable to determine a local principal for comparison " +
                 "with peer principals");
         }
-        logger = params.getContext().getLoggerFactory().getLogger(getClass());
     }
 
     /**
@@ -85,6 +94,7 @@ class SSLMirrorMatcher {
         try {
             peerPrincipal = sslSession.getPeerPrincipal();
         } catch (SSLPeerUnverifiedException pue) {
+            logger.log(INFO, String.format("Error getting peer principal: %s", pue));
             return false;
         }
 
@@ -98,6 +108,36 @@ class SSLMirrorMatcher {
         }
 
         return ourPrincipal.equals(peerPrincipal);
+    }
+
+    /**
+     * Reload the local principal when certificates change.
+     * This method provides graceful certificate principal updates during smooth transitions.
+     */
+    public void reloadPrincipal() {
+        try {
+            Principal oldPrincipal = ourPrincipal;
+            Principal newPrincipal = determinePrincipal(context, clientMode);
+
+            if (newPrincipal != null) {
+                if (!newPrincipal.equals(oldPrincipal)) {
+                    logger.log(INFO, String.format(
+                        "SSL mirror matcher principal updated from %s to %s",
+                        oldPrincipal != null ? oldPrincipal.getName() : "null",
+                        newPrincipal.getName()));
+                    ourPrincipal = newPrincipal;
+                } else {
+                    logger.log(FINE, "SSL mirror matcher principal unchanged after reload");
+                }
+            } else {
+                // Maintain current principal if new one cannot be determined
+                logger.log(WARNING,
+                    "Failed to reload SSL mirror matcher principal: no principal found, keeping current principal");
+            }
+        } catch (Exception e) {
+            logger.log(WARNING,
+                "Failed to reload SSL mirror matcher principal: " + e.getMessage() + ", keeping current principal");
+        }
     }
 
     /**
@@ -128,7 +168,9 @@ class SSLMirrorMatcher {
             try {
                 if (keyStore.size() < 1) {
                     logger.log(INFO, "KeyStore is empty");
-                    return null;
+                    throw new IllegalArgumentException(
+                        "Unable to determine a local principal for" +
+                        " comparison with peer principals");
                 } else if (keyStore.size() > 1) {
                     logger.log(INFO, "KeyStore has multiple entries but no " +
                                "alias was specified.  Using the first one " +

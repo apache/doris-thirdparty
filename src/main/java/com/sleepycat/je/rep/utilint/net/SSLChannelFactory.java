@@ -16,18 +16,48 @@ package com.sleepycat.je.rep.utilint.net;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.SocketChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.Key;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
+import java.security.KeyFactory;
+import java.security.AlgorithmParameters;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static java.util.logging.Level.INFO;
+import static java.util.logging.Level.WARNING;
+import static java.util.logging.Level.FINE;
+
+import javax.crypto.Cipher;
+import javax.crypto.EncryptedPrivateKeyInfo;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.PBEParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import javax.crypto.spec.IvParameterSpec;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -61,7 +91,7 @@ public class SSLChannelFactory implements DataChannelFactory {
      * a connection is established based on enabled protocol settings for
      * both client and server.
      */
-    private static final String SSL_CONTEXT_PROTOCOL = "TLS";
+    private static final String SSL_CONTEXT_PROTOCOL = "TLSv1.2";
 
     /**
      * A system property to allow users to specify the correct X509 certificate
@@ -79,13 +109,13 @@ public class SSLChannelFactory implements DataChannelFactory {
      * An SSLContext that will hold all the interesting connection parameter
      * information for session creation in server mode.
      */
-    private final SSLContext serverSSLContext;
+    private volatile SSLContext serverSSLContext;
 
     /**
      * An SSLContext that will hold all the interesting connection parameter
      * information for session creation in client mode.
      */
-    private final SSLContext clientSSLContext;
+    private volatile SSLContext clientSSLContext;
 
     /**
      * The base SSLParameters for use in channel creation.
@@ -107,9 +137,20 @@ public class SSLChannelFactory implements DataChannelFactory {
     private final InstanceLogger logger;
 
     /**
+     * Instance parameters used for SSL context reconstruction during certificate reload
+     */
+    private final InstanceParams instanceParams;
+
+    /**
+     * Scheduled executor service for periodic certificate checking
+     */
+    private ScheduledExecutorService certificateCheckExecutor;
+
+    /**
      * Constructor for use during creating based on access configuration
      */
     public SSLChannelFactory(InstanceParams params) {
+        this.instanceParams = params;
         serverSSLContext = constructSSLContext(params, false);
         clientSSLContext = constructSSLContext(params, true);
         baseSSLParameters =
@@ -118,6 +159,9 @@ public class SSLChannelFactory implements DataChannelFactory {
         sslAuthenticator = constructSSLAuthenticator(params);
         sslHostVerifier = constructSSLHostVerifier(params);
         logger = params.getContext().getLoggerFactory().getLogger(getClass());
+
+        // Initialize certificate monitoring
+        initializeCertificateMonitoring();
     }
 
     /**
@@ -131,6 +175,7 @@ public class SSLChannelFactory implements DataChannelFactory {
                              HostnameVerifier sslHostVerifier,
                              InstanceLogger logger) {
 
+        this.instanceParams = null; // No automatic reloading for pre-configured contexts
         this.serverSSLContext = serverSSLContext;
         this.clientSSLContext = clientSSLContext;
         this.baseSSLParameters =
@@ -263,7 +308,323 @@ public class SSLChannelFactory implements DataChannelFactory {
     }
 
     /**
-     * Builds an SSLContext object for the specified access mode.
+     * Initialize certificate monitoring using scheduled executor for periodic checks.
+     */
+    private void initializeCertificateMonitoring() {
+        if (instanceParams == null) {
+            return;
+        }
+
+        try {
+            final ReplicationSSLConfig config =
+                (ReplicationSSLConfig) instanceParams.getContext().getRepNetConfig();
+
+            // Get the refresh interval from configuration
+            long refreshInterval = config.getSSLCertRefreshIntervalSeconds();
+
+            // If refresh interval is 0, disable certificate monitoring
+            if (refreshInterval <= 0) {
+                logger.log(INFO, "Certificate monitoring disabled (refresh interval = 0)");
+                return;
+            }
+
+            // Only monitor PEM configuration
+            final String pemCert = config.getSSLPemCertFile();
+            final String pemKey = config.getSSLPemKeyFile();
+            final String pemCa = config.getSSLPemCaCertFile();
+
+            // Create scheduled executor for periodic certificate checking
+            certificateCheckExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "BDB-SSL-Certificate-Monitor");
+                t.setDaemon(true);
+                return t;
+            });
+
+            // Schedule periodic certificate checks
+            certificateCheckExecutor.scheduleAtFixedRate(
+                this::checkAndReloadCertificates,
+                refreshInterval,
+                refreshInterval,
+                TimeUnit.SECONDS
+            );
+
+            // Initialize file modification times
+            initializeFileModificationTimes(config);
+
+            logger.log(INFO, "Certificate monitoring initialized with " + refreshInterval + " second interval");
+
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to initialize certificate monitoring: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Initialize file modification times on startup.
+     */
+    private void initializeFileModificationTimes(ReplicationSSLConfig config) {
+        try {
+            caLastModified = Files.getLastModifiedTime(Paths.get(config.getSSLPemCaCertFile())).toMillis();
+            keyLastModified = Files.getLastModifiedTime(Paths.get(config.getSSLPemKeyFile())).toMillis();
+            certLastModified = Files.getLastModifiedTime(Paths.get(config.getSSLPemCertFile())).toMillis();
+            logger.log(INFO, "Certificate timestamps initialized");
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to initialize file modification times: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Check and reload certificates if any PEM files have changed.
+     * Uses bit operations to determine reload necessity:
+     * - If CA changes: check_num |= 1 << 2 (bit 2)
+     * - If key changes: check_num |= 1 << 1 (bit 1)
+     * - If cert changes: check_num |= 1 (bit 0)
+     *
+     * Valid reload scenarios:
+     * - CA + cert + key changed: check_num = 7 (111)
+     * - CA + cert changed: check_num = 5 (101)
+     * - Key + cert changed: check_num = 3 (011)
+     * - Only cert changed: check_num = 1 (001)
+     *
+     * Rule: Reload when check_num is odd (cert file changed)
+     * Only update modification times after successful reload.
+     */
+    private void checkAndReloadCertificates() {
+        if (instanceParams == null) {
+            return;
+        }
+
+        try {
+            final ReplicationSSLConfig config =
+                (ReplicationSSLConfig) instanceParams.getContext().getRepNetConfig();
+
+            // Use AtomicReference to hold temporary modification times
+            AtomicReference<Long> caModified = new AtomicReference<>(caLastModified);
+            AtomicReference<Long> keyModified = new AtomicReference<>(keyLastModified);
+            AtomicReference<Long> certModified = new AtomicReference<>(certLastModified);
+
+            int check_num = 0;
+
+            // Check CA certificate file
+            if (checkCertificateFile(config.getSSLPemCaCertFile(), caModified.get(),
+                    caModified::set, "CA certificate")) {
+                check_num |= 1 << 2;
+            }
+
+            // Check private key file
+            if (checkCertificateFile(config.getSSLPemKeyFile(), keyModified.get(),
+                    keyModified::set, "private key")) {
+                check_num |= 1 << 1;
+            }
+
+            // Check certificate file
+            if (checkCertificateFile(config.getSSLPemCertFile(), certModified.get(),
+                    certModified::set, "certificate")) {
+                check_num |= 1;
+            }
+
+            // Reload certificates when check_num is odd (certificate file changed)
+            if ((check_num & 1) == 1) {
+                // Try to reload certificates
+                if (reloadSSLContexts()) {
+                    // Only update modification times after successful reload
+                    caLastModified = caModified.get();
+                    keyLastModified = keyModified.get();
+                    certLastModified = certModified.get();
+                    logger.log(INFO, "Certificate modification times updated after successful reload");
+                } else {
+                    logger.log(WARNING, "Certificate reload failed, keeping previous modification times for retry");
+                }
+            }
+
+        } catch (Exception e) {
+            logger.log(WARNING, "Error checking certificate files: " + e.getMessage());
+        }
+    }
+
+    /**
+     * File modification time tracking for change detection.
+     * Initialize to -1 to distinguish from 0 (which could be a valid timestamp)
+     */
+    private volatile long caLastModified = -1;
+    private volatile long keyLastModified = -1;
+    private volatile long certLastModified = -1;
+
+    /**
+     * Check if a certificate file has been modified and update the stored modification time.
+     */
+    private boolean checkCertificateFile(String filePath, long lastModified,
+                                       java.util.function.Consumer<Long> timeUpdater,
+                                       String fileType) {
+        if (filePath == null || filePath.isEmpty()) {
+            return false;
+        }
+
+        try {
+            java.io.File file = new java.io.File(filePath);
+
+            // Check if file was deleted
+            if (!file.exists()) {
+                logger.log(WARNING, fileType + " file was deleted: " + filePath +
+                          ", waiting for recreation...");
+                if (waitForFileRecreation(file, fileType, filePath, timeUpdater)) {
+                    return true; // File was recreated, trigger reload
+                } else {
+                    return false; // File not recreated, skip reload
+                }
+            }
+
+            long currentModTime = Files.getLastModifiedTime(Paths.get(filePath)).toMillis();
+
+            if (lastModified == -1 || currentModTime != lastModified) {
+                timeUpdater.accept(currentModTime);
+                if (lastModified != -1) { // Don't trigger reload on first check
+                    logger.log(INFO, fileType + " file changed: " + filePath +
+                              " (old: " + lastModified + ", new: " + currentModTime + ")");
+                    return true;
+                } else {
+                    logger.log(INFO, fileType + " file initialized: " + filePath +
+                              " (timestamp: " + currentModTime + ")");
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to check " + fileType + " file modification time for " +
+                      filePath + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Wait for file recreation when a certificate file is deleted.
+     * This handles the case where certificates are updated by deleting the old file
+     * and creating a new one.
+     */
+    private boolean waitForFileRecreation(java.io.File file, String fileType, String filePath,
+                                        java.util.function.Consumer<Long> updateTime) {
+        int waitSeconds = 30;
+        int checkInterval = 1;
+
+        for (int i = 0; i < waitSeconds; i += checkInterval) {
+            try {
+                Thread.sleep(checkInterval * 1000);
+                if (file.exists()) {
+                    long newModified = Files.getLastModifiedTime(file.toPath()).toMillis();
+                    updateTime.accept(newModified);
+                    logger.log(INFO, fileType + " file recreated and detected: " + filePath);
+                    return true;
+                }
+            } catch (Exception e) {
+                logger.log(WARNING, "Error while waiting for " + fileType + " file recreation: " +
+                          filePath + ", " + e.getMessage());
+            }
+        }
+
+        logger.log(WARNING, fileType + " file was deleted and not recreated within " + waitSeconds +
+                  " seconds, certificate reload cancelled: " + filePath);
+        return false;
+    }
+
+    /**
+     * Reload SSL contexts using only PEM configuration.
+     * @return true if reload was successful, false otherwise
+     */
+    private boolean reloadSSLContexts() {
+        try {
+            logger.log(INFO, "Reloading SSL contexts with new PEM certificates");
+
+            // Construct new SSL contexts
+            SSLContext newServerContext = constructSSLContext(instanceParams, false);
+            SSLContext newClientContext = constructSSLContext(instanceParams, true);
+
+            // Validate new contexts
+            if (newServerContext != null && newClientContext != null) {
+                // Atomically switch to new contexts
+                this.serverSSLContext = newServerContext;
+                this.clientSSLContext = newClientContext;
+
+                // Update mirror matcher principals for new certificates
+                reloadMirrorMatcherPrincipals();
+
+                logger.log(INFO, "SSL certificate reload completed successfully");
+                return true;
+            } else {
+                logger.log(WARNING, "Failed to create new SSL contexts during reload");
+                return false;
+            }
+
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to reload SSL certificates: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Reload principals for mirror authenticators and verifiers.
+     * Note: DN-based authenticators/verifiers don't need explicit reloading
+     * as they re-evaluate peer certificates on each SSL handshake.
+     */
+    private void reloadMirrorMatcherPrincipals() {
+        try {
+            // Reload authenticator principal if it's a mirror authenticator
+            if (sslAuthenticator instanceof SSLMirrorAuthenticator) {
+                ((SSLMirrorAuthenticator) sslAuthenticator).reloadPrincipal();
+            }
+
+            // Reload host verifier principal if it's a mirror host verifier
+            if (sslHostVerifier instanceof SSLMirrorHostVerifier) {
+                ((SSLMirrorHostVerifier) sslHostVerifier).reloadPrincipal();
+            }
+
+            // DN-based authenticators and verifiers automatically handle
+            // certificate changes during SSL handshake validation, no action needed
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to reload mirror matcher principals: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Stop the certificate monitoring executor and clean up resources.
+     */
+    public void shutdown() {
+        if (certificateCheckExecutor != null) {
+            certificateCheckExecutor.shutdown();
+            try {
+                if (!certificateCheckExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    certificateCheckExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                certificateCheckExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            certificateCheckExecutor = null;
+        }
+    }
+
+    /**
+     * Manually trigger certificate reload.
+     * This can be called programmatically to reload certificates without
+     * waiting for periodic checks.
+     *
+     * @return true if reload was initiated successfully, false otherwise
+     */
+    public boolean triggerCertificateReload() {
+        if (instanceParams == null) {
+            logger.log(WARNING, "Cannot trigger certificate reload: instance parameters not available");
+            return false;
+        }
+
+        try {
+            logger.log(INFO, "Manually triggered certificate reload");
+            reloadSSLContexts();
+            return true;
+        } catch (Exception e) {
+            logger.log(WARNING, "Failed to trigger certificate reload: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Builds an SSLContext object using only PEM configuration.
      * @param params general instantiation information
      * @param clientMode set to true if the SSLContext is being created for
      * the client side of an SSL connection and false otherwise
@@ -414,7 +775,7 @@ public class SSLChannelFactory implements DataChannelFactory {
     }
 
     /**
-     * Reads a KeyStore into memory based on the config.
+     * Reads a KeyStore into memory based on PEM configuration only.
      */
     private static KeyStoreInfo readKeyStoreInfo(InstanceContext context) {
 
@@ -422,39 +783,63 @@ public class SSLChannelFactory implements DataChannelFactory {
             (ReplicationSSLConfig) context.getRepNetConfig();
 
         /*
-         * Determine what KeyStore file to access
+         * Determine what KeyStore file to access. P12 configuration takes
+         * precedence over PEM.
          */
         String ksProp = config.getSSLKeyStore();
         if (ksProp == null || ksProp.isEmpty()) {
             ksProp = System.getProperty("javax.net.ssl.keyStore");
         }
 
-        if (ksProp == null) {
-            return null;
+        if (ksProp != null && !ksProp.isEmpty()) {
+
+            /*
+             * Determine what type of keystore to assume. If not specified
+             * loadStore determines the default
+             */
+            final String ksTypeProp = config.getSSLKeyStoreType();
+
+            final char[] ksPw = getKeyStorePassword(context);
+            try {
+                if (ksPw == null) {
+                    throw new IllegalArgumentException(
+                        "Unable to open keystore without a password");
+                }
+
+                /*
+                 * Get a KeyStore instance
+                 */
+                final KeyStore ks =
+                    loadStore(ksProp, ksPw, "keystore", ksTypeProp);
+
+                return new KeyStoreInfo(ksProp, ks, ksPw);
+            } finally {
+                if (ksPw != null) {
+                    Arrays.fill(ksPw, ' ');
+                }
+            }
         }
 
         /*
-         * Determine what type of keystore to assume.  If not specified
-         * loadStore determines the default
+         * No keystore file configured, fall back to PEM material if provided.
          */
-        final String ksTypeProp = config.getSSLKeyStoreType();
+        final String pemCert = config.getSSLPemCertFile();
+        final String pemKey = config.getSSLPemKeyFile();
+        if (pemCert == null || pemCert.isEmpty() ||
+            pemKey == null || pemKey.isEmpty()) {
+            return null;
+        }
 
-        final char[] ksPw = getKeyStorePassword(context);
+        final char[] pemPassword = pemPasswordToChars(config.getSSLPemKeyPassword());
         try {
-            if (ksPw == null) {
-                throw new IllegalArgumentException(
-                    "Unable to open keystore without a password");
-            }
-
-            /*
-             * Get a KeyStore instance
-             */
-            final KeyStore ks = loadStore(ksProp, ksPw, "keystore", ksTypeProp);
-
-            return new KeyStoreInfo(ksProp, ks, ksPw);
+            final KeyStore ks = loadKeyStore(pemCert, pemKey, pemPassword);
+            return new KeyStoreInfo(pemCert, ks, pemPassword);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                "Error loading PEM key material from " + pemCert, e);
         } finally {
-            if (ksPw != null) {
-                Arrays.fill(ksPw, ' ');
+            if (pemPassword != null) {
+                Arrays.fill(pemPassword, ' ');
             }
         }
     }
@@ -553,7 +938,7 @@ public class SSLChannelFactory implements DataChannelFactory {
     }
 
     /**
-     * Based on the input config, read the configured TrustStore into memory.
+     * Based on PEM configuration, read the configured TrustStore into memory.
      */
     private static KeyStoreInfo readTrustStoreInfo(InstanceContext context) {
 
@@ -561,33 +946,28 @@ public class SSLChannelFactory implements DataChannelFactory {
             (ReplicationSSLConfig) context.getRepNetConfig();
 
         /*
-         * Determine what truststore file, if any, to use
+         * Only use PEM CA configuration for truststore.
          */
-        String tsProp = config.getSSLTrustStore();
-        if (tsProp == null || tsProp.isEmpty()) {
-            tsProp = System.getProperty("javax.net.ssl.trustStore");
+        final String pemCa = config.getSSLPemCaCertFile();
+        if (pemCa == null || pemCa.isEmpty()) {
+            return null;
         }
 
-        /*
-         * Determine what type of truststore to assume
-         */
-        String tsTypeProp = config.getSSLTrustStoreType();
-        if (tsTypeProp == null || tsTypeProp.isEmpty()) {
-            tsTypeProp = KeyStore.getDefaultType();
+        try {
+            final KeyStore ts = loadTrustStore(pemCa);
+            return new KeyStoreInfo(pemCa, ts, null);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                "Error loading PEM CA certificate from " + pemCa, e);
         }
+    }
 
-        /*
-         * Build a TrustStore, if specified
-         */
-        final char[] tsPw = getTrustStorePassword(context);
+    private static char[] pemPasswordToChars(String password) {
 
-        if (tsProp != null) {
-            final KeyStore ts = loadStore(tsProp, tsPw, "truststore", tsTypeProp);
-
-            return new KeyStoreInfo(tsProp, ts, tsPw);
+        if (password == null || password.isEmpty()) {
+            return new char[0];
         }
-
-        return null;
+        return password.toCharArray();
     }
 
     /**
@@ -1000,4 +1380,122 @@ public class SSLChannelFactory implements DataChannelFactory {
             }
         }
     }
+
+    public static KeyStore loadKeyStore(String certPath,
+                                        String keyPath,
+                                        char[] password)
+        throws Exception {
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+        Certificate cert;
+        try (InputStream in = new FileInputStream(certPath)) {
+            cert = cf.generateCertificate(in);
+        }
+
+        PrivateKey privateKey = loadPrivateKey(keyPath, password);
+
+        KeyStore ks = KeyStore.getInstance("PKCS12");
+        ks.load(null, null);
+        ks.setKeyEntry("cert", privateKey, password, new Certificate[]{cert});
+        return ks;
+    }
+
+    public static KeyStore loadTrustStore(String caCertPath) throws Exception {
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+        Certificate ca;
+        try (InputStream in = new FileInputStream(caCertPath)) {
+            ca = cf.generateCertificate(in);
+        }
+        KeyStore ts = KeyStore.getInstance("PKCS12");
+        ts.load(null, null);
+        ts.setCertificateEntry("ca", ca);
+        return ts;
+    }
+
+
+    public static PrivateKey loadPrivateKey(String keyPath, char[] password)
+        throws Exception {
+        if (password == null) {
+            password = new char[0];
+        }
+        String pem = new String(Files.readAllBytes(Paths.get(keyPath)));
+        pem = pem.replaceAll("-----BEGIN (.*)-----", "")
+                 .replaceAll("-----END (.*)-----", "")
+                 .replaceAll("\\s", "");
+        byte[] decoded = Base64.getDecoder().decode(pem);
+
+        try {
+            EncryptedPrivateKeyInfo encryptedInfo =
+                new EncryptedPrivateKeyInfo(decoded);
+            Cipher cipher = buildDecryptCipher(encryptedInfo, password);
+            PKCS8EncodedKeySpec keySpec = encryptedInfo.getKeySpec(cipher);
+            return generatePrivateKey(keySpec);
+        } catch (IOException e) {
+            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
+            return generatePrivateKey(keySpec);
+        }
+    }
+
+    private static PrivateKey generatePrivateKey(PKCS8EncodedKeySpec keySpec)
+        throws Exception {
+        String[] keyAlgorithms = {"RSA", "EC", "DSA"};
+        Exception lastException = null;
+
+        for (String keyAlg : keyAlgorithms) {
+            try {
+                return KeyFactory.getInstance(keyAlg).generatePrivate(keySpec);
+            } catch (Exception e) {
+                lastException = e;
+            }
+        }
+
+        if (lastException != null) {
+            throw lastException;
+        }
+
+        throw new Exception(
+            "Unable to parse private key with any supported algorithm");
+    }
+
+    private static Cipher buildDecryptCipher(EncryptedPrivateKeyInfo info,
+                                             char[] password)
+        throws Exception {
+        final String algName = info.getAlgName();
+        if (algName != null && algName.toUpperCase().contains("PBES2")) {
+            AlgorithmParameters params = info.getAlgParameters();
+            if (params == null) {
+                throw new IllegalArgumentException(
+                    "Missing PBES2 algorithm parameters");
+            }
+
+            PBEParameterSpec pbeSpec =
+                params.getParameterSpec(PBEParameterSpec.class);
+            if (pbeSpec == null) {
+                throw new IllegalArgumentException(
+                    "Unsupported PBES2 parameters");
+            }
+
+            final String transformation = params.toString();
+            if (transformation == null || transformation.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "Missing PBES2 transformation");
+            }
+
+            SecretKeyFactory skf = SecretKeyFactory.getInstance(transformation);
+            SecretKey secret = skf.generateSecret(new PBEKeySpec(password,
+                                                                pbeSpec.getSalt(),
+                                                                pbeSpec.getIterationCount()));
+
+            Cipher cipher = Cipher.getInstance(transformation);
+            cipher.init(Cipher.DECRYPT_MODE, secret, pbeSpec);
+            return cipher;
+        }
+
+        Cipher cipher = Cipher.getInstance(algName);
+        PBEKeySpec pbeKeySpec = new PBEKeySpec(password);
+        SecretKeyFactory skf = SecretKeyFactory.getInstance(algName);
+        Key key = skf.generateSecret(pbeKeySpec);
+        cipher.init(Cipher.DECRYPT_MODE, key, info.getAlgParameters());
+        return cipher;
+    }
+
 }

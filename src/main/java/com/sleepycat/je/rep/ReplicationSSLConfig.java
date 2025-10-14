@@ -510,6 +510,123 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
     public static final String SSL_HOST_VERIFIER_PARAMS =
         EnvironmentParams.REP_PARAM_PREFIX + "ssl.hostVerifierParams";
 
+    /**
+     * The interval in seconds for checking certificate file changes.
+     * The certificate file watcher will check for file modifications at this
+     * frequency. A smaller value provides faster certificate reload response
+     * but consumes more system resources. A value of 0 disables certificate
+     * file monitoring completely.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>Long</td>
+     * <td>No</td>
+     * <td>30</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_CERT_REFRESH_INTERVAL_SECONDS =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.certRefreshIntervalSeconds";
+
+    /**
+     * The timeout in seconds for smooth certificate transition.
+     * During certificate reload, the system will keep backup certificates
+     * for this duration to ensure smooth transition without connection
+     * disruption. After this timeout, backup certificates will be cleaned up.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>Long</td>
+     * <td>No</td>
+     * <td>30</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_CERT_TRANSITION_TIMEOUT_SECONDS =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.certTransitionTimeoutSeconds";
+
+    /**
+     * The path to the PEM certificate file for SSL data channel factories.
+     * The specified path must be absolute.
+     * When both PEM and P12 configurations are present, P12 takes precedence.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>String</td>
+     * <td>No</td>
+     * <td>""</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_PEM_CERT_FILE =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.pemCertFile";
+
+    /**
+     * The path to the PEM private key file for SSL data channel factories.
+     * The specified path must be absolute.
+     * When both PEM and P12 configurations are present, P12 takes precedence.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>String</td>
+     * <td>No</td>
+     * <td>""</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_PEM_KEY_FILE =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.pemKeyFile";
+
+    /**
+     * The password for the PEM private key file (if encrypted).
+     * If this parameter is not set or has an empty value, the key is
+     * assumed to be unencrypted.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>String</td>
+     * <td>No</td>
+     * <td>""</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_PEM_KEY_PASSWORD =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.pemKeyPassword";
+
+    /**
+     * The path to the PEM CA certificate file for SSL trust verification.
+     * The specified path must be absolute.
+     * When both PEM and P12 configurations are present, P12 takes precedence.
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>String</td>
+     * <td>No</td>
+     * <td>""</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_PEM_CA_CERT_FILE =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.pemCaCertFile";
+
     /* The set of Replication properties specific to this class */
     private static Set<String> repSSLProperties;
     static {
@@ -532,6 +649,12 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
         repSSLProperties.add(SSL_HOST_VERIFIER);
         repSSLProperties.add(SSL_HOST_VERIFIER_CLASS);
         repSSLProperties.add(SSL_HOST_VERIFIER_PARAMS);
+        repSSLProperties.add(SSL_CERT_REFRESH_INTERVAL_SECONDS);
+        repSSLProperties.add(SSL_CERT_TRANSITION_TIMEOUT_SECONDS);
+        repSSLProperties.add(SSL_PEM_CERT_FILE);
+        repSSLProperties.add(SSL_PEM_KEY_FILE);
+        repSSLProperties.add(SSL_PEM_KEY_PASSWORD);
+        repSSLProperties.add(SSL_PEM_CA_CERT_FILE);
         /* Nail the set down */
         repSSLProperties = Collections.unmodifiableSet(repSSLProperties);
     }
@@ -1227,6 +1350,199 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
 
         DbConfigManager.setVal(props, RepParams.SSL_HOST_VERIFIER_PARAMS,
                                hostVerifierParams, validateParams);
+    }
+
+    /**
+     * Returns the certificate file refresh interval in seconds.
+     *
+     * @return the refresh interval in seconds, or 0 if monitoring is disabled
+     */
+    public long getSSLCertRefreshIntervalSeconds() {
+        return DbConfigManager.getLongVal(props, RepParams.SSL_CERT_REFRESH_INTERVAL_SECONDS);
+    }
+
+    /**
+     * Sets the certificate file refresh interval in seconds.
+     * The certificate file watcher will check for file modifications at this
+     * frequency. A smaller value provides faster certificate reload response
+     * but consumes more system resources. A value of 0 disables certificate
+     * file monitoring completely.
+     *
+     * @param intervalSeconds the refresh interval in seconds (0 to disable)
+     *
+     * @return this
+     *
+     * @throws IllegalArgumentException if intervalSeconds is negative
+     */
+    public ReplicationNetworkConfig setSSLCertRefreshIntervalSeconds(long intervalSeconds) {
+        setSSLCertRefreshIntervalSecondsVoid(intervalSeconds);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLCertRefreshIntervalSecondsVoid(long intervalSeconds) {
+        if (intervalSeconds < 0) {
+            throw new IllegalArgumentException("Certificate refresh interval cannot be negative");
+        }
+        DbConfigManager.setVal(props, RepParams.SSL_CERT_REFRESH_INTERVAL_SECONDS,
+                               Long.toString(intervalSeconds), validateParams);
+    }
+
+    /**
+     * Returns the certificate transition timeout in seconds.
+     *
+     * @return the transition timeout in seconds
+     */
+    public long getSSLCertTransitionTimeoutSeconds() {
+        return DbConfigManager.getLongVal(props, RepParams.SSL_CERT_TRANSITION_TIMEOUT_SECONDS);
+    }
+
+    /**
+     * Sets the certificate transition timeout in seconds.
+     * During certificate reload, the system will keep backup certificates
+     * for this duration to ensure smooth transition without connection
+     * disruption. After this timeout, backup certificates will be cleaned up.
+     *
+     * @param timeoutSeconds the transition timeout in seconds
+     *
+     * @return this
+     *
+     * @throws IllegalArgumentException if timeoutSeconds is negative
+     */
+    public ReplicationNetworkConfig setSSLCertTransitionTimeoutSeconds(long timeoutSeconds) {
+        setSSLCertTransitionTimeoutSecondsVoid(timeoutSeconds);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLCertTransitionTimeoutSecondsVoid(long timeoutSeconds) {
+        if (timeoutSeconds < 0) {
+            throw new IllegalArgumentException("Certificate transition timeout cannot be negative");
+        }
+        DbConfigManager.setVal(props, RepParams.SSL_CERT_TRANSITION_TIMEOUT_SECONDS,
+                               Long.toString(timeoutSeconds), validateParams);
+    }
+
+    /**
+     * Returns the path to the PEM certificate file.
+     *
+     * @return the PEM certificate file path
+     */
+    public String getSSLPemCertFile() {
+        return DbConfigManager.getVal(props, RepParams.SSL_PEM_CERT_FILE);
+    }
+
+    /**
+     * Sets the path to the PEM certificate file.
+     *
+     * @param pemCertFile the PEM certificate file path
+     *
+     * @return this
+     */
+    public ReplicationNetworkConfig setSSLPemCertFile(String pemCertFile) {
+        setSSLPemCertFileVoid(pemCertFile);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLPemCertFileVoid(String pemCertFile) {
+        DbConfigManager.setVal(props, RepParams.SSL_PEM_CERT_FILE, pemCertFile, validateParams);
+    }
+
+    /**
+     * Returns the path to the PEM private key file.
+     *
+     * @return the PEM private key file path
+     */
+    public String getSSLPemKeyFile() {
+        return DbConfigManager.getVal(props, RepParams.SSL_PEM_KEY_FILE);
+    }
+
+    /**
+     * Sets the path to the PEM private key file.
+     *
+     * @param pemKeyFile the PEM private key file path
+     *
+     * @return this
+     */
+    public ReplicationNetworkConfig setSSLPemKeyFile(String pemKeyFile) {
+        setSSLPemKeyFileVoid(pemKeyFile);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLPemKeyFileVoid(String pemKeyFile) {
+        DbConfigManager.setVal(props, RepParams.SSL_PEM_KEY_FILE, pemKeyFile, validateParams);
+    }
+
+    /**
+     * Returns the password for the PEM private key file.
+     *
+     * @return the PEM private key password
+     */
+    public String getSSLPemKeyPassword() {
+        return DbConfigManager.getVal(props, RepParams.SSL_PEM_KEY_PASSWORD);
+    }
+
+    /**
+     * Sets the password for the PEM private key file.
+     *
+     * @param pemKeyPassword the PEM private key password
+     *
+     * @return this
+     */
+    public ReplicationNetworkConfig setSSLPemKeyPassword(String pemKeyPassword) {
+        setSSLPemKeyPasswordVoid(pemKeyPassword);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLPemKeyPasswordVoid(String pemKeyPassword) {
+        DbConfigManager.setVal(props, RepParams.SSL_PEM_KEY_PASSWORD, pemKeyPassword, validateParams);
+    }
+
+    /**
+     * Returns the path to the PEM CA certificate file.
+     *
+     * @return the PEM CA certificate file path
+     */
+    public String getSSLPemCaCertFile() {
+        return DbConfigManager.getVal(props, RepParams.SSL_PEM_CA_CERT_FILE);
+    }
+
+    /**
+     * Sets the path to the PEM CA certificate file.
+     *
+     * @param pemCaCertFile the PEM CA certificate file path
+     *
+     * @return this
+     */
+    public ReplicationNetworkConfig setSSLPemCaCertFile(String pemCaCertFile) {
+        setSSLPemCaCertFileVoid(pemCaCertFile);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLPemCaCertFileVoid(String pemCaCertFile) {
+        DbConfigManager.setVal(props, RepParams.SSL_PEM_CA_CERT_FILE, pemCaCertFile, validateParams);
     }
 
     /**
