@@ -1158,9 +1158,13 @@ namespace orc {
   }
 
   uint64_t StructColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
-    if (readPhase.contains(this->type.getReaderCategory())) {
-      numValues = ColumnReader::skip(numValues, readPhase);
+    if (!readPhase.contains(this->type.getReaderCategory())) {
+      return 0;
     }
+    // if (readPhase.contains(this->type.getReaderCategory())) {
+    //   numValues = ColumnReader::skip(numValues, readPhase);
+    // }
+    numValues = ColumnReader::skip(numValues, readPhase);
     for (auto& ptr : children) {
       if (shouldProcessChild(ptr->getType().getReaderCategory(), readPhase)) {
         ptr->skip(numValues, readPhase);

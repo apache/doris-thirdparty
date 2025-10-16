@@ -591,6 +591,7 @@ namespace orc {
         throw NotImplementedYet("Unknown type kind");
     }
     result->setIds(fileType->getColumnId(), fileType->getMaximumColumnId());
+    result->setReaderCategory(fileType->getReaderCategory());
     for (auto& key : fileType->getAttributeKeys()) {
       const auto& value = fileType->getAttributeValue(key);
       result->setAttribute(key, value);

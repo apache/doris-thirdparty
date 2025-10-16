@@ -207,6 +207,18 @@ namespace orc {
     RowReaderOptions& filter(const std::list<std::string>& filterColNames);
 
     /**
+     * Selects which type ids to filter. The root type is always 0 and the
+     * rest of the types are labeled in a preorder traversal of the tree.
+     * The parent types are automatically selected, but the children are not.
+     *
+     * This option clears any previous setting of the filter columns or
+     * types.
+     * @param types a list of the type ids to filter
+     * @return this
+     */
+    RowReaderOptions& filterTypes(const std::list<uint64_t>& types);
+
+    /**
      * A map type of <typeId, ReadIntent>.
      */
     typedef std::map<uint64_t, ReadIntent> IdReadIntentMap;
@@ -307,6 +319,16 @@ namespace orc {
      * columns are also selected.
      */
     const std::list<std::string>& getFilterColNames() const;
+
+    /**
+     * Were the filter type ids set?
+     */
+    bool getFilterTypeIdsSet() const;
+
+    /**
+     * Get the list of filter type ids.
+     */
+    const std::list<uint64_t>& getFilterTypeIds() const;
 
     /**
      * Get the start of the range for the data being processed.

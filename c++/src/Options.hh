@@ -238,6 +238,13 @@ namespace orc {
     return *this;
   }
 
+  RowReaderOptions& RowReaderOptions::filterTypes(const std::list<uint64_t>& types) {
+    privateBits->filter = ColumnFilter_TYPE_IDS;
+    privateBits->filterColumnIndexes.assign(types.begin(), types.end());
+    privateBits->filterColumnNames.clear();
+    return *this;
+  }
+
   RowReaderOptions& RowReaderOptions::range(uint64_t offset, uint64_t length) {
     privateBits->dataStart = offset;
     privateBits->dataLength = length;
@@ -266,6 +273,14 @@ namespace orc {
 
   const std::list<std::string>& RowReaderOptions::getFilterColNames() const {
     return privateBits->filterColumnNames;
+  }
+
+  bool RowReaderOptions::getFilterTypeIdsSet() const {
+    return privateBits->filter == ColumnFilter_TYPE_IDS;
+  }
+
+  const std::list<uint64_t>& RowReaderOptions::getFilterTypeIds() const {
+    return privateBits->filterColumnIndexes;
   }
 
   uint64_t RowReaderOptions::getOffset() const {
