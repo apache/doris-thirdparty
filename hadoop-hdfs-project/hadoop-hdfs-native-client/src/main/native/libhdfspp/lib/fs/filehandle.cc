@@ -292,7 +292,8 @@ void FileHandleImpl::AsyncPreadSome(
     if (status.ok()) {
       reader->AsyncReadBlock(
           client_name, *block, offset_within_block,
-          boost::asio::buffer(buffer, size_within_block), read_handler);
+          // boost::asio::buffer(buffer, size_within_block), read_handler);
+          boost::asio::buffer(*buffer.begin(), size_within_block), read_handler);
     } else {
       handler(status, dn_id, 0);
     }

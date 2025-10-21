@@ -59,7 +59,9 @@ include(FetchContent)
 # https://github.com/google/googletest/blob/e649993a402d96afe25fbf3413749adf0f2947f6/googletest/README.md#incorporating-into-an-existing-cmake-project
 FetchContent_Declare(
   googletest
-  URL https://github.com/google/googletest/archive/703bd9caab50b139428cea1aaff9974ebee5742e.zip
+  #URL https://github.com/google/googletest/archive/703bd9caab50b139428cea1aaff9974ebee5742e.zip
+  # use 1.12.1 to avoid -Wdeprecated-copy
+  URL https://github.com/google/googletest/archive/refs/tags/release-1.12.1.zip
 )
 # The commit SHA 703bd9caab50b139428cea1aaff9974ebee5742e in the URL above corresponds to the
 # tag release-1.10.0 in the googletest repository.
@@ -168,6 +170,9 @@ add_definitions(-DASIO_STANDALONE -DASIO_CPP11_DATE_TIME)
 # Disable optimizations if compiling debug
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
+
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-cast-function-type -Wno-unused-lambda-capture")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-cast-function-type -Wno-unused-lambda-capture")
 
 if(UNIX)
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic -g -fPIC -fno-strict-aliasing")

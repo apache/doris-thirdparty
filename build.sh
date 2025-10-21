@@ -33,8 +33,8 @@ if [[ -z "${THIRDPARTY_INSTALLED}" ]]; then
 	exit 255
 fi
 
-DIST_DIR="${SRC_HOME}/hadoop-dist/target/hadoop-3.3.6"
-LIBHDFS_DIST_DIR="${SRC_HOME}/hadoop-dist/target/hadoop-libhdfs-3.3.6"
+DIST_DIR="${SRC_HOME}/hadoop-dist/target/hadoop-3.4.2"
+LIBHDFS_DIST_DIR="${SRC_HOME}/hadoop-dist/target/hadoop-libhdfs-3.4.2"
 rm -rf "${DIST_DIR}"
 rm -rf "${LIBHDFS_DIST_DIR}"
 
