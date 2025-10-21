@@ -212,7 +212,7 @@ namespace orc {
     ReadPhase startReadPhase;
     bool needsFollowColumnsRead;
 
-    std::map<uint64_t, const Type*> idTypeMap;
+    std::map<uint64_t, Type*> idTypeMap;
     std::map<std::string, Type*> nameTypeMap;
     std::vector<std::string> columns;
 

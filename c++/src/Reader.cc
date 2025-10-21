@@ -176,22 +176,36 @@ namespace orc {
            field != options.getInclude().end(); ++field) {
         updateSelectedByFieldId(selectedColumns, *field);
       }
+      selectParents(selectedColumns, *contents->schema.get());
     } else if (contents->schema->getKind() == STRUCT && options.getNamesSet()) {
       for (std::list<std::string>::const_iterator field = options.getIncludeNames().begin();
            field != options.getIncludeNames().end(); ++field) {
         updateSelectedByName(selectedColumns, *field);
       }
+      selectParents(selectedColumns, *contents->schema.get());
     } else if (options.getTypeIdsSet()) {
       const RowReaderOptions::IdReadIntentMap idReadIntentMap = options.getIdReadIntentMap();
       for (std::list<uint64_t>::const_iterator typeId = options.getInclude().begin();
            typeId != options.getInclude().end(); ++typeId) {
-        updateSelectedByTypeId(selectedColumns, *typeId, idReadIntentMap);
+        if (!idReadIntentMap.empty()) {
+          updateSelectedByTypeId(selectedColumns, *typeId, idReadIntentMap);
+          selectParents(selectedColumns, *contents->schema.get());
+        } else {
+          if (*typeId < selectedColumns.size()) {
+            // Only select the specified type ID, do not automatically select children or parents
+            selectedColumns[*typeId] = true;
+          } else {
+            std::stringstream buffer;
+            buffer << "Invalid type id selected " << *typeId << " out of " << selectedColumns.size();
+            throw ParseError(buffer.str());
+          }
+        }
       }
     } else {
       // default is to select all columns
       std::fill(selectedColumns.begin(), selectedColumns.end(), true);
+      selectParents(selectedColumns, *contents->schema.get());
     }
-    selectParents(selectedColumns, *contents->schema.get());
     selectedColumns[0] = true;  // column 0 is selected by default
   }
 
@@ -330,6 +344,65 @@ namespace orc {
         }
 
         Type* type = iter->second;
+
+        // Process current node and all its parent nodes
+        // Set FILTER_CHILD for leaf nodes and FILTER_PARENT for non-leaf nodes
+        Type* current = type;
+        while (current != nullptr) {
+          if (current->getSubtypeCount() == 0) {
+            current->setReaderCategory(ReaderCategory::FILTER_CHILD);
+          } else if (current->getKind() == TypeKind::LIST
+                     || current->getKind() == TypeKind::MAP) {
+            current->setReaderCategory(ReaderCategory::FILTER_COMPOUND_ELEMENT);
+          } else {
+            current->setReaderCategory(ReaderCategory::FILTER_PARENT);
+          }
+          filterColIds.emplace(current->getColumnId());
+          current = current->getParent();
+        }
+
+        // Process all child nodes of the current node
+        // For child nodes: set FILTER_CHILD if it's a leaf, FILTER_PARENT if it has children
+        std::function<void(Type*)> processChildren = [&processChildren](Type* node) {
+          if (node == nullptr) return;
+
+          // Iterate through all child nodes
+          for (int i = 0; i < node->getSubtypeCount(); ++i) {
+            Type* child = node->getSubtype(i);
+            if (child->getSubtypeCount() == 0) {
+              // Leaf node (no children)
+              child->setReaderCategory(ReaderCategory::FILTER_CHILD);
+            } else if (child->getKind() == TypeKind::LIST
+                       || child->getKind() == TypeKind::MAP) {
+              child->setReaderCategory(ReaderCategory::FILTER_COMPOUND_ELEMENT);
+              // Recursively process its children
+              processChildren(child);
+            } else {
+              // Non-leaf node (has children)
+              child->setReaderCategory(ReaderCategory::FILTER_PARENT);
+              // Recursively process its children
+              processChildren(child);
+            }
+          }
+        };
+        processChildren(type);
+      }
+
+      startReadPhase = ReadPhase::LEADERS;
+      readerContext = std::unique_ptr<ReaderContext>(new ReaderContext());
+      readerContext->setFilterCallback(std::move(filterColIds), filter);
+    } else if (opts.getFilterTypeIdsSet()) {
+      // Handle filter by type IDs
+      const std::list<uint64_t>& filterTypeIds = opts.getFilterTypeIds();
+
+      for (const auto& typeId : filterTypeIds) {
+        if (typeId >= idTypeMap.size()) {
+          std::stringstream buffer;
+          buffer << "Invalid type id for filter " << typeId << " out of " << idTypeMap.size();
+          throw ParseError(buffer.str());
+        }
+
+        Type* type = idTypeMap[typeId];
 
         // Process current node and all its parent nodes
         // Set FILTER_CHILD for leaf nodes and FILTER_PARENT for non-leaf nodes
