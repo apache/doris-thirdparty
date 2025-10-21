@@ -2204,9 +2204,9 @@ evbuffer_expand(struct evbuffer *buf, size_t datlen)
 #define IOV_LEN_TYPE unsigned long
 #endif
 #endif
-#define NUM_READ_IOVEC 4
+#define NUM_READ_IOVEC 8
 
-#define EVBUFFER_MAX_READ	4096
+#define EVBUFFER_MAX_READ	(128 * 1024)
 
 /** Helper function to figure out which space to use for reading data into
     an evbuffer.  Internal use only.

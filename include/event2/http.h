@@ -299,6 +299,20 @@ void evhttp_set_bevcb(struct evhttp *http,
     struct bufferevent *(*cb)(struct event_base *, void *), void *arg);
 
 /**
+   Set a callback which allows the user to note or throttle incoming requests.
+   The requests are not populated with HTTP level information. They
+   are just associated to a connection.
+   If the callback returns -1, the associated connection is terminated
+   and the request is closed.
+   @param http the evhttp server object for which to set the callback
+   @param cb the callback to invoke for incoming connections
+   @param arg an context argument for the callback
+ */
+EVENT2_EXPORT_SYMBOL
+void evhttp_set_newreqcb(struct evhttp *http,
+    int (*cb)(struct evhttp_request*, void *), void *arg);
+
+/**
    Adds a virtual host to the http server.
 
    A virtual host is a newly initialized evhttp object that has request
@@ -622,6 +636,20 @@ void evhttp_request_set_error_cb(struct evhttp_request *,
  */
 EVENT2_EXPORT_SYMBOL
 void evhttp_request_set_on_complete_cb(struct evhttp_request *req,
+    void (*cb)(struct evhttp_request *, void *), void *cb_arg);
+
+/**
+ * Set a callback to be called on request free.
+ *
+ * The callback function will be called just before the evhttp_request object
+ * is destroyed.
+ *
+ * @param req a request object
+ * @param cb callback function that will be called before request free
+ * @param cb_arg an additional context argument for the callback
+ */
+EVENT2_EXPORT_SYMBOL
+void evhttp_request_set_on_free_cb(struct evhttp_request *req,
     void (*cb)(struct evhttp_request *, void *), void *cb_arg);
 
 /** Frees the request object and removes associated events. */

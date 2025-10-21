@@ -275,7 +275,7 @@ bev_async_consider_reading(struct bufferevent_async *beva)
 		}
 		at_most = read_high - cur_size;
 	} else {
-		at_most = 16384; /* FIXME totally magic. */
+		at_most = 128 * 1024; /* FIXME totally magic. */
 	}
 
 	/* XXXX This over-commits. */

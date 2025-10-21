@@ -3975,6 +3975,14 @@ evhttp_set_bevcb(struct evhttp *http,
 	http->bevcbarg = cbarg;
 }
 
+void
+evhttp_set_newreqcb(struct evhttp *http,
+    int (*cb)(struct evhttp_request *, void *), void *cbarg)
+{
+	http->newreqcb = cb;
+	http->newreqcbarg = cbarg;
+}
+
 /*
  * Request related functions
  */
@@ -4036,6 +4044,8 @@ evhttp_request_free(struct evhttp_request *req)
 		req->flags |= EVHTTP_REQ_NEEDS_FREE;
 		return;
 	}
+	if (req->on_free_cb)
+		(*req->on_free_cb)(req, req->on_free_cb_arg);
 
 	if (req->remote_host != NULL)
 		mm_free(req->remote_host);
@@ -4115,6 +4125,15 @@ evhttp_request_set_on_complete_cb(struct evhttp_request *req,
 	req->on_complete_cb = cb;
 	req->on_complete_cb_arg = cb_arg;
 }
+
+void
+evhttp_request_set_on_free_cb(struct evhttp_request *req,
+    void (*cb)(struct evhttp_request *, void *), void *cb_arg)
+{
+	req->on_free_cb = cb;
+	req->on_free_cb_arg = cb_arg;
+}
+
 
 /*
  * Allows for inspection of the request URI
@@ -4307,9 +4326,14 @@ evhttp_associate_new_request_with_connection(struct evhttp_connection *evcon)
 	 */
 	req->userdone = 1;
 
-	TAILQ_INSERT_TAIL(&evcon->requests, req, next);
-
 	req->kind = EVHTTP_REQUEST;
+
+	if (http->newreqcb && http->newreqcb(req, http->newreqcbarg) == -1) {
+		evhttp_request_free(req);
+		return (-1);
+	}
+
+	TAILQ_INSERT_TAIL(&evcon->requests, req, next);
 
 
 	evhttp_start_read_(evcon);
