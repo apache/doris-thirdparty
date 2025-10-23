@@ -235,6 +235,8 @@ jobs:
             export MACOSX_DEPLOYMENT_TARGET=12.0
           fi
 
+          export CMAKE_POLICY_VERSION_MINIMUM=3.10
+          export CUSTOM_CMAKE="/usr/local/bin/cmake"
           cd thirdparty
           ./build-thirdparty.sh -j "$(nproc)"
 
