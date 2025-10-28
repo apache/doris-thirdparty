@@ -73,17 +73,17 @@ class CLUCENE_INLINE_EXPORT PriorityQueue {
 		virtual bool lessThan(_type a, _type b)=0;
 
 		// Subclass constructors must call this. 
-		void initialize(const int32_t maxSize, bool deleteOnClear){
+		void initialize(const int32_t inputMaxSize, bool deleteOnClear){
 			_size = 0;
 			dk = deleteOnClear;
 			int32_t heapSize;
-			if (0 == maxSize)
+			if (0 == inputMaxSize)
 				// We allocate 1 extra to avoid if statement in top()
 				heapSize = 2;
 			else
-				heapSize = maxSize + 1;
+				heapSize = inputMaxSize + 1;
 			heap = _CL_NEWARRAY(_type,heapSize);
-            this->maxSize = maxSize;
+            this->maxSize = inputMaxSize;
 		}
 
 	public:
