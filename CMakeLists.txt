@@ -73,9 +73,13 @@ option(FAISS_USE_LTO "Enable Link-Time optimization" OFF)
 
 # Suppress warnings everywhere
 add_compile_options(-Wno-everything)
+message(STATUS "FAISS_OPT_LEVEL=${FAISS_OPT_LEVEL}")
 
-# Only add -mfma on x86_64
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+# Only add -mfma on x86_64 when avx is enable
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64"
+    AND (FAISS_OPT_LEVEL STREQUAL "avx2"
+         OR FAISS_OPT_LEVEL STREQUAL "avx512"
+         OR FAISS_OPT_LEVEL STREQUAL "avx512_spr"))
     add_compile_options(-mfma)
 endif()
 
