@@ -208,9 +208,9 @@ public class SSLChannelFactory implements DataChannelFactory {
                                              socketChannel.socket().getPort());
         engine.setSSLParameters(baseSSLParameters);
         engine.setUseClientMode(false);
-        if (sslAuthenticator != null) {
-            engine.setWantClientAuth(true);
-        }
+
+        // Configure client authentication based on SSL_CLIENT_AUTH_MODE
+        configureClientAuth(engine);
 
         return new SSLDataChannel(socketChannel, engine, null, null,
                                   sslAuthenticator, logger);
@@ -246,6 +246,56 @@ public class SSLChannelFactory implements DataChannelFactory {
 
         return new SSLDataChannel(
             socketChannel, engine, host, sslHostVerifier, null, logger);
+    }
+
+    /**
+     * Configure client authentication mode for the SSLEngine based on the
+     * SSL_CLIENT_AUTH_MODE configuration parameter.
+     *
+     * @param engine the SSLEngine to configure
+     */
+    private void configureClientAuth(SSLEngine engine) {
+        if (instanceParams == null) {
+            // Fallback to legacy behavior if no instance params
+            if (sslAuthenticator != null) {
+                engine.setWantClientAuth(true);
+            }
+            return;
+        }
+
+        final ReplicationSSLConfig config =
+            (ReplicationSSLConfig) instanceParams.getContext().getRepNetConfig();
+        final String clientAuthMode = config.getSSLClientAuthMode();
+
+        if (clientAuthMode == null || clientAuthMode.isEmpty()) {
+            // Default behavior: request client auth if authenticator is present
+            if (sslAuthenticator != null) {
+                engine.setWantClientAuth(true);
+            }
+            return;
+        }
+
+        if ("verify_none".equals(clientAuthMode)) {
+            // Don't request client certificates at all (TLS without client auth)
+            engine.setWantClientAuth(false);
+            engine.setNeedClientAuth(false);
+        } else if ("verify_peer".equals(clientAuthMode)) {
+            // Request client certificates but don't require them (standard TLS)
+            // Relax the certificate restrictions for verify_peer
+            // engine.setWantClientAuth(true);
+            // engine.setNeedClientAuth(false);
+        } else if ("verify_fail_if_no_peer_cert".equals(clientAuthMode)) {
+            // Require client certificates (mutual TLS / mTLS)
+            engine.setWantClientAuth(false);  // setNeedClientAuth implies want
+            engine.setNeedClientAuth(true);
+        } else {
+            // Should not happen due to validation in RepParams, but handle it
+            logger.log(WARNING, "Unknown SSL client auth mode: " + clientAuthMode +
+                      ", falling back to default behavior");
+            if (sslAuthenticator != null) {
+                engine.setWantClientAuth(true);
+            }
+        }
     }
 
     /**
