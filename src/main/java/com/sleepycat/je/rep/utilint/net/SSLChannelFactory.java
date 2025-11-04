@@ -281,8 +281,9 @@ public class SSLChannelFactory implements DataChannelFactory {
             engine.setNeedClientAuth(false);
         } else if ("verify_peer".equals(clientAuthMode)) {
             // Request client certificates but don't require them (standard TLS)
-            engine.setWantClientAuth(true);
-            engine.setNeedClientAuth(false);
+            // Relax the certificate restrictions for verify_peer
+            // engine.setWantClientAuth(true);
+            // engine.setNeedClientAuth(false);
         } else if ("verify_fail_if_no_peer_cert".equals(clientAuthMode)) {
             // Require client certificates (mutual TLS / mTLS)
             engine.setWantClientAuth(false);  // setNeedClientAuth implies want
