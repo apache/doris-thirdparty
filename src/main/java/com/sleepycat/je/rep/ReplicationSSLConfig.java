@@ -105,6 +105,13 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
      *   {@link #SSL_HOST_VERIFIER je.rep.ssl.hostVerifier}
      *   {@link #SSL_HOST_VERIFIER_CLASS je.rep.ssl.hostVerifierClass}
      *   {@link #SSL_HOST_VERIFIER_PARAMS je.rep.ssl.hostVerifierParams}
+     *   {@link #SSL_CERT_REFRESH_INTERVAL_SECONDS je.rep.ssl.certRefreshIntervalSeconds}
+     *   {@link #SSL_CERT_TRANSITION_TIMEOUT_SECONDS je.rep.ssl.certTransitionTimeoutSeconds}
+     *   {@link #SSL_PEM_CERT_FILE je.rep.ssl.pemCertFile}
+     *   {@link #SSL_PEM_KEY_FILE je.rep.ssl.pemKeyFile}
+     *   {@link #SSL_PEM_KEY_PASSWORD je.rep.ssl.pemKeyPassword}
+     *   {@link #SSL_PEM_CA_CERT_FILE je.rep.ssl.pemCaCertFile}
+     *   {@link #SSL_CLIENT_AUTH_MODE je.rep.ssl.clientAuthMode}
      * </pre>
      */
 
@@ -627,6 +634,35 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
     public static final String SSL_PEM_CA_CERT_FILE =
         EnvironmentParams.REP_PARAM_PREFIX + "ssl.pemCaCertFile";
 
+    /**
+     * The SSL/TLS client authentication mode. This parameter controls whether
+     * and how the server requests client certificates during the SSL handshake.
+     * Valid values are:
+     * <ul>
+     *   <li><code>verify_none</code> - Server does not request client certificates.
+     *       This effectively disables client authentication (TLS without client auth).</li>
+     *   <li><code>verify_peer</code> - Server requests client certificates but does
+     *       not require them. If a client certificate is provided, it will be verified.
+     *       This is the default mode and is suitable for standard TLS (single-sided auth).</li>
+     *   <li><code>verify_fail_if_no_peer_cert</code> - Server requires client certificates
+     *       and will fail the handshake if the client does not provide one. This enforces
+     *       mutual TLS (mTLS) authentication.</li>
+     * </ul>
+     *
+     * <p><table border="1"
+     *           summary="Information about configuration option">
+     * <tr><td>Name</td><td>Type</td><td>Mutable</td><td>Default</td></tr>
+     * <tr>
+     * <td>{@value}</td>
+     * <td>String</td>
+     * <td>No</td>
+     * <td>"verify_peer"</td>
+     * </tr>
+     * </table>
+     */
+    public static final String SSL_CLIENT_AUTH_MODE =
+        EnvironmentParams.REP_PARAM_PREFIX + "ssl.clientAuthMode";
+
     /* The set of Replication properties specific to this class */
     private static Set<String> repSSLProperties;
     static {
@@ -655,6 +691,7 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
         repSSLProperties.add(SSL_PEM_KEY_FILE);
         repSSLProperties.add(SSL_PEM_KEY_PASSWORD);
         repSSLProperties.add(SSL_PEM_CA_CERT_FILE);
+        repSSLProperties.add(SSL_CLIENT_AUTH_MODE);
         /* Nail the set down */
         repSSLProperties = Collections.unmodifiableSet(repSSLProperties);
     }
@@ -1543,6 +1580,50 @@ public class ReplicationSSLConfig extends ReplicationNetworkConfig {
      */
     public void setSSLPemCaCertFileVoid(String pemCaCertFile) {
         DbConfigManager.setVal(props, RepParams.SSL_PEM_CA_CERT_FILE, pemCaCertFile, validateParams);
+    }
+
+    /**
+     * Returns the SSL/TLS client authentication mode.
+     *
+     * @return the client authentication mode (verify_none, verify_peer, or verify_fail_if_no_peer_cert)
+     */
+    public String getSSLClientAuthMode() {
+        return DbConfigManager.getVal(props, RepParams.SSL_CLIENT_AUTH_MODE);
+    }
+
+    /**
+     * Sets the SSL/TLS client authentication mode. This controls whether
+     * and how the server requests client certificates during the SSL handshake.
+     * <p>
+     * Valid values are:
+     * <ul>
+     *   <li><code>verify_none</code> - Server does not request client certificates.
+     *       This effectively disables client authentication (TLS without client auth).</li>
+     *   <li><code>verify_peer</code> - Server requests client certificates but does
+     *       not require them. If a client certificate is provided, it will be verified.
+     *       This is the default mode and is suitable for standard TLS (single-sided auth).</li>
+     *   <li><code>verify_fail_if_no_peer_cert</code> - Server requires client certificates
+     *       and will fail the handshake if the client does not provide one. This enforces
+     *       mutual TLS (mTLS) authentication.</li>
+     * </ul>
+     *
+     * @param clientAuthMode the client authentication mode
+     *
+     * @return this
+     *
+     * @throws IllegalArgumentException if the clientAuthMode is not one of the valid values
+     */
+    public ReplicationNetworkConfig setSSLClientAuthMode(String clientAuthMode) {
+        setSSLClientAuthModeVoid(clientAuthMode);
+        return this;
+    }
+
+    /**
+     * @hidden
+     * The void return setter for use by Bean editors.
+     */
+    public void setSSLClientAuthModeVoid(String clientAuthMode) {
+        DbConfigManager.setVal(props, RepParams.SSL_CLIENT_AUTH_MODE, clientAuthMode, validateParams);
     }
 
     /**

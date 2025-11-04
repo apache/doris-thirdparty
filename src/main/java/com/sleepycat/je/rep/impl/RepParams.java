@@ -1583,6 +1583,32 @@ public class RepParams {
                         true);          // forReplication
 
     /**
+     * SSL client authentication mode
+     * @see ReplicationSSLConfig#SSL_CLIENT_AUTH_MODE
+     */
+    public static final ConfigParam SSL_CLIENT_AUTH_MODE =
+        new ConfigParam(ReplicationSSLConfig.SSL_CLIENT_AUTH_MODE,
+                        "verify_peer",  // default
+                        false,          // mutable
+                        true) {         // forReplication
+
+            @Override
+            public void validateValue(String value) {
+                if (value == null || value.isEmpty()) {
+                    throw new IllegalArgumentException
+                        ("SSL client auth mode cannot be null or empty");
+                }
+                if (!("verify_none".equals(value) ||
+                      "verify_peer".equals(value) ||
+                      "verify_fail_if_no_peer_cert".equals(value))) {
+                    throw new IllegalArgumentException
+                        ("Invalid SSL client auth mode: " + value +
+                         ". Must be one of: verify_none, verify_peer, verify_fail_if_no_peer_cert");
+                }
+            }
+        };
+
+    /**
      * Override the current JE version, for testing only.
      */
     public static final ConfigParam TEST_JE_VERSION = new ConfigParam(
