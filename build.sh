@@ -29,8 +29,8 @@ export SRC_HOME="${ROOT}"
 . "${SRC_HOME}/env.sh"
 
 if [[ -z "${THIRDPARTY_INSTALLED}" ]]; then
-	echo "Must set 'THIRDPARTY_INSTALLED' in env.sh"
-	exit 255
+    echo "Must set 'THIRDPARTY_INSTALLED' in env.sh"
+    exit 255
 fi
 
 DIST_DIR="${SRC_HOME}/hadoop-dist/target/hadoop-3.4.2"
@@ -39,14 +39,20 @@ rm -rf "${DIST_DIR}"
 rm -rf "${LIBHDFS_DIST_DIR}"
 
 mvn clean package -Pnative,dist -DskipTests -Djavadoc.skip.jdk11 -f hadoop-common-project \
+        -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true \
         -Dopenssl.prefix="${THIRDPARTY_INSTALLED}" -e
+
 mvn clean package -Pnative,dist -DskipTests -Djavadoc.skip.jdk11 -f hadoop-hdfs-project \
-	-Dthirdparty.installed="${THIRDPARTY_INSTALLED}" -Dopenssl.prefix="${THIRDPARTY_INSTALLED}" -e
-mvn clean package -Pdist -DskipTests -Djavadoc.skip.jdk11 -f hadoop-dist -e
+    -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true \
+    -Dthirdparty.installed="${THIRDPARTY_INSTALLED}" -Dopenssl.prefix="${THIRDPARTY_INSTALLED}" -e
+
+mvn clean package -Pdist -DskipTests -Djavadoc.skip.jdk11 \
+    -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true \
+    -f hadoop-dist -e
 
 if [[ ! -d "${DIST_DIR}" ]]; then
-	echo "${DIST_DIR} is missing. Build failed."
-	exit 255
+    echo "${DIST_DIR} is missing. Build failed."
+    exit 255
 fi
 
 echo "Finished. Begin to pacakge for libhdfs..."

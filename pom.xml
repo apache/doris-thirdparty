@@ -639,6 +639,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/x
           <reportSet>
             <id>aggregate</id>
             <configuration>
+              <skip>true</skip>
               <maxmemory>1024m</maxmemory>
               <quiet>true</quiet>
               <verbose>false</verbose>
