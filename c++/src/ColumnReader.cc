@@ -116,7 +116,10 @@ namespace orc {
   void ColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                                     const ReadPhase& readPhase) {
     if (notNullDecoder.get()) {
-      notNullDecoder->seek(positions.at(columnId));
+      auto it = positions.find(columnId);
+      if (it != positions.end()) {
+        notNullDecoder->seek(it->second);
+      }
     }
   }
 
