@@ -152,6 +152,7 @@ namespace orc {
 
     RowReaderOptionsPrivate() {
       selection = ColumnSelection_NONE;
+      filter = ColumnFilter_NONE;
       dataStart = 0;
       dataLength = std::numeric_limits<uint64_t>::max();
       throwOnHive11DecimalOverflow = true;
