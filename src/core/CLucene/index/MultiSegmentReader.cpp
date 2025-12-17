@@ -737,11 +737,14 @@ bool MultiTermDocs::readRange(DocRange* docRange) {
 		if (!current->readRange(docRange)) {
 			current = nullptr;
 		} else {
-			if (docRange->type_ == DocRangeType::kMany) {
+			// Always update doc_many with base offset (doc_many is always valid)
+			if (docRange->doc_many && docRange->doc_many_size_ > 0) {
 				auto begin = docRange->doc_many->begin();
 				auto end = docRange->doc_many->begin() + docRange->doc_many_size_;
 				std::transform(begin, end, begin, [this](int32_t val) { return val + base; });
-			} else if (docRange->type_ == DocRangeType::kRange) {
+			}
+			// Also update doc_range if kRange type
+			if (docRange->type_ == DocRangeType::kRange) {
 				docRange->doc_range.first += base;
 				docRange->doc_range.second += base;
 			}
@@ -766,6 +769,17 @@ bool MultiTermDocs::skipTo(const int32_t target) {
 			return false;
 		}
 	}
+}
+
+void MultiTermDocs::skipToBlock(const int32_t target) {
+    while (pointer < subReaders->length && target >= starts[pointer]) {
+        base = starts[pointer];
+        current = termDocs(pointer++);
+    }
+    
+    if (current != NULL) {
+        current->skipToBlock(target - base);
+    }
 }
 
 void MultiTermDocs::close() {
@@ -1024,6 +1038,11 @@ int32_t MultiTermPositions::nextPosition() {
 	return curAsTP->nextPosition();
 }
 
+int32_t MultiTermPositions::nextDeltaPosition() {
+	TermPositions* curAsTP = current->__asTermPositions();
+	return curAsTP->nextDeltaPosition();
+}
+
 int32_t MultiTermPositions::getPayloadLength() const{
   TermPositions* curAsTP = current->__asTermPositions();
   return curAsTP->getPayloadLength();
@@ -1037,6 +1056,11 @@ uint8_t* MultiTermPositions::getPayload(uint8_t* data){
 bool MultiTermPositions::isPayloadAvailable() const{
   TermPositions* curAsTP = current->__asTermPositions();
   return curAsTP->isPayloadAvailable();
+}
+
+void MultiTermPositions::addLazySkipProxCount(int32_t count) {
+  TermPositions* curAsTP = current->__asTermPositions();
+  curAsTP->addLazySkipProxCount(count);
 }
 
 CL_NS_END

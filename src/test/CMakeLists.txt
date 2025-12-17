@@ -113,6 +113,7 @@ SET(test_files ./tests.cpp
         ./store/TestUTF8Chars.cpp
         ./store/testPFOR.cpp
         ./posting/TestBlockMaxScoreV3.cpp
+        ./index/TestReadRange.cpp
         ${test_HEADERS})
 IF (USE_SHARED_OBJECT_FILES)
     GET_SHARED_FILES(clucene_shared_Files)

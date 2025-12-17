@@ -197,8 +197,25 @@ bool SegmentTermDocs::readRange(DocRange* docRange) {
     }
 
     buffer_.readRange(docRange);
-
     count += docRange->doc_many_size_;
+
+    if (docRange->need_positions && hasProx && docRange->doc_many_size_ > 0 && df >= skipInterval) {
+        if (skipListReader == nullptr) {
+            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval, indexVersion_);
+            skipListReader->setIoContext(io_ctx_);
+        }
+        if (!haveSkipped) {
+            skipListReader->init(skipPointer, freqBasePointer, proxBasePointer, df, hasProx, currentFieldStoresPayloads);
+            haveSkipped = true;
+        }
+        
+        uint32_t firstDoc = (*docRange->doc_many)[0];
+        int32_t skippedCount = skipListReader->skipTo(firstDoc);
+
+        if (skipListReader->getDoc() >= 0) {
+            skipProx(skipListReader->getProxPointer(), skipListReader->getPayloadLength());
+        }
+    }
 
     if (docRange->doc_many_size_ > 0) {
         uint32_t start = (*docRange->doc_many)[0];
@@ -244,6 +261,32 @@ bool SegmentTermDocs::skipTo(const int32_t target) {
             return false;
     } while (target > _doc);
     return true;
+}
+
+void SegmentTermDocs::skipToBlock(const int32_t target) {
+    if (df >= skipInterval) {
+        if (skipListReader == NULL) {
+            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval, indexVersion_);
+            skipListReader->setIoContext(io_ctx_);
+        }
+
+        if (!haveSkipped) {
+            skipListReader->init(skipPointer, freqBasePointer, proxBasePointer, df, hasProx, currentFieldStoresPayloads);
+            haveSkipped = true;
+        }
+
+        int32_t newCount = skipListReader->skipTo(target);
+        if (newCount > count) {
+            freqStream->seek(skipListReader->getFreqPointer());
+            skipProx(skipListReader->getProxPointer(), skipListReader->getPayloadLength());
+
+            _doc = skipListReader->getDoc();
+            count = newCount;
+            // Note: We do NOT call buffer_.refill() here.
+            // The caller will use readRange() to read the next block.
+        }
+    }
+    // If df < skipInterval, nothing to skip. Caller will use readRange() sequentially.
 }
 
 void TermDocsBuffer::refill() {

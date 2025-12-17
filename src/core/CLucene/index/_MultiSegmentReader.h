@@ -176,6 +176,9 @@ public:
    /* A Possible future optimization could skip entire segments */
   bool skipTo(const int32_t target);
 
+  /** Skip to the block containing target using skip list. */
+  void skipToBlock(const int32_t target) override;
+
   void close();
 
   virtual TermPositions* __asTermPositions();
@@ -241,6 +244,7 @@ public:
   MultiTermPositions(CL_NS(util)::ArrayBase<IndexReader*>* subReaders, const int32_t* s);
   virtual ~MultiTermPositions() {};
   int32_t nextPosition();
+  int32_t nextDeltaPosition();
 
   /**
   * Not implemented.
@@ -260,6 +264,8 @@ public:
   */
   // TODO: Remove warning after API has been finalized
   bool isPayloadAvailable() const;
+
+  void addLazySkipProxCount(int32_t count) override;
 
   virtual TermDocs* __asTermDocs();
   virtual TermPositions* __asTermPositions();
