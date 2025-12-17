@@ -29,4 +29,5 @@ unittest tests[] = {{"analysis", testanalysis},
 #endif
                     {"TestIndexReader2", testIndexReader2},
                     {"testBlockMaxScoreV3", testBlockMaxScoreV3},
+                    {"testReadRange", testReadRange},
                     {"LastTest", NULL}};

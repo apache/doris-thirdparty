@@ -79,6 +79,11 @@ public:
 	// Some implementations are considerably more efficient than that.
 	virtual bool skipTo(const int32_t target)=0;
 
+	// Skip to the block containing the target document using skip list.
+	// This is an optimization that positions the stream for subsequent readRange calls.
+	// Unlike skipTo, this does not scan to find the exact document.
+	virtual void skipToBlock(const int32_t target) {}
+
 	// Frees associated resources.
 	virtual void close() = 0;
 
@@ -206,6 +211,9 @@ public:
 	  */
 	virtual TermDocs* __asTermDocs()=0;
 	virtual TermPositions* __asTermPositions()=0;
+
+	virtual void addLazySkipProxCount(int32_t count) {}
+	virtual int32_t nextDeltaPosition() { return 0; }
 };
 CL_NS_END
 #endif
