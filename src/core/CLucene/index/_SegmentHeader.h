@@ -25,8 +25,7 @@
 #include "_CompoundFile.h"
 #include "DirectoryIndexReader.h"
 #include "_SkipListReader.h"
-#include "CLucene/util/_ThreadLocal.h"
-#include "CLucene/index/IndexVersion.h"
+#include "_TermInfosReader.h"
 
 CL_NS_DEF(index)
 class SegmentReader;
@@ -198,6 +197,9 @@ public:
   /** Optimized implementation. */
   virtual bool skipTo(const int32_t target);
 
+    /** Skip to the block containing target using skip list. */
+    void skipToBlock(const int32_t target) override;
+
   virtual TermPositions* __asTermPositions();
 
   void setIoContext(const void* io_ctx) override;
@@ -241,6 +243,8 @@ public:
 
   void setIoContext(const void* io_ctx) override;
 
+    void addLazySkipProxCount(int32_t count) override { lazySkipProxCount += count; }
+
 private:
   void seek(const TermInfo* ti, Term* term);
 
@@ -248,6 +252,8 @@ public:
   void close();
 
   int32_t nextPosition();
+    int32_t nextDeltaPosition();
+
 private:
   int32_t readDeltaPosition();
 
@@ -296,6 +302,7 @@ private:
   int32_t doc() const{ return SegmentTermDocs::doc(); }
   int32_t freq() const{ return SegmentTermDocs::freq(); }
   bool skipTo(const int32_t target){ return SegmentTermDocs::skipTo(target); }
+    void skipToBlock(const int32_t target) { SegmentTermDocs::skipToBlock(target); }
 
 private:
   IndexVersion indexVersion_ = IndexVersion::kV0; 
