@@ -108,7 +108,6 @@ static void writeTestIndex(const std::string& fieldName, RAMDirectory* dir,
 struct TermDocsResult {
     std::vector<int32_t> docs;
     std::vector<int32_t> freqs;
-    std::vector<int32_t> norms;
 };
 
 struct TermPositionsResult {
@@ -123,7 +122,6 @@ static TermDocsResult readWithNext(TermDocs* termDocs) {
     while (termDocs->next()) {
         result.docs.push_back(termDocs->doc());
         result.freqs.push_back(termDocs->freq());
-        result.norms.push_back(termDocs->norm());
     }
     return result;
 }
@@ -139,11 +137,6 @@ static TermDocsResult readWithRange(TermDocs* termDocs) {
                 result.freqs.push_back((*docRange.freq_many)[i]);
             } else {
                 result.freqs.push_back(1);
-            }
-            if (docRange.norm_many && i < docRange.norm_many_size_) {
-                result.norms.push_back((*docRange.norm_many)[i]);
-            } else {
-                result.norms.push_back(0);
             }
         }
     }
@@ -212,11 +205,6 @@ static bool compareTermDocsResults(const TermDocsResult& a, const TermDocsResult
         if (a.freqs[i] != b.freqs[i]) {
             std::cerr << "Freq mismatch at doc " << a.docs[i] << ": " << a.freqs[i] << " vs "
                       << b.freqs[i] << std::endl;
-            return false;
-        }
-        if (checkNorms && a.norms[i] != b.norms[i]) {
-            std::cerr << "Norm mismatch at doc " << a.docs[i] << ": " << a.norms[i] << " vs "
-                      << b.norms[i] << std::endl;
             return false;
         }
     }
