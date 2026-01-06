@@ -150,7 +150,7 @@ bool SegmentTermDocs::readRange(DocRange* docRange) {
 
     if (docRange->need_positions && hasProx && docRange->doc_many_size_ > 0 && df >= skipInterval) {
         if (skipListReader == nullptr) {
-            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval, indexVersion_);
+            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval);
             skipListReader->setIoContext(io_ctx_);
         }
         if (!haveSkipped) {
@@ -215,7 +215,7 @@ bool SegmentTermDocs::skipTo(const int32_t target) {
 void SegmentTermDocs::skipToBlock(const int32_t target) {
     if (df >= skipInterval) {
         if (skipListReader == NULL) {
-            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval, indexVersion_);
+            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval);
             skipListReader->setIoContext(io_ctx_);
         }
 
