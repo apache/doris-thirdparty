@@ -69,6 +69,14 @@ int32_t SegmentTermPositions::nextPosition() {
     return position += readDeltaPosition();
 }
 
+int32_t SegmentTermPositions::nextDeltaPosition() {
+    if (!hasProx) {
+        return 0;
+    }
+    lazySkip();
+    return readDeltaPosition();
+}
+
 int32_t SegmentTermPositions::readDeltaPosition() {
 	int32_t delta = buffer_.getPos();
 	if (currentFieldStoresPayloads) {

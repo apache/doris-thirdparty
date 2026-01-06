@@ -27,4 +27,6 @@ class DocRange {
   std::vector<uint32_t>* freq_many = nullptr;
 
   std::pair<uint32_t, uint32_t> doc_range;
+
+  bool need_positions = false;
 };

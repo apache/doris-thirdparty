@@ -28,4 +28,5 @@ unittest tests[] = {{"analysis", testanalysis},
                     {"chinese", testchinese},
 #endif
                     {"TestIndexReader2", testIndexReader2},
+                    {"testReadRange", testReadRange},
                     {"LastTest", NULL}};
