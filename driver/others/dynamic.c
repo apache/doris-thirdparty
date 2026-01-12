@@ -792,7 +792,7 @@ static gotoblas_t *get_coretype(void){
 	  }
         }
         if (model == 7) {
-	  if (support_avx512()) 
+	  if (support_avx512())
 	    return &gotoblas_SKYLAKEX;
 	  if(support_avx2())
 	    return &gotoblas_HASWELL;
@@ -803,7 +803,27 @@ static gotoblas_t *get_coretype(void){
 	    openblas_warning(FALLBACK_VERBOSE, NEHALEM_FALLBACK);
 	    return &gotoblas_NEHALEM; //OS doesn't support AVX. Use old kernels.
 	  }
-        }      
+        }
+	return NULL;
+      case 12:
+        // Emerald Rapids (e.g., Intel Xeon Platinum 8575C, model 207 = exmodel 12, model 15)
+        if (model == 15) {
+	   if(support_amx_bf16())
+	     return &gotoblas_SAPPHIRERAPIDS;
+	   if(support_avx512_bf16())
+             return &gotoblas_COOPERLAKE;
+          if (support_avx512())
+	    return &gotoblas_SKYLAKEX;
+	  if(support_avx2())
+	    return &gotoblas_HASWELL;
+	  if(support_avx()) {
+	    openblas_warning(FALLBACK_VERBOSE, SANDYBRIDGE_FALLBACK);
+	    return &gotoblas_SANDYBRIDGE;
+	  } else {
+	    openblas_warning(FALLBACK_VERBOSE, NEHALEM_FALLBACK);
+	    return &gotoblas_NEHALEM;
+	  }
+        }
 	return NULL;
       }
       break;
