@@ -2424,6 +2424,7 @@ int get_coretype(void){
 	}
       case 12:
 	switch (model) {
+	  case 15: // Emerald Rapids (e.g., Intel Xeon Platinum 8575C)
 	  case 6: // Arrow Lake
 	  if(support_amx_bf16())
 	    return CORE_SAPPHIRERAPIDS;
@@ -2438,6 +2439,7 @@ int get_coretype(void){
 	  else
 	    return CORE_NEHALEM;
 	}
+	break;
       }
     case 15:
       if (model <= 0x2) return CORE_NORTHWOOD;
