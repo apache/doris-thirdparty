@@ -65,6 +65,8 @@ public:
 	*  has skipped.  */
 	int32_t getDoc() const;
 
+	int32_t getLastDocInBlock() const;
+
 	/** Skips entries to the first beyond the current whose document number is
 	*  greater than or equal to <i>target</i>. Returns the current doc count.
 	*/
@@ -78,6 +80,8 @@ private:
 protected:
 	/** Seeks the skip entry on the given level */
 	virtual void seekChild(const int32_t level);
+
+	virtual void onSkipExhausted(const int32_t level) {}
 
 	void close();
 
@@ -158,8 +162,8 @@ private:
 	int64_t lastProxPointer{0};
 	int32_t lastPayloadLength;
 
-	int32_t maxBlockFreq = 0;
-	int32_t maxBlockNorm = 0;
+	int32_t maxBlockFreq = -1;
+	int32_t maxBlockNorm = -1;
 
 public:
 	DefaultSkipListReader(CL_NS(store)::IndexInput* _skipStream, const int32_t maxSkipLevels, const int32_t _skipInterval, IndexVersion indexVersion);
@@ -190,6 +194,8 @@ protected:
 	void seekChild(const int32_t level);
 
 	void setLastSkipData(const int32_t level);
+
+	void onSkipExhausted(const int32_t level) override;
 
 	int32_t readSkipData(const int32_t level, CL_NS(store)::IndexInput* _skipStream);
 };

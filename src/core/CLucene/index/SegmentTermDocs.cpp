@@ -144,7 +144,7 @@ bool SegmentTermDocs::next()  {
 
 int32_t SegmentTermDocs::read(int32_t *docs, int32_t *freqs, int32_t length) {
     int32_t i = 0;
-    
+
     if (count == df) {
         return i;
     }
@@ -197,24 +197,46 @@ bool SegmentTermDocs::readRange(DocRange* docRange) {
     }
 
     buffer_.readRange(docRange);
+
     count += docRange->doc_many_size_;
 
-    if (docRange->need_positions && hasProx && docRange->doc_many_size_ > 0 && df >= skipInterval) {
+    if (docRange->doc_many_size_ > 0) {
+        uint32_t start = (*docRange->doc_many)[0];
+        uint32_t end = (*docRange->doc_many)[docRange->doc_many_size_ - 1];
+        if ((end - start) == docRange->doc_many_size_ - 1) {
+            docRange->doc_range.first = start;
+            docRange->doc_range.second = start + docRange->doc_many_size_;
+            docRange->type_ = DocRangeType::kRange;
+        }
+    }
+
+    return true;
+}
+
+bool SegmentTermDocs::readBlock(DocRange* docRange) {
+    if (count >= df) {
+        return false;
+    }
+
+    buffer_.readRange(docRange);
+    count += docRange->doc_many_size_;
+
+    if (docRange->doc_many_size_ > 0 && df >= skipInterval) {
         if (skipListReader == nullptr) {
-            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval, indexVersion_);
+            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels,
+                                                          skipInterval, indexVersion_);
             skipListReader->setIoContext(io_ctx_);
         }
         if (!haveSkipped) {
-            skipListReader->init(skipPointer, freqBasePointer, proxBasePointer, df, hasProx, currentFieldStoresPayloads);
+            skipListReader->init(skipPointer, freqBasePointer, proxBasePointer, df, hasProx,
+                                 currentFieldStoresPayloads);
             haveSkipped = true;
         }
-        
-        uint32_t firstDoc = (*docRange->doc_many)[0];
-        int32_t skippedCount = skipListReader->skipTo(firstDoc);
 
-        if (skipListReader->getDoc() >= 0) {
-            skipProx(skipListReader->getProxPointer(), skipListReader->getPayloadLength());
-        }
+        uint32_t firstDoc = (*docRange->doc_many)[0];
+        skipListReader->skipTo(firstDoc);
+
+        skipProx(skipListReader->getProxPointer(), skipListReader->getPayloadLength());
     }
 
     if (docRange->doc_many_size_ > 0) {
@@ -263,30 +285,32 @@ bool SegmentTermDocs::skipTo(const int32_t target) {
     return true;
 }
 
-void SegmentTermDocs::skipToBlock(const int32_t target) {
+bool SegmentTermDocs::skipToBlock(const int32_t target) {
     if (df >= skipInterval) {
         if (skipListReader == NULL) {
-            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels, skipInterval, indexVersion_);
+            skipListReader = _CLNEW DefaultSkipListReader(freqStream->clone(), maxSkipLevels,
+                                                          skipInterval, indexVersion_);
             skipListReader->setIoContext(io_ctx_);
         }
 
         if (!haveSkipped) {
-            skipListReader->init(skipPointer, freqBasePointer, proxBasePointer, df, hasProx, currentFieldStoresPayloads);
+            skipListReader->init(skipPointer, freqBasePointer, proxBasePointer, df, hasProx,
+                                 currentFieldStoresPayloads);
             haveSkipped = true;
         }
 
-        int32_t newCount = skipListReader->skipTo(target);
-        if (newCount > count) {
-            freqStream->seek(skipListReader->getFreqPointer());
-            skipProx(skipListReader->getProxPointer(), skipListReader->getPayloadLength());
-
-            _doc = skipListReader->getDoc();
-            count = newCount;
-            // Note: We do NOT call buffer_.refill() here.
-            // The caller will use readRange() to read the next block.
+        int32_t currentLastDoc = skipListReader->getLastDocInBlock();
+        if (target <= currentLastDoc && haveSkipped) {
+            return false;
         }
+        int32_t newCount = skipListReader->skipTo(target);
+        freqStream->seek(skipListReader->getFreqPointer());
+        skipProx(skipListReader->getProxPointer(), skipListReader->getPayloadLength());
+        _doc = skipListReader->getDoc();
+        count = newCount;
+        return true;
     }
-    // If df < skipInterval, nothing to skip. Caller will use readRange() sequentially.
+    return false;
 }
 
 void TermDocsBuffer::refill() {
@@ -409,4 +433,26 @@ void TermDocsBuffer::refillNorm(int32_t size) {
         }
     }
 }
+
+int32_t SegmentTermDocs::getMaxBlockFreq() {
+    if (skipListReader != nullptr) {
+        return skipListReader->getMaxBlockFreq();
+    }
+    return -1;
+}
+
+int32_t SegmentTermDocs::getMaxBlockNorm() {
+    if (skipListReader != nullptr) {
+        return skipListReader->getMaxBlockNorm();
+    }
+    return -1;
+}
+
+int32_t SegmentTermDocs::getLastDocInBlock() {
+    if (skipListReader != nullptr) {
+        return skipListReader->getLastDocInBlock();
+    }
+    return -1;
+}
+
 CL_NS_END

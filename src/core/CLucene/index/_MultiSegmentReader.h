@@ -120,6 +120,7 @@ public:
   int32_t getTermInfosIndexDivisor();
 
   const CL_NS(util)::ArrayBase<IndexReader*>* getSubReaders() const;
+  const int32_t* getStarts() const;
 
   friend class MultiReader;
   friend class SegmentReader;
@@ -176,8 +177,6 @@ public:
    /* A Possible future optimization could skip entire segments */
   bool skipTo(const int32_t target);
 
-  /** Skip to the block containing target using skip list. */
-  void skipToBlock(const int32_t target) override;
 
   void close();
 

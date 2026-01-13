@@ -270,6 +270,10 @@ const ArrayBase<IndexReader*>* MultiSegmentReader::getSubReaders() const{
   return subReaders;
 }
 
+const int32_t* MultiSegmentReader::getStarts() const{
+  return starts;
+}
+
 bool MultiSegmentReader::document(int32_t n, CL_NS(document)::Document& doc, const FieldSelector* fieldSelector){
 	ensureOpen();
   int32_t i = readerIndex(n);			  // find segment num
@@ -769,17 +773,6 @@ bool MultiTermDocs::skipTo(const int32_t target) {
 			return false;
 		}
 	}
-}
-
-void MultiTermDocs::skipToBlock(const int32_t target) {
-    while (pointer < subReaders->length && target >= starts[pointer]) {
-        base = starts[pointer];
-        current = termDocs(pointer++);
-    }
-    
-    if (current != NULL) {
-        current->skipToBlock(target - base);
-    }
 }
 
 void MultiTermDocs::close() {

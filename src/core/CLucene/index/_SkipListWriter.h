@@ -110,8 +110,8 @@ private:
   bool hasProx = false;
   IndexVersion indexVersion = IndexVersion::kV0;
 
-  int32_t maxBlockFreq = 0;
-  int32_t maxBlockNorm = 0;
+  int32_t maxBlockFreq = -1;
+  int32_t maxBlockNorm = -1;
   
 protected:
 
@@ -128,7 +128,7 @@ public:
     /**
    * Sets the values for the current skip data.
    */
-    void setSkipData(int32_t doc, bool storePayloads, int32_t payloadLength, int32_t maxBlockFreq = 0, int32_t maxBlockNorm = 0);
+    void setSkipData(int32_t doc, bool storePayloads, int32_t payloadLength, int32_t maxBlockFreq = -1, int32_t maxBlockNorm = -1);
     void resetSkip();
 };
 

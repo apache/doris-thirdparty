@@ -64,6 +64,9 @@ public:
 	virtual int32_t read(int32_t* docs, int32_t* freqs, int32_t length)=0;
         virtual int32_t read(int32_t* docs, int32_t* freqs, int32_t* norms, int32_t length)=0;
 	virtual bool readRange(DocRange* docRange) = 0;
+	virtual bool readBlock(DocRange* docRange) {
+		_CLTHROWA(CL_ERR_UnsupportedOperation, "readBlock is not supported for multi-segment readers");
+	}
 
 	// Skips entries to the first beyond the current whose document number is
 	// greater than or equal to <i>target</i>. <p>Returns true iff there is such
@@ -79,10 +82,9 @@ public:
 	// Some implementations are considerably more efficient than that.
 	virtual bool skipTo(const int32_t target)=0;
 
-	// Skip to the block containing the target document using skip list.
-	// This is an optimization that positions the stream for subsequent readRange calls.
-	// Unlike skipTo, this does not scan to find the exact document.
-	virtual void skipToBlock(const int32_t target) {}
+	virtual bool skipToBlock(const int32_t target) {
+		_CLTHROWA(CL_ERR_UnsupportedOperation, "skipToBlock is not supported for multi-segment readers");
+	}
 
 	// Frees associated resources.
 	virtual void close() = 0;
@@ -102,6 +104,16 @@ public:
 
         virtual int32_t docNorm() {
 	    return 0;
+	}
+
+	virtual int32_t getMaxBlockFreq() {
+		_CLTHROWA(CL_ERR_UnsupportedOperation, "getMaxBlockFreq is not supported for multi-segment readers");
+	}
+	virtual int32_t getMaxBlockNorm() {
+		_CLTHROWA(CL_ERR_UnsupportedOperation, "getMaxBlockNorm is not supported for multi-segment readers");
+	}
+	virtual int32_t getLastDocInBlock() {
+		_CLTHROWA(CL_ERR_UnsupportedOperation, "getLastDocInBlock is not supported for multi-segment readers");
 	}
 };
 

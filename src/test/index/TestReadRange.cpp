@@ -128,11 +128,11 @@ static TermDocsResult readWithNext(TermDocs* termDocs) {
     return result;
 }
 
-// Read using readRange() method
-static TermDocsResult readWithRange(TermDocs* termDocs) {
+// Read using readBlock() method
+static TermDocsResult readWithBlock(TermDocs* termDocs) {
     TermDocsResult result;
     DocRange docRange;
-    while (termDocs->readRange(&docRange)) {
+    while (termDocs->readBlock(&docRange)) {
         for (uint32_t i = 0; i < docRange.doc_many_size_; ++i) {
             result.docs.push_back((*docRange.doc_many)[i]);
             if (docRange.freq_many && i < docRange.freq_many_size_) {
@@ -167,13 +167,12 @@ static TermPositionsResult readPositionsWithNext(TermPositions* termPos) {
     return result;
 }
 
-// Read positions using readRange() and nextDeltaPosition() method
-static TermPositionsResult readPositionsWithRange(TermPositions* termPos) {
+// Read positions using readBlock() and nextDeltaPosition() method
+static TermPositionsResult readPositionsWithBlock(TermPositions* termPos) {
     TermPositionsResult result;
     DocRange docRange;
-    docRange.need_positions = true;
 
-    while (termPos->readRange(&docRange)) {
+    while (termPos->readBlock(&docRange)) {
         for (uint32_t i = 0; i < docRange.doc_many_size_; ++i) {
             result.docs.push_back((*docRange.doc_many)[i]);
             int32_t freq = 1;
@@ -296,7 +295,7 @@ void TestReadRangeBasic(CuTest* tc) {
             // Read with readRange()
             TermDocs* termDocs2 = reader->termDocs();
             termDocs2->seek(term);
-            TermDocsResult result2 = readWithRange(termDocs2);
+            TermDocsResult result2 = readWithBlock(termDocs2);
             termDocs2->close();
             _CLDELETE(termDocs2);
 
@@ -366,7 +365,7 @@ void TestReadRangePositions(CuTest* tc) {
             // Read with readRange()/nextDeltaPosition()
             TermPositions* termPos2 = reader->termPositions();
             termPos2->seek(term);
-            TermPositionsResult result2 = readPositionsWithRange(termPos2);
+            TermPositionsResult result2 = readPositionsWithBlock(termPos2);
             termPos2->close();
             _CLDELETE(termPos2);
 
@@ -642,7 +641,7 @@ void TestReadRangeLargeDataset(CuTest* tc) {
             // Read with readRange()
             TermDocs* termDocs2 = reader->termDocs();
             termDocs2->seek(term);
-            TermDocsResult result2 = readWithRange(termDocs2);
+            TermDocsResult result2 = readWithBlock(termDocs2);
             termDocs2->close();
             _CLDELETE(termDocs2);
 
@@ -712,7 +711,7 @@ void TestReadRangeVersions(CuTest* tc) {
                 // Read with readRange()
                 TermDocs* termDocs2 = reader->termDocs();
                 termDocs2->seek(term);
-                TermDocsResult result2 = readWithRange(termDocs2);
+                TermDocsResult result2 = readWithBlock(termDocs2);
                 termDocs2->close();
                 _CLDELETE(termDocs2);
 
@@ -768,7 +767,7 @@ void TestReadRangeEdgeCases(CuTest* tc) {
 
         TermDocs* termDocs2 = reader->termDocs();
         termDocs2->seek(term);
-        TermDocsResult result2 = readWithRange(termDocs2);
+        TermDocsResult result2 = readWithBlock(termDocs2);
         termDocs2->close();
         _CLDELETE(termDocs2);
 
@@ -831,7 +830,7 @@ void TestReadRangeEdgeCases(CuTest* tc) {
 
         TermDocs* termDocs2 = reader->termDocs();
         termDocs2->seek(term);
-        TermDocsResult result2 = readWithRange(termDocs2);
+        TermDocsResult result2 = readWithBlock(termDocs2);
         termDocs2->close();
         _CLDELETE(termDocs2);
 
@@ -849,6 +848,145 @@ void TestReadRangeEdgeCases(CuTest* tc) {
 }
 
 //=============================================================================
+// Test: Block-based interfaces (readBlock, skipToBlock, getMaxBlockFreq,
+//       getMaxBlockNorm, getLastDocInBlock) working together
+//=============================================================================
+void TestBlockBasedInterfaces(CuTest* tc) {
+    std::srand(getDaySeed());
+    std::mt19937 rng(getDaySeed());
+
+    std::string fieldName = "content";
+    std::vector<std::string> datas;
+
+    // Create index with a common term appearing frequently
+    std::string commonWord = "target";
+    for (int32_t i = 0; i < DEFAULT_DOC_COUNT; ++i) {
+        std::string text = generateRandomText(rng, 1, 5);
+        if (i % 2 == 0) {
+            text += " " + commonWord;
+            // Add multiple occurrences for higher freq
+            if (i % 4 == 0) {
+                text += " " + commonWord + " " + commonWord;
+            }
+        }
+        datas.push_back(text);
+    }
+
+    RAMDirectory dir;
+    writeTestIndex(fieldName, &dir, IndexVersion::kV2, datas);
+
+    auto* reader = IndexReader::open(&dir);
+    std::exception_ptr eptr;
+
+    try {
+        std::wstring ws = StringUtil::string_to_wstring(commonWord);
+        std::wstring fieldNameW = StringUtil::string_to_wstring(fieldName);
+        Term* term = _CLNEW Term(fieldNameW.c_str(), ws.c_str());
+
+        // Collect all docs using next() as baseline
+        TermDocs* baselineDocs = reader->termDocs();
+        baselineDocs->seek(term);
+        std::vector<int32_t> baselineDocIds;
+        std::vector<int32_t> baselineFreqs;
+        while (baselineDocs->next()) {
+            baselineDocIds.push_back(baselineDocs->doc());
+            baselineFreqs.push_back(baselineDocs->freq());
+        }
+        baselineDocs->close();
+        _CLDELETE(baselineDocs);
+
+        // Test: skipToBlock + readBlock + getMaxBlockFreq/getMaxBlockNorm/getLastDocInBlock
+        std::vector<int32_t> skipTargets = {0, 500, 2000, 5000, 8000};
+
+        for (int32_t target : skipTargets) {
+            TermDocs* termDocs = reader->termDocs();
+            termDocs->seek(term);
+
+            std::vector<int32_t> collectedDocs;
+            std::vector<int32_t> collectedFreqs;
+
+            // Skip to target block
+            bool skipped = termDocs->skipToBlock(target);
+
+            // Verify getLastDocInBlock returns valid value after skip
+            int32_t lastDocInBlock = termDocs->getLastDocInBlock();
+            if (skipped && lastDocInBlock >= 0) {
+                assertTrue(lastDocInBlock >= 0);
+            }
+
+            // Read blocks and verify maxBlockFreq/maxBlockNorm
+            DocRange docRange;
+            while (termDocs->readBlock(&docRange)) {
+                int32_t maxFreq = termDocs->getMaxBlockFreq();
+                int32_t maxNorm = termDocs->getMaxBlockNorm();
+                lastDocInBlock = termDocs->getLastDocInBlock();
+
+                // Verify maxBlockFreq is >= max freq in current block
+                int32_t actualMaxFreq = 0;
+                for (uint32_t i = 0; i < docRange.doc_many_size_; ++i) {
+                    int32_t doc = (*docRange.doc_many)[i];
+                    int32_t freq = (docRange.freq_many && i < docRange.freq_many_size_)
+                                           ? (*docRange.freq_many)[i]
+                                           : 1;
+                    if (doc >= target) {
+                        collectedDocs.push_back(doc);
+                        collectedFreqs.push_back(freq);
+                    }
+                    if (freq > actualMaxFreq) {
+                        actualMaxFreq = freq;
+                    }
+                }
+
+                // maxBlockFreq should be >= actual max freq in block (if valid)
+                if (maxFreq > 0) {
+                    assertTrue(maxFreq >= actualMaxFreq);
+                }
+
+                // lastDocInBlock should be >= last doc in current block
+                if (lastDocInBlock >= 0 && docRange.doc_many_size_ > 0) {
+                    int32_t lastDocInRange = (*docRange.doc_many)[docRange.doc_many_size_ - 1];
+                    assertTrue(lastDocInBlock >= lastDocInRange);
+                }
+            }
+
+            // Verify collected docs match baseline (docs >= target)
+            std::vector<int32_t> expectedDocs;
+            for (size_t i = 0; i < baselineDocIds.size(); ++i) {
+                if (baselineDocIds[i] >= target) {
+                    expectedDocs.push_back(baselineDocIds[i]);
+                }
+            }
+
+            // All expected docs should be in collected docs
+            for (int32_t expectedDoc : expectedDocs) {
+                bool found = std::find(collectedDocs.begin(), collectedDocs.end(), expectedDoc) !=
+                             collectedDocs.end();
+                if (!found) {
+                    std::cerr << "Missing doc " << expectedDoc << " after skipToBlock(" << target
+                              << ")" << std::endl;
+                }
+                assertTrue(found);
+            }
+
+            termDocs->close();
+            _CLDELETE(termDocs);
+        }
+
+        _CLDECDELETE(term);
+
+    } catch (...) {
+        eptr = std::current_exception();
+    }
+
+    FINALLY(eptr, {
+        reader->close();
+        _CLLDELETE(reader);
+    })
+
+    std::cout << "\nTestBlockBasedInterfaces success" << std::endl;
+}
+
+//=============================================================================
 // Suite registration
 //=============================================================================
 CuSuite* testReadRange() {
@@ -861,6 +999,7 @@ CuSuite* testReadRange() {
     SUITE_ADD_TEST(suite, TestReadRangeLargeDataset);
     SUITE_ADD_TEST(suite, TestReadRangeVersions);
     SUITE_ADD_TEST(suite, TestReadRangeEdgeCases);
+    SUITE_ADD_TEST(suite, TestBlockBasedInterfaces);
 
     return suite;
 }

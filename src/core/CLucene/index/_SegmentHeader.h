@@ -236,17 +236,21 @@ public:
   virtual int32_t read(int32_t* docs, int32_t* freqs,int32_t* norms, int32_t length);
 
   bool readRange(DocRange* docRange) override;
+  bool readBlock(DocRange* docRange) override;
 
   /** Optimized implementation. */
   virtual bool skipTo(const int32_t target);
 
-    /** Skip to the block containing target using skip list. */
-    void skipToBlock(const int32_t target) override;
+  bool skipToBlock(const int32_t target) override;
 
   virtual TermPositions* __asTermPositions();
 
   void setLoadStats(bool load_stats) override;
   void setIoContext(const void* io_ctx) override;
+
+  int32_t getMaxBlockFreq() override;
+  int32_t getMaxBlockNorm() override;
+  int32_t getLastDocInBlock() override;
 
   int32_t docFreq() override;
 
@@ -351,7 +355,7 @@ private:
   int32_t freq() const{ return SegmentTermDocs::freq(); }
   int32_t norm() const{ return SegmentTermDocs::norm(); }
   bool skipTo(const int32_t target){ return SegmentTermDocs::skipTo(target); }
-    void skipToBlock(const int32_t target) { SegmentTermDocs::skipToBlock(target); }
+  bool skipToBlock(const int32_t target) { return SegmentTermDocs::skipToBlock(target); }
 
 private:
   IndexVersion indexVersion_ = IndexVersion::kV0; 

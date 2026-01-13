@@ -118,8 +118,8 @@ void DefaultSkipListWriter::resetSkip() {
     if (hasProx) {
         Arrays<int64_t>::fill(lastSkipProxPointer, numberOfSkipLevels, proxOutput->getFilePointer());
         if (indexVersion == IndexVersion::kV4) {
-            maxBlockFreq = 0;
-            maxBlockNorm = 0;
+            maxBlockFreq = -1;
+            maxBlockNorm = -1;
         }
     }
     Arrays<int64_t>::fill(lastSkipFreqPointer, numberOfSkipLevels, freqOutput->getFilePointer());
