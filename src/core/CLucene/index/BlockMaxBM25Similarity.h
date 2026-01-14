@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace lucene::index {
@@ -37,5 +38,6 @@ private:
 
     std::vector<float> _cache;
 };
+using BlockMaxBM25SimilarityPtr = std::shared_ptr<BlockMaxBM25Similarity>;
 
 } // namespace lucene::index

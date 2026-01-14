@@ -1327,6 +1327,9 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
             }
         }
 
+        // Build destFieldNormsMapValues from srcFieldNormsMapValues using _trans_vec
+        std::vector<std::map<std::wstring, std::vector<uint8_t>>> destFieldNormsMapValues(
+                numDestIndexes);
         if (hasNorms) {
             for (int srcIndex = 0; srcIndex < numIndices; srcIndex++) {
                 auto reader = readers[srcIndex];
@@ -1348,6 +1351,24 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
                         }
                         srcFieldTotalTermCountMap[fi->name] +=
                                 reader->sumTotalTermFreq(fi->name).value_or(0);
+                    }
+                }
+            }
+
+            // Build destFieldNormsMapValues
+            for (int destIdx = 0; destIdx < numDestIndexes; destIdx++) {
+                for (const auto& [fieldName, _] : srcFieldNormsMapValues[0]) {
+                    destFieldNormsMapValues[destIdx][fieldName].resize(dest_index_docs[destIdx], 0);
+                }
+            }
+            for (int srcIdx = 0; srcIdx < numIndices; srcIdx++) {
+                for (const auto& [fieldName, srcNorms] : srcFieldNormsMapValues[srcIdx]) {
+                    for (size_t srcDocId = 0; srcDocId < srcNorms.size(); srcDocId++) {
+                        auto [destIdx, destDocId] = _trans_vec[srcIdx][srcDocId];
+                        if (destIdx != UINT32_MAX && destDocId != UINT32_MAX) {
+                            destFieldNormsMapValues[destIdx][fieldName][destDocId] =
+                                    srcNorms[srcDocId];
+                        }
                     }
                 }
             }
@@ -1406,7 +1427,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         }
 
         /// merge terms
-        mergeTerms(hasProx, indexVersion);
+        mergeTerms(hasProx, hasNorms, indexVersion, destFieldNormsMapValues);
 
         /// merge norms if have
         if (hasNorms){
@@ -1643,7 +1664,8 @@ protected:
 
 };
 
-void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
+void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVersion,
+        const std::vector<std::map<std::wstring, std::vector<uint8_t>>>& destFieldNormsMapValues) {
     auto queue = _CLNEW SegmentMergeQueue(readers.size());
     auto numSrcIndexes = readers.size();
     //std::vector<TermPositions *> postingsList(numSrcIndexes);
@@ -1794,7 +1816,32 @@ void IndexWriter::mergeTerms(bool hasProx, IndexVersion indexVersion) {
                         PforUtil::encodePos(proxOut, posBuffer);
                     }
 
-                    skipWriter->setSkipData(lastDoc, false, -1);
+                    int32_t maxBlockFreq = -1;
+                    int32_t minBlockNorm = -1;
+
+                    if (hasProx && hasNorms) {
+                        auto normsIt = destFieldNormsMapValues[destIdx].find(smallestTerm->field());
+                        const std::vector<uint8_t>* destNorms =
+                                (normsIt != destFieldNormsMapValues[destIdx].end())
+                                        ? &normsIt->second
+                                        : nullptr;
+
+                        for (size_t i = 0; i < docDeltaBuffer.size(); ++i) {
+                            int32_t freq = freqBuffer[i];
+                            maxBlockFreq = std::max(maxBlockFreq, freq);
+                            if (destNorms) {
+                                uint32_t docId = docDeltaBuffer[i];
+                                if (docId < destNorms->size()) {
+                                    uint8_t normByte = (*destNorms)[docId];
+                                    if (minBlockNorm == -1 || normByte < minBlockNorm) {
+                                        minBlockNorm = normByte;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    skipWriter->setSkipData(lastDoc, false, -1, maxBlockFreq, minBlockNorm);
                     skipWriter->bufferSkip(df);
                 }
 

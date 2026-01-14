@@ -6,6 +6,7 @@
 
 #include "BlockMaxBM25Similarity.h"
 
+#include <cstddef>
 #include <limits>
 
 namespace lucene::index {
