@@ -116,8 +116,8 @@ void testDefaultSkipListWriterMaxBlockParamsV1(CuTest* tc) {
             int32_t actualMaxBlockFreq = reader->getMaxBlockFreq();
             int32_t actualMaxBlockNorm = reader->getMaxBlockNorm();
 
-            CuAssertTrue(tc, actualMaxBlockFreq == 0);
-            CuAssertTrue(tc, actualMaxBlockNorm == 0);
+            CuAssertTrue(tc, actualMaxBlockFreq == -1);
+            CuAssertTrue(tc, actualMaxBlockNorm == -1);
         }
 
         _CLDELETE(reader);

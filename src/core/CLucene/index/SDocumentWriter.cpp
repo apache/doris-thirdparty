@@ -1035,6 +1035,9 @@ void SDocumentsWriter<T>::writeSegment(std::vector<std::string> &flushedFiles) {
     if (hasProx_) {
         const int32_t numFieldInfos = fieldInfos->size();
         for (int32_t fieldIdx = 0; fieldIdx < numFieldInfos; fieldIdx++) {
+            if (fieldIdx >= static_cast<int32_t>(norms.length)) {
+                continue;
+            }
             BufferedNorms* n = norms[fieldIdx];
             if (n != nullptr && numDocsInRAM > 0) {
                 float avgdl =
@@ -1174,7 +1177,10 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
     auto currentFieldStorePayloads = false;
 
     // Block Max WAND: Pre-compute if scoring info is available
-    BufferedNorms* blockMaxNorms = norms[fieldNumber];
+    BufferedNorms* blockMaxNorms = nullptr;
+    if (fieldNumber < static_cast<int32_t>(norms.length)) {
+        blockMaxNorms = norms[fieldNumber];
+    }
     const bool enableBlockMaxWand = hasProx_ && (blockMaxNorms != nullptr && !fieldInfo->omitNorms);
 
     ValueArray<FieldMergeState *> termStates(numFields);
