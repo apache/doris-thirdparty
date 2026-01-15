@@ -103,6 +103,7 @@ SET(clucene_core_Files
     ./CLucene/index/DocumentsWriter.cpp
     ./CLucene/index/SDocumentWriter.cpp
     ./CLucene/index/SDocumentWriter.h
+    ./CLucene/index/BlockMaxBM25Similarity.cpp
     ./CLucene/index/DocumentsWriterThreadState.cpp
     ./CLucene/index/SegmentTermVector.cpp
     ./CLucene/index/TermVectorReader.cpp

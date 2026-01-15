@@ -328,7 +328,8 @@ public:
     // write fields info file
     void writeFields(lucene::store::Directory* d, std::string segment);
     // merge terms and write files
-    void mergeTerms(bool hasProx, IndexVersion indexVersion);
+    void mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVersion,
+            const std::vector<std::map<std::wstring, std::vector<uint8_t>>>& destFieldNormsMapValues);
     // merge norms and write files
     void mergeNorms(
             std::vector<uint32_t> dest_index_docs,

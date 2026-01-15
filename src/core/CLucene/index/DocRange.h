@@ -7,29 +7,27 @@
 #include "CLucene/CLConfig.h"
 
 enum class DocRangeType {
-  kMany = 0,
-  kRange = 1,
+    kMany = 0,
+    kRange = 1,
 
-  kNone
+    kNone
 };
 
 class DocRange {
- public:
-  DocRange() = default;
-  ~DocRange() = default;
+public:
+    DocRange() = default;
+    ~DocRange() = default;
 
- public:
-  DocRangeType type_ = DocRangeType::kNone;
+public:
+    DocRangeType type_ = DocRangeType::kNone;
 
-  uint32_t doc_many_size_ = 0;
-  uint32_t freq_many_size_ = 0;
-  uint32_t norm_many_size_ = 0;
+    uint32_t doc_many_size_ = 0;
+    uint32_t freq_many_size_ = 0;
+    uint32_t norm_many_size_ = 0;
 
-  std::vector<uint32_t>* doc_many = nullptr;
-  std::vector<uint32_t>* freq_many = nullptr;
-  std::vector<uint32_t>* norm_many = nullptr;
+    std::vector<uint32_t>* doc_many = nullptr;
+    std::vector<uint32_t>* freq_many = nullptr;
+    std::vector<uint32_t>* norm_many = nullptr;
 
-  std::pair<uint32_t, uint32_t> doc_range;
-
-  bool need_positions = false;
+    std::pair<uint32_t, uint32_t> doc_range;
 };

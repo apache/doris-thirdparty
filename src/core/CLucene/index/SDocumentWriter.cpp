@@ -986,8 +986,8 @@ void SDocumentsWriter<T>::writeNorms(const std::string &segmentName, int32_t tot
                     v = 0;
                 } else {
                     normsOut->writeLong(n->total_term_count_);
-                    v = n->out.getFilePointer();
-                    n->out.writeTo(normsOut);
+                    v = n->norms_buffer.size();
+                    normsOut->writeBytes(n->norms_buffer.data(), n->norms_buffer.size());
                     n->reset();
                 }
                 if (v < totalNumDoc)
@@ -1031,6 +1031,21 @@ void SDocumentsWriter<T>::writeSegment(std::vector<std::string> &flushedFiles) {
     // Sort by field name
     std::sort(allFields.begin(), allFields.end(), ThreadState::FieldData::sort);
     const int32_t numAllFields = allFields.size();
+
+    if (hasProx_) {
+        const int32_t numFieldInfos = fieldInfos->size();
+        for (int32_t fieldIdx = 0; fieldIdx < numFieldInfos; fieldIdx++) {
+            if (fieldIdx >= static_cast<int32_t>(norms.length)) {
+                continue;
+            }
+            BufferedNorms* n = norms[fieldIdx];
+            if (n != nullptr && numDocsInRAM > 0) {
+                float avgdl =
+                        static_cast<float>(n->total_term_count_) / static_cast<float>(numDocsInRAM);
+                n->createBM25Similarity(avgdl);
+            }
+        }
+    }
 
     skipListWriter = _CLNEW DefaultSkipListWriter(termsOut->skipInterval, termsOut->maxSkipLevels,
                                                   numDocsInRAM, freqOut, proxOut, indexVersion_);
@@ -1136,8 +1151,8 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
                                      STermInfosWriter<T> *termsOut,
                                      IndexOutput *freqOut,
                                      IndexOutput *proxOut) {
-
-    const int32_t fieldNumber = (*fields)[0]->fieldInfo->number;
+    const FieldInfo* fieldInfo = (*fields)[0]->fieldInfo;
+    const int32_t fieldNumber = fieldInfo->number;
     int32_t numFields = fields->length;
     // In Doris, field number is always 1 by now.
     assert(numFields == 1);
@@ -1160,6 +1175,13 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
 
     const int32_t skipInterval = termsOut->skipInterval;
     auto currentFieldStorePayloads = false;
+
+    // Block Max WAND: Pre-compute if scoring info is available
+    BufferedNorms* blockMaxNorms = nullptr;
+    if (fieldNumber < static_cast<int32_t>(norms.length)) {
+        blockMaxNorms = norms[fieldNumber];
+    }
+    const bool enableBlockMaxWand = hasProx_ && (blockMaxNorms != nullptr && !fieldInfo->omitNorms);
 
     ValueArray<FieldMergeState *> termStates(numFields);
 
@@ -1205,12 +1227,39 @@ void SDocumentsWriter<T>::appendPostings(ArrayBase<typename ThreadState::FieldDa
         while (numToMerge > 0) {
 
             if ((++df % skipInterval) == 0) {
+                int32_t maxBlockFreq = -1;
+                int32_t maxBlockNorm = -1;
+                
+                if (enableBlockMaxWand) {
+                    const auto& nb = blockMaxNorms->norms_buffer;
+                    auto* bm25 = blockMaxNorms->bm25_similarity_.get();
+                    float maxTFFactor = -1.0F;
+                    
+                    if (bm25 != nullptr) {
+                        for (size_t i = 0; i < docDeltaBuffer.size(); ++i) {
+                            int32_t freq = freqBuffer[i];
+                            int32_t docId = docDeltaBuffer[i];
+                            
+                            if (static_cast<size_t>(docId) < nb.size()) {
+                                uint8_t normByte = nb[docId];
+                                float tf_factor = bm25->tf_factor(freq, normByte);
+                                
+                                if (tf_factor > maxTFFactor) {
+                                    maxTFFactor = tf_factor;
+                                    maxBlockFreq = freq;
+                                    maxBlockNorm = normByte;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 PforUtil::pfor_encode(freqOut, docDeltaBuffer, freqBuffer, hasProx_);
                 if (hasProx_ && indexVersion_ >= IndexVersion::kV2) {
                     PforUtil::encodePos(proxOut, posBuffer);
                 }
 
-                skipListWriter->setSkipData(lastDoc, currentFieldStorePayloads, lastPayloadLength);
+                skipListWriter->setSkipData(lastDoc, currentFieldStorePayloads, lastPayloadLength, maxBlockFreq, maxBlockNorm);
                 skipListWriter->bufferSkip(df);
             }
 
@@ -1425,24 +1474,22 @@ SDocumentsWriter<T>::BufferedNorms::BufferedNorms() {
 }
 template<typename T>
 void SDocumentsWriter<T>::BufferedNorms::add(float_t norm) {
-    uint8_t b = search::Similarity::encodeNorm(norm);
-    out.writeByte(b);
-    upto++;
+    _CLTHROWA(CL_ERR_UnsupportedOperation, "SDocumentsWriter::BufferedNorms::add(float_t) not supported");
 }
 
 template<typename T>
 void SDocumentsWriter<T>::BufferedNorms::add(int32_t norm) {
     total_term_count_ += norm;
     uint8_t b = search::Similarity::encodeNorm(norm);
-    out.writeByte(b);
+    norms_buffer.push_back(b);
     upto++;
 }
 
 template<typename T>
 void SDocumentsWriter<T>::BufferedNorms::reset() {
-    out.reset();
     upto = 0;
     total_term_count_ = 0;
+    norms_buffer.clear();
 }
 template<typename T>
 void SDocumentsWriter<T>::BufferedNorms::fill(int32_t docID) {
@@ -1452,7 +1499,7 @@ void SDocumentsWriter<T>::BufferedNorms::fill(int32_t docID) {
     // varying different fields, because we are not
     // storing the norms sparsely (see LUCENE-830)
     if (upto < docID) {
-        fillBytes(&out, defaultNorm, docID - upto);
+        norms_buffer.insert(norms_buffer.end(), docID - upto, defaultNorm);
         upto = docID;
     }
 }

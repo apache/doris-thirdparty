@@ -14,6 +14,7 @@
 #include "_FieldInfos.h"
 #include "_TermInfo.h"
 #include "_TermInfosWriter.h"
+#include "BlockMaxBM25Similarity.h"
 
 CL_CLASS_DEF(analysis, Analyzer)
 CL_CLASS_DEF(analysis, Token)
@@ -83,16 +84,22 @@ public:
    * to a partial segment. */
     class BufferedNorms {
     public:
-        CL_NS(store)::RAMOutputStream out;
-        int32_t upto{};
-
         BufferedNorms();
+        ~BufferedNorms() = default;
+
         void add(float_t norm);
         void add(int32_t norm);
         void reset();
         void fill(int32_t docID);
 
+        void createBM25Similarity(float avgdl) {
+            bm25_similarity_ = std::make_unique<lucene::index::BlockMaxBM25Similarity>(avgdl);
+        }
+
+        int32_t upto {};
         int64_t total_term_count_ = 0;
+        std::vector<uint8_t> norms_buffer;
+        std::unique_ptr<lucene::index::BlockMaxBM25Similarity> bm25_similarity_;
     };
     template<typename T2>
     class BlockPool {

@@ -63,6 +63,13 @@ int32_t MultiLevelSkipListReader::getDoc() const {
 	return lastDoc;
 }
 
+int32_t MultiLevelSkipListReader::getLastDocInBlock() const {
+	if (skipDoc[0] == 0 && haveSkipped && numberOfSkipLevels > 0) {
+		const_cast<MultiLevelSkipListReader*>(this)->loadNextSkip(0);;
+	}
+	return skipDoc[0];
+}
+
 int32_t MultiLevelSkipListReader::skipTo(const int32_t target) {
 	if (!haveSkipped) {
 		// first time, load skip levels
@@ -111,6 +118,7 @@ bool MultiLevelSkipListReader::loadNextSkip(const int32_t level) {
 		// this skip list is exhausted
 		skipDoc[level] = LUCENE_INT32_MAX_SHOULDBE;
 		if (numberOfSkipLevels > level) numberOfSkipLevels = level;
+		onSkipExhausted(level);
 		return false;
 	}
 
@@ -362,6 +370,13 @@ int32_t DefaultSkipListReader::readSkipData(const int32_t level, CL_NS(store)::I
 	}
 
 	return delta;
+}
+
+void DefaultSkipListReader::onSkipExhausted(const int32_t level) {
+	if (level == 0) {
+		maxBlockFreq = -1;
+		maxBlockNorm = -1;
+	}
 }
 
 int32_t DefaultSkipListReader::getMaxBlockFreq() const {
