@@ -81,24 +81,32 @@ public class KuduSecurityModule
 
         @Provides
         @Singleton
-        public static KuduClientSession createKuduClientSession(KuduClientConfig config, KuduKerberosConfig kuduKerberosConfig)
+        public static KuduClientSession createKuduClientSession(KuduClientConfig config,
+                KuduKerberosConfig kuduKerberosConfig)
         {
             return KuduSecurityModule.createKuduClientSession(config,
                     builder -> {
                         kuduKerberosConfig.getKuduPrincipalPrimary().ifPresent(builder::saslProtocolName);
-                        setJavaSecurityKrb5Conf(kuduKerberosConfig.getConfig().getAbsolutePath());
+                        try {
+                            setJavaSecurityKrb5Conf(kuduKerberosConfig.getConfig().getAbsolutePath());
+                        }
+                        catch (Exception e) {
+                            e.printStackTrace();
+                        }
                         KerberosAuthentication kerberosAuthentication = new KerberosAuthentication(
                                 new KerberosConfiguration.Builder()
                                         .withKerberosPrincipal(kuduKerberosConfig.getClientPrincipal())
                                         .withKeytabLocation(kuduKerberosConfig.getClientKeytab().getAbsolutePath())
                                         .build());
-                        CachingKerberosAuthentication cachingKerberosAuthentication = new CachingKerberosAuthentication(kerberosAuthentication);
+                        CachingKerberosAuthentication cachingKerberosAuthentication = new CachingKerberosAuthentication(
+                                kerberosAuthentication);
                         return new KerberizedKuduClient(builder, cachingKerberosAuthentication);
                     });
         }
     }
 
-    private static KuduClientSession createKuduClientSession(KuduClientConfig config, Function<KuduClientBuilder, KuduClientWrapper> kuduClientFactory)
+    private static KuduClientSession createKuduClientSession(KuduClientConfig config,
+            Function<KuduClientBuilder, KuduClientWrapper> kuduClientFactory)
     {
         KuduClient.KuduClientBuilder builder = new KuduClientBuilder(config.getMasterAddresses());
         builder.defaultAdminOperationTimeoutMs(config.getDefaultAdminOperationTimeout().toMillis());
