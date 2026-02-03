@@ -35,7 +35,14 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class ConfluentSchemaRegistryConfig
 {
+    public enum ConfluentSchemaRegistryAuthType
+    {
+        NONE,
+        BASIC_AUTH,
+    }
+
     private Set<HostAddress> confluentSchemaRegistryUrls;
+    private ConfluentSchemaRegistryAuthType confluentSchemaRegistryAuthType = ConfluentSchemaRegistryAuthType.NONE;
     private int confluentSchemaRegistryClientCacheSize = 1000;
     private EmptyFieldStrategy emptyFieldStrategy = IGNORE;
     private Duration confluentSubjectsCacheRefreshInterval = new Duration(1, SECONDS);
@@ -51,6 +58,19 @@ public class ConfluentSchemaRegistryConfig
     public ConfluentSchemaRegistryConfig setConfluentSchemaRegistryUrls(String confluentSchemaRegistryUrls)
     {
         this.confluentSchemaRegistryUrls = (confluentSchemaRegistryUrls == null) ? null : parseNodes(confluentSchemaRegistryUrls);
+        return this;
+    }
+
+    public ConfluentSchemaRegistryAuthType getConfluentSchemaRegistryAuthType()
+    {
+        return confluentSchemaRegistryAuthType;
+    }
+
+    @Config("kafka.confluent-schema-registry-auth-type")
+    @ConfigDescription("Auth type for logging in Confluent Schema Registry")
+    public ConfluentSchemaRegistryConfig setConfluentSchemaRegistryAuthType(ConfluentSchemaRegistryAuthType confluentSchemaRegistryAuthType)
+    {
+        this.confluentSchemaRegistryAuthType = confluentSchemaRegistryAuthType;
         return this;
     }
 
