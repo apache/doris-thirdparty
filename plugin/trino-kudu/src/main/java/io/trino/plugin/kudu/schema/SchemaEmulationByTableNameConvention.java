@@ -114,8 +114,27 @@ public class SchemaEmulationByTableNameConvention
     {
         try {
             if (rawSchemasTable == null) {
-                createAndFillSchemasTable(client);
-                rawSchemasTable = getSchemasTable(client);
+                // Try to open the schemas table first, only create if it doesn't exist
+                try {
+                    rawSchemasTable = client.openTable(rawSchemasTableName);
+                }
+                catch (KuduException e) {
+                    if (e.getStatus().isNotFound()) {
+                        // Table doesn't exist, try to create it (requires write permission)
+                        // If creation fails due to permission, fall back to scanning table names
+                        try {
+                            createAndFillSchemasTable(client);
+                            rawSchemasTable = getSchemasTable(client);
+                        }
+                        catch (KuduException createException) {
+                            // Fall back to listing schemas from table names directly (read-only)
+                            return listSchemaNamesFromTablets(client);
+                        }
+                    }
+                    else {
+                        throw e;
+                    }
+                }
             }
 
             KuduScanner scanner = client.newScannerBuilder(rawSchemasTable).build();
