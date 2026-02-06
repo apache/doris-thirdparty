@@ -76,16 +76,19 @@ public class ConfluentSchemaRegistryTableDescriptionSupplier
     private final String defaultSchema;
     private final Supplier<SetMultimap<String, TopicAndSubjects>> topicAndSubjectsSupplier;
     private final Supplier<SetMultimap<String, String>> subjectsSupplier;
+    private final Map<SchemaTableName, String> subjectMapping;
 
     public ConfluentSchemaRegistryTableDescriptionSupplier(
             SchemaRegistryClient schemaRegistryClient,
             Map<String, SchemaParser> schemaParsers,
             String defaultSchema,
-            Duration subjectsCacheRefreshInterval)
+            Duration subjectsCacheRefreshInterval,
+            Map<SchemaTableName, String> subjectMapping)
     {
         this.schemaRegistryClient = requireNonNull(schemaRegistryClient, "schemaRegistryClient is null");
         this.schemaParsers = ImmutableMap.copyOf(requireNonNull(schemaParsers, "schemaParsers is null"));
         this.defaultSchema = requireNonNull(defaultSchema, "defaultSchema is null");
+        this.subjectMapping = ImmutableMap.copyOf(requireNonNull(subjectMapping, "subjectMapping is null"));
         topicAndSubjectsSupplier = memoizeWithExpiration(this::getTopicAndSubjects, subjectsCacheRefreshInterval.toMillis(), MILLISECONDS);
         subjectsSupplier = memoizeWithExpiration(this::getAllSubjects, subjectsCacheRefreshInterval.toMillis(), MILLISECONDS);
     }
@@ -97,6 +100,7 @@ public class ConfluentSchemaRegistryTableDescriptionSupplier
         private final Map<String, SchemaParser> schemaParsers;
         private final String defaultSchema;
         private final Duration subjectsCacheRefreshInterval;
+        private final Map<SchemaTableName, String> subjectMapping;
 
         @Inject
         public Factory(
@@ -109,12 +113,18 @@ public class ConfluentSchemaRegistryTableDescriptionSupplier
             this.schemaParsers = ImmutableMap.copyOf(requireNonNull(schemaParsers, "schemaParsers is null"));
             this.defaultSchema = kafkaConfig.getDefaultSchema();
             this.subjectsCacheRefreshInterval = confluentConfig.getConfluentSubjectsCacheRefreshInterval();
+            this.subjectMapping = confluentConfig.getConfluentSchemaRegistrySubjectMapping();
         }
 
         @Override
         public TableDescriptionSupplier get()
         {
-            return new ConfluentSchemaRegistryTableDescriptionSupplier(schemaRegistryClient, schemaParsers, defaultSchema, subjectsCacheRefreshInterval);
+            return new ConfluentSchemaRegistryTableDescriptionSupplier(
+                    schemaRegistryClient,
+                    schemaParsers,
+                    defaultSchema,
+                    subjectsCacheRefreshInterval,
+                    subjectMapping);
         }
     }
 
@@ -193,6 +203,15 @@ public class ConfluentSchemaRegistryTableDescriptionSupplier
                     topicAndSubjectsFromCache.getTopic(),
                     topicAndSubjects.getKeySubject().or(topicAndSubjectsFromCache::getKeySubject),
                     topicAndSubjects.getValueSubject().or(topicAndSubjectsFromCache::getValueSubject));
+        }
+
+        // Apply subject mapping override if configured
+        if (subjectMapping.containsKey(schemaTableName)) {
+            String overrideTopic = subjectMapping.get(schemaTableName);
+            topicAndSubjects = new TopicAndSubjects(
+                    overrideTopic,
+                    topicAndSubjects.getKeySubject(),
+                    topicAndSubjects.getValueSubject());
         }
 
         if (topicAndSubjects.getKeySubject().isEmpty() && topicAndSubjects.getValueSubject().isEmpty()) {
