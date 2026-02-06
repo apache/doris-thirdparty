@@ -109,40 +109,11 @@ public class SchemaEmulationByTableNameConvention
     public List<String> listSchemaNames(KuduClientWrapper client)
     {
         try {
-            // if (rawSchemasTable == null) {
-            //     // Try to open the schemas table first, only create if it doesn't exist
-            //     try {
-            //         rawSchemasTable = client.openTable(rawSchemasTableName);
-            //     }
-            //     catch (KuduException e) {
-            //         if (e.getStatus().isNotFound()) {
-            //             // Table doesn't exist, try to create it (requires write permission)
-            //             // If creation fails due to permission, fall back to scanning table names
-            //             try {
-            //                 createAndFillSchemasTable(client);
-            //                 rawSchemasTable = getSchemasTable(client);
-            //             }
-            //             catch (KuduException createException) {
-            //                 // Fall back to listing schemas from table names directly (read-only)
-            //                 return listSchemaNamesFromTablets(client);
-            //             }
-            //         }
-            //         else {
-            //             throw e;
-            //         }
-            //     }
-            // }
-
-            // KuduScanner scanner = client.newScannerBuilder(rawSchemasTable).build();
-            // RowResultIterator iterator = scanner.nextRows();
-            // ArrayList<String> result = new ArrayList<>();
-            // while (iterator != null) {
-            //     for (RowResult row : iterator) {
-            //         result.add(row.getString(0));
-            //     }
-            //     iterator = scanner.nextRows();
-            // }
-            // return result;
+            // createAndFillSchemasTable(client);
+            // rawSchemasTable = getSchemasTable(client);
+            // ATTN, sometimes user does not have write priv for kudu,
+            // so we can not create schema table here.
+            // So here we get schema names directly from tablets.
             return listSchemaNamesFromTablets(client);
         }
         catch (KuduException e) {
