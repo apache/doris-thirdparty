@@ -14,6 +14,7 @@
 package io.trino.plugin.kafka.schema.confluent;
 
 import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.airlift.configuration.Config;
 import io.airlift.configuration.ConfigDescription;
@@ -22,15 +23,20 @@ import io.airlift.units.MaxDuration;
 import io.airlift.units.MinDuration;
 import io.trino.plugin.kafka.schema.confluent.AvroSchemaConverter.EmptyFieldStrategy;
 import io.trino.spi.HostAddress;
+import io.trino.spi.connector.SchemaTableName;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static com.google.common.collect.Streams.stream;
 import static io.trino.plugin.kafka.schema.confluent.AvroSchemaConverter.EmptyFieldStrategy.IGNORE;
+import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class ConfluentSchemaRegistryConfig
@@ -46,6 +52,7 @@ public class ConfluentSchemaRegistryConfig
     private int confluentSchemaRegistryClientCacheSize = 1000;
     private EmptyFieldStrategy emptyFieldStrategy = IGNORE;
     private Duration confluentSubjectsCacheRefreshInterval = new Duration(1, SECONDS);
+    private Map<SchemaTableName, String> confluentSchemaRegistrySubjectMapping = ImmutableMap.of();
 
     @Size(min = 1)
     public Set<HostAddress> getConfluentSchemaRegistryUrls()
@@ -117,6 +124,19 @@ public class ConfluentSchemaRegistryConfig
         return this;
     }
 
+    public Map<SchemaTableName, String> getConfluentSchemaRegistrySubjectMapping()
+    {
+        return confluentSchemaRegistrySubjectMapping;
+    }
+
+    @Config("kafka.confluent-schema-registry-subject-mapping")
+    @ConfigDescription("Comma-separated list of schema.table to actual topic name mappings. Format: schema1.table1:topic1,schema2.table2:topic2")
+    public ConfluentSchemaRegistryConfig setConfluentSchemaRegistrySubjectMapping(String mapping)
+    {
+        this.confluentSchemaRegistrySubjectMapping = (mapping == null) ? ImmutableMap.of() : parseSubjectMapping(mapping);
+        return this;
+    }
+
     private static ImmutableSet<HostAddress> parseNodes(String nodes)
     {
         Splitter splitter = Splitter.on(',').omitEmptyStrings().trimResults();
@@ -128,5 +148,41 @@ public class ConfluentSchemaRegistryConfig
     private static HostAddress toHostAddress(String value)
     {
         return HostAddress.fromString(value);
+    }
+
+    private static ImmutableMap<SchemaTableName, String> parseSubjectMapping(String mapping)
+    {
+        requireNonNull(mapping, "mapping is null");
+
+        Splitter entrySplitter = Splitter.on(',').omitEmptyStrings().trimResults();
+        Splitter keyValueSplitter = Splitter.on(':').trimResults();
+
+        ImmutableMap.Builder<SchemaTableName, String> builder = ImmutableMap.builder();
+
+        for (String entry : entrySplitter.split(mapping)) {
+            List<String> parts = keyValueSplitter.splitToList(entry);
+            checkArgument(parts.size() == 2,
+                    "Invalid mapping format '%s'. Expected format: schema.table:topic", entry);
+
+            String schemaTable = parts.get(0);
+            String topicName = parts.get(1);
+
+            List<String> schemaTableParts = Splitter.on('.').trimResults().splitToList(schemaTable);
+            checkArgument(schemaTableParts.size() == 2,
+                    "Invalid schema.table format '%s'. Expected format: schema.table", schemaTable);
+
+            String schema = schemaTableParts.get(0);
+            String table = schemaTableParts.get(1);
+
+            checkArgument(!schema.isEmpty() && !table.isEmpty(),
+                    "Schema and table names cannot be empty in '%s'", schemaTable);
+            checkArgument(!topicName.isEmpty(),
+                    "Topic name cannot be empty in mapping '%s'", entry);
+
+            SchemaTableName schemaTableName = new SchemaTableName(schema, table);
+            builder.put(schemaTableName, topicName);
+        }
+
+        return builder.buildOrThrow();
     }
 }
