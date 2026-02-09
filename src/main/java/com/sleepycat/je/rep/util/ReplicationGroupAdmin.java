@@ -77,6 +77,8 @@ public class ReplicationGroupAdmin {
     private final Logger logger;
     private final Formatter formatter;
     private final DataChannelFactory channelFactory;
+    private final boolean ownsChannelFactory;
+    private volatile boolean closed = false;
 
     /**
      * Constructs a group admin object.
@@ -104,7 +106,8 @@ public class ReplicationGroupAdmin {
                                  Set<InetSocketAddress> helperSockets,
                                  ReplicationNetworkConfig repNetConfig) {
         this(groupName, helperSockets,
-             initializeFactory(repNetConfig, groupName));
+             initializeFactory(repNetConfig, groupName),
+             true);
     }
 
     /**
@@ -119,9 +122,17 @@ public class ReplicationGroupAdmin {
     public ReplicationGroupAdmin(String groupName,
                                  Set<InetSocketAddress> helperSockets,
                                  DataChannelFactory channelFactory) {
+        this(groupName, helperSockets, channelFactory, false);
+    }
+
+    private ReplicationGroupAdmin(String groupName,
+                                  Set<InetSocketAddress> helperSockets,
+                                  DataChannelFactory channelFactory,
+                                  boolean ownsChannelFactory) {
         this.groupName = groupName;
         this.helperSockets = helperSockets;
         this.channelFactory = channelFactory;
+        this.ownsChannelFactory = ownsChannelFactory;
 
         electionsProtocol =
             new Protocol(TimebasedProposalGenerator.getParser(),
@@ -136,6 +147,20 @@ public class ReplicationGroupAdmin {
         logger = LoggerUtils.getLoggerFixedPrefix
             (getClass(), NameIdPair.NOCHECK.toString());
         formatter = new ReplicationFormatter(NameIdPair.NOCHECK);
+    }
+
+    /**
+     * Releases resources owned by this instance.
+     */
+    public synchronized void close() {
+        if (closed) {
+            return;
+        }
+        closed = true;
+
+        if (ownsChannelFactory) {
+            channelFactory.shutdown();
+        }
     }
 
     /**

@@ -277,40 +277,46 @@ public class DbGroupAdmin {
 
         createGroupAdmin();
 
-        if (actions.size() == 0) {
-            return;
-        }
+        try {
+            if (actions.size() == 0) {
+                return;
+            }
 
-        for (Command action : actions) {
-            switch (action) {
+            for (Command action : actions) {
+                switch (action) {
 
-                /* Dump the group information. */
-            case DUMP:
-                dumpGroup();
-                break;
+                    /* Dump the group information. */
+                case DUMP:
+                    dumpGroup();
+                    break;
 
-                /* Remove a member. */
-            case REMOVE:
-                removeMember(nodeName);
-                break;
+                    /* Remove a member. */
+                case REMOVE:
+                    removeMember(nodeName);
+                    break;
 
-                /* Transfer the current mastership to a specified node. */
-            case TRANSFER_MASTER:
-                transferMaster(nodeName, timeout);
-                break;
+                    /* Transfer the current mastership to a specified node. */
+                case TRANSFER_MASTER:
+                    transferMaster(nodeName, timeout);
+                    break;
 
-                /* Update the network address of a specified node. */
-            case UPDATE_ADDRESS:
-                updateAddress(nodeName, newHostName, newPort);
-                break;
+                    /* Update the network address of a specified node. */
+                case UPDATE_ADDRESS:
+                    updateAddress(nodeName, newHostName, newPort);
+                    break;
 
-                /* Delete a member */
-            case DELETE:
-                deleteMember(nodeName);
-                break;
+                    /* Delete a member */
+                case DELETE:
+                    deleteMember(nodeName);
+                    break;
 
-            default:
-                throw new AssertionError();
+                default:
+                    throw new AssertionError();
+                }
+            }
+        } finally {
+            if (groupAdmin != null) {
+                groupAdmin.close();
             }
         }
     }

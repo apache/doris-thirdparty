@@ -645,6 +645,33 @@ public class RepImpl
         }
     }
 
+    private synchronized void shutdownChannelFactory(PrintWriter errors) {
+        if (channelFactory == null) {
+            return;
+        }
+
+        try {
+            channelFactory.shutdown();
+        } catch (RuntimeException e) {
+            if (errors != null) {
+                appendException(errors, e,
+                                "shutting down channel factory " +
+                                nameIdPair);
+            } else {
+                LoggerUtils.warning(
+                    envLogger, this,
+                    "Unexpected exception shutting down channel factory: " +
+                    e.getMessage());
+            }
+        } finally {
+            channelFactory = null;
+        }
+    }
+
+    private void shutdownChannelFactory() {
+        shutdownChannelFactory(null);
+    }
+
     @Override
     protected Environment createInternalEnvironment() {
         return new InternalReplicatedEnvironment
@@ -680,6 +707,8 @@ public class RepImpl
             }
         } catch (InterruptedException e) {
             appendException(errors, e, "shutting down node " + nameIdPair);
+        } finally {
+            shutdownChannelFactory(errors);
         }
     }
 
@@ -774,6 +803,8 @@ public class RepImpl
                 repNode = null;
             }
         } catch (Exception ignore) {
+        } finally {
+            shutdownChannelFactory();
         }
 
         super.doCloseAfterInvalid();
@@ -811,6 +842,8 @@ public class RepImpl
             }
         } catch (InterruptedException ignore) {
             /* ignore */
+        } finally {
+            shutdownChannelFactory();
         }
 
         try {

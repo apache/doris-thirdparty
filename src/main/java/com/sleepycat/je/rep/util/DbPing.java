@@ -50,6 +50,7 @@ public class DbPing {
     private int socketTimeout = 10000;
     /* The factory for channel creation */
     private DataChannelFactory channelFactory;
+    private boolean ownsChannelFactory = false;
 
     private static final String undocumentedUsageString =
         "  -netProps <optional>    # name of a property file containing\n" +
@@ -93,8 +94,12 @@ public class DbPing {
         throws Exception {
 
         DbPing ping = new DbPing();
-        ping.parseArgs(args);
-        System.out.println(ping.getNodeState());
+        try {
+            ping.parseArgs(args);
+            System.out.println(ping.getNodeState());
+        } finally {
+            ping.close();
+        }
     }
 
     /**
@@ -201,6 +206,7 @@ public class DbPing {
         }
 
         this.channelFactory = initializeFactory(repNetConfig, nodeName);
+        this.ownsChannelFactory = true;
     }
 
     private DbPing() {
@@ -269,7 +275,8 @@ public class DbPing {
                   int socketTimeout,
                   ReplicationNetworkConfig netConfig) {
         this(repNode, groupName, socketTimeout,
-             initializeFactory(netConfig, repNode.getName()));
+             initializeFactory(netConfig, repNode.getName()),
+             true);
     }
 
     /**
@@ -289,11 +296,20 @@ public class DbPing {
                   String groupName,
                   int socketTimeout,
                   DataChannelFactory channelFactory) {
+        this(repNode, groupName, socketTimeout, channelFactory, false);
+    }
+
+    private DbPing(ReplicationNode repNode,
+                   String groupName,
+                   int socketTimeout,
+                   DataChannelFactory channelFactory,
+                   boolean ownsChannelFactory) {
         this.nodeName = repNode.getName();
         this.groupName = groupName;
         this.socketAddress = repNode.getSocketAddress();
         this.socketTimeout = socketTimeout;
         this.channelFactory = channelFactory;
+        this.ownsChannelFactory = ownsChannelFactory;
     }
 
     /* Get the state of the specified node. */
@@ -330,6 +346,16 @@ public class DbPing {
             if (channel != null) {
                 channel.close();
             }
+        }
+    }
+
+    /**
+     * Releases resources owned by this instance.
+     */
+    public void close() {
+        if (ownsChannelFactory && channelFactory != null) {
+            channelFactory.shutdown();
+            channelFactory = null;
         }
     }
 
