@@ -378,10 +378,17 @@ public class SSLChannelFactory implements DataChannelFactory {
                 return;
             }
 
-            // Only monitor PEM configuration
-            final String pemCert = config.getSSLPemCertFile();
-            final String pemKey = config.getSSLPemKeyFile();
-            final String pemCa = config.getSSLPemCaCertFile();
+            if (!isPemMonitoringEnabled(config)) {
+                logger.log(INFO,
+                           "Certificate monitoring disabled " +
+                           "(PEM certificate/key/CA files are not fully configured " +
+                           "or keystore mode is in use)");
+                return;
+            }
+
+            if (certificateCheckExecutor != null) {
+                return;
+            }
 
             // Create scheduled executor for periodic certificate checking
             certificateCheckExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -406,6 +413,25 @@ public class SSLChannelFactory implements DataChannelFactory {
         } catch (Exception e) {
             logger.log(WARNING, "Failed to initialize certificate monitoring: " + e.getMessage());
         }
+    }
+
+    private boolean isPemMonitoringEnabled(ReplicationSSLConfig config) {
+        final String keyStore = config.getSSLKeyStore();
+        final String keyStoreProperty =
+            System.getProperty("javax.net.ssl.keyStore");
+
+        if ((keyStore != null && !keyStore.isEmpty()) ||
+            (keyStoreProperty != null && !keyStoreProperty.isEmpty())) {
+            return false;
+        }
+
+        return isNonEmpty(config.getSSLPemCaCertFile()) &&
+               isNonEmpty(config.getSSLPemKeyFile()) &&
+               isNonEmpty(config.getSSLPemCertFile());
+    }
+
+    private static boolean isNonEmpty(String value) {
+        return value != null && !value.isEmpty();
     }
 
     /**
@@ -635,6 +661,7 @@ public class SSLChannelFactory implements DataChannelFactory {
     /**
      * Stop the certificate monitoring executor and clean up resources.
      */
+    @Override
     public void shutdown() {
         if (certificateCheckExecutor != null) {
             certificateCheckExecutor.shutdown();

@@ -215,4 +215,13 @@ public interface DataChannelFactory {
                         InetSocketAddress localAddr,
                         ConnectOptions connectOptions)
         throws IOException;
+
+    /**
+     * Releases resources associated with this factory.
+     *
+     * Implementations that do not hold resources can use the default no-op
+     * behavior.
+     */
+    default void shutdown() {
+    }
 }

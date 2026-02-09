@@ -552,6 +552,15 @@ public class Monitor {
         if (serviceDispatcher != null) {
             serviceDispatcher.shutdown();
         }
+
+        if (repGroupAdmin != null) {
+            repGroupAdmin.close();
+        }
+
+        if (channelFactory != null) {
+            channelFactory.shutdown();
+            channelFactory = null;
+        }
     }
 
     /**
