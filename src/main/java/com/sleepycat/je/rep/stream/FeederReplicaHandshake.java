@@ -611,7 +611,7 @@ public class FeederReplicaHandshake {
          * issue a shutdown to the feeder explicitly.
          */
         if (dup != null && dup.getChannel() != null &&
-            !dup.getChannel().isOpen() && !dup.isShutdown()) {
+                !dup.isChannelAvailable()) {
             dup.shutdown(new IOException("Feeder's channel for node " +
                                          replicaNameIdPair +
                                          " is already closed"));
