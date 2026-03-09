@@ -243,6 +243,10 @@ set(FAISS_HEADERS
 if(NOT WIN32)
   list(APPEND FAISS_SRC invlists/OnDiskInvertedLists.cpp)
   list(APPEND FAISS_HEADERS invlists/OnDiskInvertedLists.h)
+  list(APPEND FAISS_SRC impl/random_access_reader.cpp)
+  list(APPEND FAISS_HEADERS impl/random_access_reader.h)
+  list(APPEND FAISS_SRC invlists/PreadInvertedLists.cpp)
+  list(APPEND FAISS_HEADERS invlists/PreadInvertedLists.h)
 endif()
 
 # Export FAISS_HEADERS variable to parent scope.
