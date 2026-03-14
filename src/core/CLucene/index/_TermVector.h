@@ -167,6 +167,10 @@ public:
 };
 
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winaccessible-base"
+#endif
 class SegmentTermPositionVector: public SegmentTermVector, public TermPositionVector {
 protected:
 	CL_NS(util)::ArrayBase< CL_NS(util)::ArrayBase<int32_t>* >* positions;
@@ -207,6 +211,9 @@ public:
 
 	virtual TermPositionVector* __asTermPositionVector();
 };
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 
 /**
  * The TermVectorMapper can be used to map Term Vectors into your own

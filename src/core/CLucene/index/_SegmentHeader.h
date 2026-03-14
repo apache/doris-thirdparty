@@ -36,11 +36,11 @@ public:
       : docs_(PFOR_BLOCK_SIZE + 3),
         freqs_(PFOR_BLOCK_SIZE + 3),
         norms_(PFOR_BLOCK_SIZE + 3),
-        maxDoc(maxDoc),
         freqStream_(freqStream),
+        maxDoc(maxDoc),
         hasProx_(hasProx),
-        indexVersion_(indexVersion),
-        compatibleRead_(compatibleRead) {
+        compatibleRead_(compatibleRead),
+        indexVersion_(indexVersion) {
   }
 
   ~TermDocsBuffer() {
