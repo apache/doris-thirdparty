@@ -153,6 +153,10 @@ CL_NS_DEF(index)
 		// for merge
 		class FieldForMerge : public CL_NS(document)::Field {
 		public:
+			using CL_NS(document)::Field::stringValue;
+			using CL_NS(document)::Field::readerValue;
+			using CL_NS(document)::Field::tokenStreamValue;
+
 			const TCHAR* stringValue() const;
 			CL_NS(util)::Reader* readerValue() const;
 			const CL_NS(util)::ValueArray<uint8_t>* binaryValue();
