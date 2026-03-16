@@ -1371,6 +1371,7 @@ int32_t SDocumentsWriter<T>::flush(bool _closeDocStore) {
     }
 
     newFiles.clear();
+    newFiles.reserve(10);
 
     docStoreOffset = numDocsInStore;
 
