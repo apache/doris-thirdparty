@@ -309,8 +309,6 @@ namespace orc {
     // Perform BFS
     while (!nodes.empty()) {
       TreeNode& node = nodes.front();
-      nodes.pop_front();
-
       if (node->getOperator() == ExpressionTree::Operator::LEAF) {
         leaves.insert(node);
       } else {
@@ -318,6 +316,7 @@ namespace orc {
           nodes.push_back(child);
         }
       }
+      nodes.pop_front();
     }
 
     // Update the leaf in place
