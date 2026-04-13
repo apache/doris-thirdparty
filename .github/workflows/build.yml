@@ -251,9 +251,116 @@ jobs:
           tar -cf - installed | xz -z -T0 - >"doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
           gh release upload --clobber automation "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
 
+  update-docker:
+    name: Update Docker Image
+    needs: [prerelease, build]
+    if: needs.prerelease.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Prepare Dockerfiles
+        run: |
+          # Pull the upstream Dockerfile from apache/doris to stay in sync with
+          # any toolchain / dependency changes they make.
+          curl -fsSL https://raw.githubusercontent.com/apache/doris/master/docker/compilation/Dockerfile \
+            -o Dockerfile.upstream
+
+          python3 - << 'PYEOF'
+          import sys, re
+
+          with open('Dockerfile.upstream') as f:
+              content = f.read()
+
+          # Patch 1: fix epel metalink.
+          # The upstream RUN line installs epel-release then immediately runs yum
+          # install/clean/makecache, but epel.repo's metalink may be unreliable.
+          # Insert a sed fix between epel-release install and the next yum install.
+          old_epel = 'yum install epel-release -y && yum install https://packages.endpointdev.com'
+          new_epel = ('yum install epel-release -y \\\n'
+                      '    && sed -i \\\n'
+                      '      -e \'s/^metalink=/#metalink=/\' \\\n'
+                      '      -e \'s|^#baseurl=http://download.fedoraproject.org/pub/epel/7|baseurl=https://mirrors.aliyun.com/epel/7|\' \\\n'
+                      '      /etc/yum.repos.d/epel*.repo \\\n'
+                      '    && yum install https://packages.endpointdev.com')
+          patched = content.replace(old_epel, new_epel, 1)
+
+          # Patch 2: replace "clone & build thirdparty" block with downloading
+          # our prebuilt artifact. The block starts with "# clone lastest source
+          # code" comment and ends with "rm -rf ${DEFAULT_DIR}/doris".
+          prebuilt_block = (
+              '# Download prebuilt thirdparty from GitHub Release (built by doris-thirdparty automation)\n'
+              'ARG GITHUB_REPOSITORY\n'
+              'RUN mkdir -p /var/local/thirdparty \\\n'
+              '    && wget -q "https://github.com/${GITHUB_REPOSITORY}/releases/download/automation/doris-thirdparty-prebuilt-linux-x86_64.tar.xz" \\\n'
+              '        -O /tmp/prebuilt.tar.xz \\\n'
+              '    && tar -xf /tmp/prebuilt.tar.xz -C /var/local/thirdparty \\\n'
+              '    && rm /tmp/prebuilt.tar.xz\n'
+          )
+          patched = re.sub(
+              r'# clone lastest source code.*?rm -rf \$\{DEFAULT_DIR\}/doris\n',
+              prebuilt_block,
+              patched, flags=re.DOTALL
+          )
+
+          # Write normal image Dockerfile
+          with open('Dockerfile.patched', 'w') as f:
+              f.write(patched)
+
+          # Patch 3 (no-avx2): add USE_AVX2=0 to the ENV block in builder stage.
+          # The ENV block ends with PATH=... just before "# install ccache".
+          noavx2 = patched.replace(
+              'PATH="/var/local/ldb-toolchain/bin/:$PATH"\n    # USE_AVX2=0',
+              'PATH="/var/local/ldb-toolchain/bin/:$PATH" \\\n    USE_AVX2=0'
+          )
+          with open('Dockerfile.patched-noavx2', 'w') as f:
+              f.write(noavx2)
+
+          print("=== normal: check ===")
+          for line in open('Dockerfile.patched'):
+              if any(k in line for k in ['COPY doris', 'build-thirdparty', 'ARG GITHUB', 'prebuilt', 'USE_AVX2']):
+                  print(line, end='')
+          print("=== noavx2: check ===")
+          for line in open('Dockerfile.patched-noavx2'):
+              if any(k in line for k in ['COPY doris', 'build-thirdparty', 'ARG GITHUB', 'prebuilt', 'USE_AVX2']):
+                  print(line, end='')
+          PYEOF
+
+      - name: Build and Push Docker Image (normal)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.patched
+          build-args: |
+            GITHUB_REPOSITORY=${{ github.repository }}
+          push: true
+          tags: apache/doris:build-env-ldb-toolchain-latest
+          platforms: linux/amd64
+
+      - name: Build and Push Docker Image (no-avx2)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.patched-noavx2
+          build-args: |
+            GITHUB_REPOSITORY=${{ github.repository }}
+          push: true
+          tags: apache/doris:build-env-ldb-toolchain-no-avx2-latest
+          platforms: linux/amd64
+
   success:
     name: Success
-    needs: [prerelease, build]
+    needs: [prerelease, build, update-docker]
     if: needs.prerelease.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     env:
@@ -272,7 +379,7 @@ jobs:
 
   failure:
     name: Failure
-    needs: [build]
+    needs: [build, update-docker]
     if: failure()
     runs-on: ubuntu-latest
     env:
