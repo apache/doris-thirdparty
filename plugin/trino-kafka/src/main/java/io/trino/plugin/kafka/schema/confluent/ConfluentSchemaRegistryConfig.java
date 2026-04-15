@@ -15,14 +15,12 @@ package io.trino.plugin.kafka.schema.confluent;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import io.airlift.configuration.Config;
 import io.airlift.configuration.ConfigDescription;
 import io.airlift.units.Duration;
 import io.airlift.units.MaxDuration;
 import io.airlift.units.MinDuration;
 import io.trino.plugin.kafka.schema.confluent.AvroSchemaConverter.EmptyFieldStrategy;
-import io.trino.spi.HostAddress;
 import io.trino.spi.connector.SchemaTableName;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -30,10 +28,9 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.collect.ImmutableSet.toImmutableSet;
+import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.Streams.stream;
 import static io.trino.plugin.kafka.schema.confluent.AvroSchemaConverter.EmptyFieldStrategy.IGNORE;
 import static java.util.Objects.requireNonNull;
@@ -47,7 +44,7 @@ public class ConfluentSchemaRegistryConfig
         BASIC_AUTH,
     }
 
-    private Set<HostAddress> confluentSchemaRegistryUrls;
+    private List<String> confluentSchemaRegistryUrls;
     private ConfluentSchemaRegistryAuthType confluentSchemaRegistryAuthType = ConfluentSchemaRegistryAuthType.NONE;
     private int confluentSchemaRegistryClientCacheSize = 1000;
     private EmptyFieldStrategy emptyFieldStrategy = IGNORE;
@@ -55,7 +52,7 @@ public class ConfluentSchemaRegistryConfig
     private Map<SchemaTableName, String> confluentSchemaRegistrySubjectMapping = ImmutableMap.of();
 
     @Size(min = 1)
-    public Set<HostAddress> getConfluentSchemaRegistryUrls()
+    public List<String> getConfluentSchemaRegistryUrls()
     {
         return confluentSchemaRegistryUrls;
     }
@@ -137,17 +134,20 @@ public class ConfluentSchemaRegistryConfig
         return this;
     }
 
-    private static ImmutableSet<HostAddress> parseNodes(String nodes)
+    private static List<String> parseNodes(String nodes)
     {
         Splitter splitter = Splitter.on(',').omitEmptyStrings().trimResults();
         return stream(splitter.split(nodes))
-                .map(ConfluentSchemaRegistryConfig::toHostAddress)
-                .collect(toImmutableSet());
+                .map(ConfluentSchemaRegistryConfig::normalizeUrl)
+                .collect(toImmutableList());
     }
 
-    private static HostAddress toHostAddress(String value)
+    private static String normalizeUrl(String value)
     {
-        return HostAddress.fromString(value);
+        if (value.contains("://")) {
+            return value;
+        }
+        return "https://" + value;
     }
 
     private static ImmutableMap<SchemaTableName, String> parseSubjectMapping(String mapping)
