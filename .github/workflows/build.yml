@@ -18,6 +18,7 @@
 name: Build
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: '*/30 * * * *'
 
@@ -251,9 +252,125 @@ jobs:
           tar -cf - installed | xz -z -T0 - >"doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
           gh release upload --clobber automation "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
 
+  update-docker:
+    name: Update Docker Image
+    needs: [prerelease, build]
+    if: |
+      always() && (
+        (needs.prerelease.outputs.should_release == 'true' && needs.build.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' && needs.build.result != 'failure')
+      )
+    runs-on: ubuntu-latest
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Prepare Dockerfiles
+        run: |
+          # Pull the upstream Dockerfile from apache/doris to stay in sync with
+          # any toolchain / dependency changes they make.
+          curl -fsSL https://raw.githubusercontent.com/apache/doris/master/docker/compilation/Dockerfile \
+            -o Dockerfile.upstream
+
+          python3 - << 'PYEOF'
+          import sys, re
+
+          with open('Dockerfile.upstream') as f:
+              content = f.read()
+
+          # Patch 1: fix epel metalink.
+          # The upstream RUN line installs epel-release then immediately runs yum
+          # install/clean/makecache, but epel.repo's metalink may be unreliable.
+          # Insert a sed fix between epel-release install and the next yum install.
+          old_epel = 'yum install epel-release -y && yum install https://packages.endpointdev.com'
+          new_epel = ('yum install epel-release -y \\\n'
+                      '    && sed -i \\\n'
+                      '      -e \'s/^metalink=/#metalink=/\' \\\n'
+                      '      -e \'s|^#baseurl=http://download.fedoraproject.org/pub/epel/7|baseurl=https://mirrors.aliyun.com/epel/7|\' \\\n'
+                      '      /etc/yum.repos.d/epel*.repo \\\n'
+                      '    && yum install https://packages.endpointdev.com')
+          assert old_epel in content, f"Patch 1 failed: target string not found in upstream Dockerfile"
+          patched = content.replace(old_epel, new_epel, 1)
+          assert patched != content, "Patch 1 was a no-op: upstream Dockerfile may have changed"
+
+          # Patch 2: replace "clone & build thirdparty" block with downloading
+          # our prebuilt artifact. The block starts with "# clone lastest source
+          # code" comment and ends with "rm -rf ${DEFAULT_DIR}/doris".
+          prebuilt_block = (
+              '# Download prebuilt thirdparty from GitHub Release (built by doris-thirdparty automation)\n'
+              'ARG GITHUB_REPOSITORY\n'
+              'RUN mkdir -p /var/local/thirdparty \\\n'
+              '    && wget -q "https://github.com/${GITHUB_REPOSITORY}/releases/download/automation/doris-thirdparty-prebuilt-linux-x86_64.tar.xz" \\\n'
+              '        -O /tmp/prebuilt.tar.xz \\\n'
+              '    && tar -xf /tmp/prebuilt.tar.xz -C /var/local/thirdparty \\\n'
+              '    && rm /tmp/prebuilt.tar.xz\n'
+          )
+          patched_2 = re.sub(
+              r'# clone lastest source code.*?rm -rf \$\{DEFAULT_DIR\}/doris\n',
+              prebuilt_block,
+              patched, flags=re.DOTALL
+          )
+          assert patched_2 != patched, "Patch 2 was a no-op: 'clone lastest source code' block not found in upstream Dockerfile"
+          patched = patched_2
+
+          # Write normal image Dockerfile
+          with open('Dockerfile.patched', 'w') as f:
+              f.write(patched)
+
+          # Patch 3 (no-avx2): add USE_AVX2=0 to the ENV block in builder stage.
+          # The ENV block ends with PATH=... just before "# install ccache".
+          old_avx2 = 'PATH="/var/local/ldb-toolchain/bin/:$PATH"\n    # USE_AVX2=0'
+          new_avx2 = 'PATH="/var/local/ldb-toolchain/bin/:$PATH" \\\n    USE_AVX2=0'
+          assert old_avx2 in patched, "Patch 3 failed: '# USE_AVX2=0' comment not found; upstream Dockerfile may have changed"
+          noavx2 = patched.replace(old_avx2, new_avx2)
+          assert noavx2 != patched, "Patch 3 was a no-op: no-avx2 Dockerfile is identical to normal Dockerfile"
+          with open('Dockerfile.patched-noavx2', 'w') as f:
+              f.write(noavx2)
+
+          print("=== normal: check ===")
+          for line in open('Dockerfile.patched'):
+              if any(k in line for k in ['COPY doris', 'build-thirdparty', 'ARG GITHUB', 'prebuilt', 'USE_AVX2']):
+                  print(line, end='')
+          print("=== noavx2: check ===")
+          for line in open('Dockerfile.patched-noavx2'):
+              if any(k in line for k in ['COPY doris', 'build-thirdparty', 'ARG GITHUB', 'prebuilt', 'USE_AVX2']):
+                  print(line, end='')
+          PYEOF
+
+      - name: Build and Push Docker Image (normal)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.patched
+          build-args: |
+            GITHUB_REPOSITORY=${{ github.repository }}
+          push: true
+          tags: ${{ vars.DOCKER_TAGS || 'apache/doris:build-env-ldb-toolchain-latest' }}
+          platforms: linux/amd64
+
+      - name: Build and Push Docker Image (no-avx2)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.patched-noavx2
+          build-args: |
+            GITHUB_REPOSITORY=${{ github.repository }}
+          push: true
+          tags: ${{ vars.DOCKER_TAGS_NOAVX2 || 'apache/doris:build-env-ldb-toolchain-no-avx2-latest' }}
+          platforms: linux/amd64
+
   success:
     name: Success
-    needs: [prerelease, build]
+    needs: [prerelease, build, update-docker]
     if: needs.prerelease.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     env:
@@ -272,7 +389,7 @@ jobs:
 
   failure:
     name: Failure
-    needs: [build]
+    needs: [build, update-docker]
     if: failure()
     runs-on: ubuntu-latest
     env:
