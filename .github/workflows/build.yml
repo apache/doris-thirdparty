@@ -236,7 +236,7 @@ jobs:
             export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
             export PATH="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 1 -type d -name 'bin'):${PATH}"
             export JAVA_HOME="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 0)"
-            export DORIS_TOOLCHAIN=gcc
+            export DORIS_TOOLCHAIN=clang
           else
             export MACOSX_DEPLOYMENT_TARGET=12.0
           fi
