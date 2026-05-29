@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-name: Build
+name: Build (4.0)
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ on:
 jobs:
   prerelease:
     name: Prerelease
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -43,16 +43,20 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'apache/doris'
+          ref: 'branch-4.0'
           fetch-depth: 0
 
       - name: Check Diff
         id: check_diff
         run: |
+          tag_name='automation-4.0'
+          title="Apache Doris Third Party Prebuilt (${tag_name/automation-/})"
+
           if [[ -z "$(gh release list)" ]] ||
-              ! gh release list | awk -F "\t" '{ print $3 }' | grep 'automation' >/dev/null; then
-            gh release create -t 'Apache Doris Third Party Prebuilt' automation
+              ! gh release list | awk -F "\t" '{ print $3 }' | grep "${tag_name}" >/dev/null; then
+            gh release create -t "${title}" "${tag_name}"
           fi
-          last_version="$(gh release view automation | sed -n -E 's/Doris Version: \*(.*)\*.*/\1/p')"
+          last_version="$(gh release view "${tag_name}" | sed -n -E 's/Doris Version: \*(.*)\*.*/\1/p')"
           current_version="$(git log -1 --format='%H')"
 
           echo "Last Version: ${last_version}"
@@ -75,24 +79,34 @@ jobs:
           if "${should_release}"; then
             echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*" >release_note.md
           else
-            gh release view automation | sed -n '/--/,$p' | awk '{ if (NR > 1) print $0 }' | sed "{
+            gh release view "${tag_name}" | sed -n '/--/,$p' | awk '{ if (NR > 1) print $0 }' | sed "{
               s/Update Time:.*/Update Time: *$(date)*/
               s/Doris Version:.*/Doris Version: *${current_version}*/
             }" >release_note.md
           fi
-          gh release edit -F release_note.md automation
+          gh release edit -F release_note.md "${tag_name}"
 
           echo "should_release=${should_release}" >> $GITHUB_OUTPUT
 
       - name: Download Source and Upload
         if: steps.check_diff.outputs.should_release == 'true'
         run: |
+          tag_name='automation-4.0'
+
           cd thirdparty
+          # Pre-download packages whose default mirror is blocked or gone on GH Actions runners:
+          #   lzo: fossies.org returns 410 Gone
+          #   libuuid: nchc.dl.sourceforge.net (TW mirror) is blocked from GH Actions
+          mkdir -p src
+          curl -fL "https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz" \
+            -o src/lzo-2.10.tar.gz
+          curl -fL "https://downloads.sourceforge.net/project/libuuid/libuuid-1.0.3.tar.gz" \
+            -o src/libuuid-1.0.3.tar.gz
           sed '/# unpacking thirdpart archives/,$d' download-thirdparty.sh | bash -
 
           tar -zcvf doris-thirdparty-source.tgz src
 
-          gh release upload --clobber automation doris-thirdparty-source.tgz
+          gh release upload --clobber "${tag_name}" doris-thirdparty-source.tgz
 
   build:
     name: Build
@@ -201,11 +215,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'apache/doris'
+          ref: 'branch-4.0'
 
       - name: Download
         run: |
+          tag_name='automation-4.0'
+
           cd thirdparty
-          curl -L https://github.com/${{ github.repository }}/releases/download/automation/doris-thirdparty-source.tgz \
+          curl -L "https://github.com/${{ github.repository }}/releases/download/${tag_name}/doris-thirdparty-source.tgz" \
             -o doris-thirdparty-source.tgz
           tar -zxvf doris-thirdparty-source.tgz
 
@@ -236,6 +253,8 @@ jobs:
 
       - name: Build and Upload
         run: |
+          tag_name='automation-4.0'
+
           if [[ "${{ matrix.config.name }}" == 'Linux' ]]; then
             export DEFAULT_DIR='/opt/doris'
             export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
@@ -249,13 +268,28 @@ jobs:
           export CMAKE_POLICY_VERSION_MINIMUM=3.10
           export CUSTOM_CMAKE="/usr/local/bin/cmake"
           cd thirdparty
+          # Fix packages that may be empty if the source tarball was built before the mirror fixes:
+          #   lzo: fossies.org returns 410 Gone
+          #   libuuid: nchc.dl.sourceforge.net (TW mirror) blocked from GH Actions
+          if [[ ! -s src/lzo-2.10.tar.gz ]]; then
+            curl -fL "https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz" \
+              -o src/lzo-2.10.tar.gz
+          fi
+          if [[ ! -s src/libuuid-1.0.3.tar.gz ]]; then
+            curl -fL "https://downloads.sourceforge.net/project/libuuid/libuuid-1.0.3.tar.gz" \
+              -o src/libuuid-1.0.3.tar.gz
+          fi
           ./build-thirdparty.sh -j "$(nproc)"
 
           kernel="$(uname -s | awk '{print tolower($0)}')"
           arch="$(uname -m)"
           rm -rf "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
           tar -cf - installed | xz -z -T0 - >"doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
-          gh release upload --clobber automation "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
+          # Delete existing asset first to avoid gh CLI --clobber race-condition bug
+          # (gh release upload --clobber sometimes returns "release not found" exit 1
+          # when deleting an existing asset, even though the upload itself succeeds)
+          gh release delete-asset "${tag_name}" "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz" 2>/dev/null || true
+          gh release upload "${tag_name}" "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
 
   update-docker:
     name: Update Docker Image
@@ -308,9 +342,9 @@ jobs:
 
       - name: Prepare Dockerfiles
         run: |
-          # Pull the upstream Dockerfile from apache/doris to stay in sync with
+          # Pull the upstream Dockerfile from apache/doris branch-4.0 to stay in sync with
           # any toolchain / dependency changes they make.
-          curl -fsSL https://raw.githubusercontent.com/apache/doris/master/docker/compilation/Dockerfile \
+          curl -fsSL https://raw.githubusercontent.com/apache/doris/branch-4.0/docker/compilation/Dockerfile \
             -o Dockerfile.upstream
 
           python3 - << 'PYEOF'
@@ -341,7 +375,7 @@ jobs:
               '# Download prebuilt thirdparty from GitHub Release (built by doris-thirdparty automation)\n'
               'ARG GITHUB_REPOSITORY\n'
               'RUN mkdir -p /var/local/thirdparty \\\n'
-              '    && wget -q "https://github.com/${GITHUB_REPOSITORY}/releases/download/automation/doris-thirdparty-prebuilt-linux-x86_64.tar.xz" \\\n'
+              '    && wget -q "https://github.com/${GITHUB_REPOSITORY}/releases/download/automation-4.0/doris-thirdparty-prebuilt-linux-x86_64.tar.xz" \\\n'
               '        -O /tmp/prebuilt.tar.xz \\\n'
               '    && tar -xf /tmp/prebuilt.tar.xz -C /var/local/thirdparty \\\n'
               '    && rm /tmp/prebuilt.tar.xz\n'
@@ -386,7 +420,7 @@ jobs:
           build-args: |
             GITHUB_REPOSITORY=${{ github.repository }}
           push: true
-          tags: ${{ vars.DOCKER_TAGS || 'apache/doris:build-env-ldb-toolchain-latest' }}
+          tags: ${{ vars.DOCKER_TAGS_4_0 || 'apache/doris:build-env-ldb-toolchain-4.0-latest' }}
           platforms: linux/amd64
 
       - name: Build and Push Docker Image (no-avx2)
@@ -397,7 +431,7 @@ jobs:
           build-args: |
             GITHUB_REPOSITORY=${{ github.repository }}
           push: true
-          tags: ${{ vars.DOCKER_TAGS_NOAVX2 || 'apache/doris:build-env-ldb-toolchain-no-avx2-latest' }}
+          tags: ${{ vars.DOCKER_TAGS_NOAVX2_4_0 || 'apache/doris:build-env-ldb-toolchain-4.0-no-avx2-latest' }}
           platforms: linux/amd64
 
   success:
@@ -413,11 +447,13 @@ jobs:
     steps:
       - name: Update Checksums
         run: |
-          gh release download automation
+          tag_name='automation-4.0'
 
-          content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
+          gh release download "${tag_name}"
+
+          content="$(gh release view "${tag_name}" | sed -n '/Update Time:/,/Doris Version:/p')"
           echo -ne "${content}\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
-          gh release edit --latest -F release_note.md automation
+          gh release edit -F release_note.md "${tag_name}"
 
   failure:
     name: Failure
@@ -432,7 +468,9 @@ jobs:
     steps:
       - name: Update Checksums
         run: |
-          gh release download automation
+          tag_name='automation-4.0'
+
+          gh release download "${tag_name}"
 
           echo -ne "Status: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
-          gh release edit --latest -F release_note.md automation
+          gh release edit -F release_note.md "${tag_name}"
