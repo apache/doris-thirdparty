@@ -99,10 +99,12 @@ jobs:
     needs: prerelease
     if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
     strategy:
+      fail-fast: false
       matrix:
         config:
           - name: macOS-x86_64
             os: macos-13
+            continue-on-error: true
             packages: >-
               'm4'
               'automake'
@@ -176,6 +178,7 @@ jobs:
               'maven'
 
     runs-on: ${{ matrix.config.os }}
+    continue-on-error: ${{ matrix.config.continue-on-error == true }}
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -422,7 +425,7 @@ jobs:
   failure:
     name: Failure
     needs: [build, update-docker]
-    if: failure()
+    if: always() && failure()
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
