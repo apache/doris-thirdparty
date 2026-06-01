@@ -113,32 +113,9 @@ jobs:
     needs: prerelease
     if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
     strategy:
+      fail-fast: false
       matrix:
         config:
-          - name: macOS-x86_64
-            os: macos-13
-            packages: >-
-              'm4'
-              'automake'
-              'autoconf'
-              'libtool'
-              'pkg-config'
-              'texinfo'
-              'coreutils'
-              'gnu-getopt'
-              'python@3'
-              'ninja'
-              'ccache'
-              'bison'
-              'byacc'
-              'gettext'
-              'wget'
-              'pcre'
-              'openjdk@11'
-              'maven'
-              'node'
-              'llvm@20'
-
           - name: macOS-arm64
             os: macos-14
             packages: >-
@@ -458,7 +435,7 @@ jobs:
   failure:
     name: Failure
     needs: [build, update-docker]
-    if: failure()
+    if: always() && failure()
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
