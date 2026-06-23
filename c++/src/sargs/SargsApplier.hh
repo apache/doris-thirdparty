@@ -37,7 +37,8 @@ namespace orc {
    public:
     SargsApplier(const Type& type, const SearchArgument* searchArgument, uint64_t rowIndexStride,
                  WriterVersion writerVersion, ReaderMetrics* metrics,
-                 const SchemaEvolution* schemaEvolution = nullptr);
+                 const SchemaEvolution* schemaEvolution = nullptr,
+                 bool writerUsedProlepticGregorian = true, bool useProlepticGregorian = true);
 
     /**
      * Evaluate search argument on file statistics
@@ -130,6 +131,8 @@ namespace orc {
     const SchemaEvolution* mSchemaEvolution;
     uint64_t mRowIndexStride;
     WriterVersion mWriterVersion;
+    bool mWriterUsedProlepticGregorian;
+    bool mUseProlepticGregorian;
     // column ids for each predicate leaf in the search argument
     std::vector<uint64_t> mFilterColumns;
 

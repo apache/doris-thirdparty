@@ -21,6 +21,7 @@
 #include "Adaptor.hh"
 #include "ByteRLE.hh"
 #include "ColumnReader.hh"
+#include "DateUtils.hh"
 #include "RLE.hh"
 #include "orc/Exceptions.hh"
 
@@ -275,6 +276,38 @@ namespace orc {
     }
   };
 
+  class DateColumnReader : public IntegerColumnReader<LongVectorBatch> {
+   private:
+    const bool writerUsedProleptic;
+    const bool useProleptic;
+
+    void convertCalendar(LongVectorBatch& batch, uint64_t numValues) {
+      if (writerUsedProleptic == useProleptic) {
+        return;
+      }
+      const char* notNull = batch.hasNulls ? batch.notNull.data() : nullptr;
+      for (uint64_t i = 0; i < numValues; ++i) {
+        if (notNull == nullptr || notNull[i]) {
+          batch.data[i] =
+              convertDate(static_cast<int32_t>(batch.data[i]), writerUsedProleptic, useProleptic);
+        }
+      }
+    }
+
+   public:
+    DateColumnReader(const Type& type, StripeStreams& stripe)
+        : IntegerColumnReader<LongVectorBatch>(type, stripe),
+          writerUsedProleptic(stripe.writerUsedProlepticGregorian()),
+          useProleptic(stripe.useProlepticGregorian()) {}
+
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
+              const ReadPhase& readPhase, uint16_t* sel_rowid_idx, size_t sel_size) override {
+      IntegerColumnReader<LongVectorBatch>::next(rowBatch, numValues, notNull, readPhase,
+                                                 sel_rowid_idx, sel_size);
+      convertCalendar(dynamic_cast<LongVectorBatch&>(rowBatch), numValues);
+    }
+  };
+
   class TimestampColumnReader : public ColumnReader {
    private:
     std::unique_ptr<orc::RleDecoder> secondsRle;
@@ -283,6 +316,8 @@ namespace orc {
     const Timezone& readerTimezone;
     const int64_t epochOffset;
     const bool sameTimezone;
+    const bool writerUsedProleptic;
+    const bool useProleptic;
 
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull,
                       const ReadPhase& readPhase);
@@ -302,6 +337,8 @@ namespace orc {
 
     void seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions,
                         const ReadPhase& readPhase) override;
+
+    void convertCalendar(int64_t& seconds, int64_t nanoseconds) const;
   };
 
   TimestampColumnReader::TimestampColumnReader(const Type& type, StripeStreams& stripe,
@@ -310,7 +347,9 @@ namespace orc {
         writerTimezone(isInstantType ? getTimezoneByName("GMT") : stripe.getWriterTimezone()),
         readerTimezone(isInstantType ? getTimezoneByName("GMT") : stripe.getReaderTimezone()),
         epochOffset(writerTimezone.getEpoch()),
-        sameTimezone(&writerTimezone == &readerTimezone) {
+        sameTimezone(&writerTimezone == &readerTimezone),
+        writerUsedProleptic(stripe.writerUsedProlepticGregorian()),
+        useProleptic(stripe.useProlepticGregorian()) {
     RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
     std::unique_ptr<SeekableInputStream> stream =
         stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
@@ -323,6 +362,15 @@ namespace orc {
 
   TimestampColumnReader::~TimestampColumnReader() {
     // PASS
+  }
+
+  void TimestampColumnReader::convertCalendar(int64_t& seconds, int64_t nanoseconds) const {
+    if (writerUsedProleptic == useProleptic) {
+      return;
+    }
+    const int64_t millis = seconds * 1000 + nanoseconds / 1000000;
+    const int64_t convertedMillis = convertTime(millis, writerUsedProleptic, useProleptic);
+    seconds += (convertedMillis - millis) / 1000;
   }
 
   uint64_t TimestampColumnReader::skip(uint64_t numValues, const ReadPhase& readPhase) {
@@ -385,6 +433,7 @@ namespace orc {
         if (secsBuffer[i] < 0 && nanoBuffer[i] > 999999) {
           secsBuffer[i] -= 1;
         }
+        convertCalendar(secsBuffer[i], nanoBuffer[i]);
       }
     }
   }
@@ -427,9 +476,10 @@ namespace orc {
           }
         }
         secsBuffer[idx] = writerTime;
-        if (secsBuffer[idx] < 0 && nanoBuffer[i] > 999999) {
+        if (secsBuffer[idx] < 0 && nanoBuffer[idx] > 999999) {
           secsBuffer[idx] -= 1;
         }
+        convertCalendar(secsBuffer[idx], nanoBuffer[idx]);
       }
     }
   }
@@ -2341,8 +2391,9 @@ namespace orc {
         }
       }
       case LONG:
-      case DATE:
         return std::make_unique<IntegerColumnReader<LongVectorBatch>>(type, stripe);
+      case DATE:
+        return std::make_unique<DateColumnReader>(type, stripe);
       case BINARY:
       case CHAR:
       case STRING:
