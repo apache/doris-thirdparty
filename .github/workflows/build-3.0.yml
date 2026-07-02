@@ -102,7 +102,7 @@ jobs:
       matrix:
         config:
           - name: macOS-x86_64
-            os: macos-13
+            os: macos-15-intel
             packages: >-
               'm4'
               'automake'
