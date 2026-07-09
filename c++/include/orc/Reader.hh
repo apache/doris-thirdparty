@@ -385,11 +385,17 @@ namespace orc {
     bool getUseTightNumericVector() const;
   };
 
+  struct ORCFilterContext {
+    uint64_t batchFirstRow;
+    uint64_t stripe;
+    uint64_t rowInStripe;
+  };
+
   class ORCFilter {
    public:
     virtual ~ORCFilter() = default;
     virtual void filter(ColumnVectorBatch& data, uint16_t* sel, uint16_t size,
-                        void* arg = nullptr) const = 0;
+                        const ORCFilterContext& context, void* arg = nullptr) const = 0;
   };
 
   class StringDictFilter {

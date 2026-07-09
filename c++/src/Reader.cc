@@ -1480,7 +1480,10 @@ namespace orc {
       // Apply filter callback to reduce number of # rows selected for decoding in the next
       // TreeReaders
       if (readerContext->getFilterCallback()) {
-        readerContext->getFilterCallback()->filter(data, sel_rowid_idx, batchSize, arg);
+        ORCFilterContext filterContext{firstRowOfStripe[currentStripe] + currentRowInStripe,
+                                       currentStripe, currentRowInStripe};
+        readerContext->getFilterCallback()->filter(data, sel_rowid_idx, batchSize, filterContext,
+                                                   arg);
       }
     }
   }
