@@ -173,9 +173,15 @@ public:
   int32_t read(int32_t* docs, int32_t* freqs, int32_t length);
   int32_t read(int32_t* docs, int32_t* freqs, int32_t* norms , int32_t length);
   bool readRange(DocRange* docRange) override;
+  bool readBlock(DocRange* docRange) override;
 
    /* A Possible future optimization could skip entire segments */
   bool skipTo(const int32_t target);
+  bool skipToBlock(const int32_t target) override;
+
+  int32_t getMaxBlockFreq() override;
+  int32_t getMaxBlockNorm() override;
+  int32_t getLastDocInBlock() override;
 
 
   void close();
