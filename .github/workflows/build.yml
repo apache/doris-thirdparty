@@ -322,22 +322,10 @@ jobs:
           with open('Dockerfile.upstream') as f:
               content = f.read()
 
-          # Patch 1: fix epel metalink.
-          # The upstream RUN line installs epel-release then immediately runs yum
-          # install/clean/makecache, but epel.repo's metalink may be unreliable.
-          # Insert a sed fix between epel-release install and the next yum install.
-          old_epel = 'yum install epel-release -y && yum install https://packages.endpointdev.com'
-          new_epel = ('yum install epel-release -y \\\n'
-                      '    && sed -i \\\n'
-                      '      -e \'s/^metalink=/#metalink=/\' \\\n'
-                      '      -e \'s|^#baseurl=http://download.fedoraproject.org/pub/epel/7|baseurl=https://mirrors.aliyun.com/epel/7|\' \\\n'
-                      '      /etc/yum.repos.d/epel*.repo \\\n'
-                      '    && yum install https://packages.endpointdev.com')
-          assert old_epel in content, f"Patch 1 failed: target string not found in upstream Dockerfile"
-          patched = content.replace(old_epel, new_epel, 1)
-          assert patched != content, "Patch 1 was a no-op: upstream Dockerfile may have changed"
+          # Normalize line endings (raw.githubusercontent.com may serve \r\n)
+          content = content.replace('\r\n', '\n')
 
-          # Patch 2: replace "clone & build thirdparty" block with downloading
+          # Patch 1: replace "clone & build thirdparty" block with downloading
           # our prebuilt artifact. The block starts with "# clone lastest source
           # code" comment and ends with "rm -rf ${DEFAULT_DIR}/doris".
           prebuilt_block = (
@@ -349,25 +337,25 @@ jobs:
               '    && tar -xf /tmp/prebuilt.tar.xz -C /var/local/thirdparty \\\n'
               '    && rm /tmp/prebuilt.tar.xz\n'
           )
-          patched_2 = re.sub(
+          patched = re.sub(
               r'# clone lastest source code.*?rm -rf \$\{DEFAULT_DIR\}/doris\n',
               prebuilt_block,
-              patched, flags=re.DOTALL
+              content, flags=re.DOTALL
           )
-          assert patched_2 != patched, "Patch 2 was a no-op: 'clone lastest source code' block not found in upstream Dockerfile"
-          patched = patched_2
+          assert patched != content, "Patch 1 failed: 'clone lastest source code' block not found in upstream Dockerfile"
 
           # Write normal image Dockerfile
           with open('Dockerfile.patched', 'w') as f:
               f.write(patched)
 
-          # Patch 3 (no-avx2): add USE_AVX2=0 to the ENV block in builder stage.
+          # Patch 2 (no-avx2): add USE_AVX2=0 to the ENV block in builder stage.
           # The ENV block ends with PATH=... just before "# install ccache".
-          old_avx2 = 'PATH="/var/local/ldb-toolchain/bin/:$PATH"\n    # USE_AVX2=0'
-          new_avx2 = 'PATH="/var/local/ldb-toolchain/bin/:$PATH" \\\n    USE_AVX2=0'
-          assert old_avx2 in patched, "Patch 3 failed: '# USE_AVX2=0' comment not found; upstream Dockerfile may have changed"
+          # The PATH now includes /root/.cargo/bin for the Rust toolchain.
+          old_avx2 = 'PATH="/root/.cargo/bin:/var/local/ldb-toolchain/bin/:$PATH"\n    # USE_AVX2=0'
+          new_avx2 = 'PATH="/root/.cargo/bin:/var/local/ldb-toolchain/bin/:$PATH" \\\n    USE_AVX2=0'
+          assert old_avx2 in patched, "Patch 2 failed: '# USE_AVX2=0' comment not found; upstream Dockerfile may have changed"
           noavx2 = patched.replace(old_avx2, new_avx2)
-          assert noavx2 != patched, "Patch 3 was a no-op: no-avx2 Dockerfile is identical to normal Dockerfile"
+          assert noavx2 != patched, "Patch 2 was a no-op: no-avx2 Dockerfile is identical to normal Dockerfile"
           with open('Dockerfile.patched-noavx2', 'w') as f:
               f.write(noavx2)
 
