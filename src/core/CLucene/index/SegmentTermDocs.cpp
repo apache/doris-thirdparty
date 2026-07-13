@@ -307,7 +307,8 @@ bool SegmentTermDocs::skipToBlock(const int32_t target) {
         freqStream->seek(skipListReader->getFreqPointer());
         skipProx(skipListReader->getProxPointer(), skipListReader->getPayloadLength());
         _doc = skipListReader->getDoc();
-        count = newCount;
+        // -1 means the target is in the first skip block and no postings were skipped.
+        count = newCount < 0 ? 0 : newCount;
         return true;
     }
     return false;
