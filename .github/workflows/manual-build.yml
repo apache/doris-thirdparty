@@ -183,6 +183,11 @@ jobs:
 
       - name: Prepare for ${{ matrix.config.os }}
         run: |
+          # Doris's lance-c build prefers Rust 1.91.0 when it is installed.
+          # Pin it here so hosted-runner toolchain updates do not break locked Rust dependencies.
+          rustup toolchain install 1.91.0 --profile minimal
+          rustup run 1.91.0 rustc --version
+
           if [[ "${{ matrix.config.name }}" =~ macOS-* ]]; then
             # Install packages except cmake
             brew install ${{ matrix.config.packages }} || true
