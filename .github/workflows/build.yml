@@ -38,6 +38,7 @@ jobs:
       contents: write
     outputs:
       should_release: ${{ steps.check_diff.outputs.should_release }}
+      thirdparty_commit_hash: ${{ steps.check_diff.outputs.thirdparty_commit_hash }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,9 +55,11 @@ jobs:
           fi
           last_version="$(gh release view automation | sed -n -E 's/Doris Version: \*(.*)\*.*/\1/p')"
           current_version="$(git log -1 --format='%H')"
+          thirdparty_commit_hash="$(git log -1 --format='%H' -- thirdparty)"
 
           echo "Last Version: ${last_version}"
           echo "Current Version: ${current_version}"
+          echo "Thirdparty Commit: ${thirdparty_commit_hash}"
 
           should_release=false
           if [[ -z "${last_version}" ]]; then
@@ -83,6 +86,7 @@ jobs:
           gh release edit -F release_note.md automation
 
           echo "should_release=${should_release}" >> $GITHUB_OUTPUT
+          echo "thirdparty_commit_hash=${thirdparty_commit_hash}" >> $GITHUB_OUTPUT
 
       - name: Download Source and Upload
         if: steps.check_diff.outputs.should_release == 'true'
@@ -286,6 +290,13 @@ jobs:
           export CUSTOM_CMAKE="/usr/local/bin/cmake"
           cd thirdparty
           ./build-thirdparty.sh -j "$(nproc)"
+
+          thirdparty_commit_hash="${{ needs.prerelease.outputs.thirdparty_commit_hash }}"
+          if [[ -z "${thirdparty_commit_hash}" ]]; then
+            echo 'Thirdparty commit hash is empty' >&2
+            exit 1
+          fi
+          echo "${thirdparty_commit_hash}" >installed/_doris_thirdparty_commit_
 
           kernel="$(uname -s | awk '{print tolower($0)}')"
           arch="$(uname -m)"
