@@ -214,6 +214,7 @@ jobs:
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CMAKE_VERSION: 3.25.3
     steps:
       - name: Checkout easimon/maximize-build-space
         if: ${{ matrix.config.name == 'Linux' }}
@@ -254,11 +255,11 @@ jobs:
           if [[ "${{ matrix.config.name }}" =~ macOS-* ]]; then
             # Install packages except cmake
             brew install ${{ matrix.config.packages }} || true
-            # Install specific version of cmake
+            # Arrow 24 requires CMake 3.25 or newer.
             brew unlink cmake || true
-            wget https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-macos-universal.tar.gz
-            tar -xzf cmake-3.22.1-macos-universal.tar.gz
-            sudo cp -r cmake-3.22.1-macos-universal/CMake.app/Contents/* /usr/local/
+            wget "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-macos-universal.tar.gz"
+            tar -xzf "cmake-${CMAKE_VERSION}-macos-universal.tar.gz"
+            sudo cp -r "cmake-${CMAKE_VERSION}-macos-universal/CMake.app/Contents/"* /usr/local/
             cmake --version
           else
             export DEFAULT_DIR='/opt/doris'
@@ -315,16 +316,35 @@ jobs:
   update-docker:
     name: Update Docker Image
     needs: [prerelease, build]
+    # macOS failures must not block Docker when the current Linux x86_64 package is available.
     if: |
-      always() && (
-        (needs.prerelease.outputs.should_release == 'true' && needs.build.result == 'success') ||
-        (github.event_name == 'workflow_dispatch' && needs.build.result != 'failure')
-      )
+      always() &&
+      needs.build.result != 'cancelled' &&
+      (needs.prerelease.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Verify Linux x86_64 prebuilt provenance
+        run: |
+          expected_commit="${{ needs.prerelease.outputs.thirdparty_commit_hash }}"
+          if [[ -z "${expected_commit}" ]]; then
+            echo 'Expected thirdparty commit hash is empty' >&2
+            exit 1
+          fi
+
+          archive='doris-thirdparty-prebuilt-linux-x86_64.tar.xz'
+          gh release download automation --pattern "${archive}"
+          actual_commit="$(tar -xOf "${archive}" installed/_doris_thirdparty_commit_)"
+          if [[ "${actual_commit}" != "${expected_commit}" ]]; then
+            echo "Linux prebuilt provenance mismatch: expected ${expected_commit}, got ${actual_commit}" >&2
+            exit 1
+          fi
+
+          echo "Verified Linux prebuilt thirdparty commit: ${actual_commit}"
+          rm -f "${archive}"
+
       - name: Checkout docker/setup-buildx-action
         run: |
           rm -rf ./.github/actions/setup-buildx-action
@@ -477,5 +497,10 @@ jobs:
         run: |
           gh release download automation
 
-          echo -ne "Status: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
+          if [[ -z "${content}" ]]; then
+            echo 'Unable to preserve release provenance in the failure note' >&2
+            exit 1
+          fi
+          echo -ne "${content}\nStatus: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit --latest -F release_note.md automation
