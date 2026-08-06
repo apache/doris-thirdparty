@@ -245,6 +245,24 @@ jobs:
             -o doris-thirdparty-source.tgz
           tar -zxvf doris-thirdparty-source.tgz
 
+          # The gcc.gnu.org git endpoint occasionally rate-limits hosted runners and
+          # leaves this header empty in the cached source archive. Repair only an
+          # invalid copy, and verify the mirror content before replacing it.
+          tsan_header="src/tsan_interface_atomic.h"
+          expected_md5="d72679bea167d6a513d959f5abd149dc"
+          actual_md5="$(openssl dgst -md5 "${tsan_header}" | awk '{ print $NF }')"
+          if [[ "${actual_md5}" != "${expected_md5}" ]]; then
+            tsan_header_tmp="${tsan_header}.tmp"
+            trap 'rm -f "${tsan_header_tmp}"' EXIT
+            curl --fail --location --retry 3 \
+              https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-7/libsanitizer/include/sanitizer/tsan_interface_atomic.h \
+              --output "${tsan_header_tmp}"
+            actual_md5="$(openssl dgst -md5 "${tsan_header_tmp}" | awk '{ print $NF }')"
+            [[ "${actual_md5}" == "${expected_md5}" ]]
+            mv "${tsan_header_tmp}" "${tsan_header}"
+            trap - EXIT
+          fi
+
       - name: Prepare for ${{ matrix.config.os }}
         run: |
           # Doris's lance-c build prefers Rust 1.91.0 when it is installed.
