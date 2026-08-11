@@ -91,6 +91,22 @@ jobs:
       - name: Download Source and Upload
         if: steps.check_diff.outputs.should_release == 'true'
         run: |
+          # download-thirdparty.sh turns every checksum into a no-op when md5sum is
+          # missing, and macOS ships `md5` under a different name. That is not just a
+          # lost safety net here, it actively publishes corruption: `wget -O` creates
+          # its output file before the transfer, so a failed download leaves a 0-byte
+          # stub behind, and the retry inside download_func() then accepts the stub as
+          # a valid cached archive ("Archive ... already exist"). The job stays green
+          # and uploads the stub. That is how a 0-byte src/tsan_interface_atomic.h
+          # reached this release on 2026-08-06 and broke apache/doris CI for days.
+          # Put md5sum on PATH so the script verifies what we are about to package.
+          brew install coreutils || true
+          mkdir -p "${RUNNER_TEMP}/gnu-bin"
+          ln -sf "$(brew --prefix)/bin/gmd5sum" "${RUNNER_TEMP}/gnu-bin/md5sum"
+          export PATH="${RUNNER_TEMP}/gnu-bin:${PATH}"
+          # Fail loudly now rather than silently skipping every checksum below.
+          md5sum --version >/dev/null
+
           cd thirdparty
           sed '/# unpacking thirdpart archives/,$d' download-thirdparty.sh | bash -
 
