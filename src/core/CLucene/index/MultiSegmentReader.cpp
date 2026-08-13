@@ -757,6 +757,33 @@ bool MultiTermDocs::readRange(DocRange* docRange) {
 	}
 }
 
+bool MultiTermDocs::readBlock(DocRange* docRange) {
+	while (true) {
+		while (current == NULL) {
+			if (pointer < subReaders->length) {
+				base = starts[pointer];
+				current = termDocs(pointer++);
+			} else {
+				return false;
+			}
+		}
+		if (!current->readBlock(docRange)) {
+			current = nullptr;
+		} else {
+			if (docRange->doc_many && docRange->doc_many_size_ > 0) {
+				auto begin = docRange->doc_many->begin();
+				auto end = docRange->doc_many->begin() + docRange->doc_many_size_;
+				std::transform(begin, end, begin, [this](int32_t val) { return val + base; });
+			}
+			if (docRange->type_ == DocRangeType::kRange) {
+				docRange->doc_range.first += base;
+				docRange->doc_range.second += base;
+			}
+			return true;
+		}
+	}
+}
+
 bool MultiTermDocs::skipTo(const int32_t target) {
 //	do {
 //	  if (!next())
@@ -773,6 +800,54 @@ bool MultiTermDocs::skipTo(const int32_t target) {
 			return false;
 		}
 	}
+}
+
+bool MultiTermDocs::skipToBlock(const int32_t target) {
+	bool switched_reader = false;
+	while (true) {
+		while (current == NULL) {
+			if (pointer < subReaders->length) {
+				base = starts[pointer];
+				current = termDocs(pointer++);
+			} else {
+				return true;
+			}
+		}
+
+		if (target >= starts[pointer]) {
+			current = nullptr;
+			switched_reader = true;
+			continue;
+		}
+
+		// A child without a skip list returns false even though switching readers
+		// invalidates the caller's cached block metadata.
+		return switched_reader || current->skipToBlock(target - base);
+	}
+}
+
+int32_t MultiTermDocs::getMaxBlockFreq() {
+	return current != NULL ? current->getMaxBlockFreq() : -1;
+}
+
+int32_t MultiTermDocs::getMaxBlockNorm() {
+	return current != NULL ? current->getMaxBlockNorm() : -1;
+}
+
+int32_t MultiTermDocs::getLastDocInBlock() {
+	if (current == NULL) {
+		return LUCENE_INT32_MAX_SHOULDBE;
+	}
+
+	int32_t lastDoc = current->getLastDocInBlock();
+	if (lastDoc == -1) {
+		return -1;
+	}
+	if (lastDoc == LUCENE_INT32_MAX_SHOULDBE) {
+		return pointer < subReaders->length ? starts[pointer] - 1
+		                                    : LUCENE_INT32_MAX_SHOULDBE;
+	}
+	return base + lastDoc;
 }
 
 void MultiTermDocs::close() {

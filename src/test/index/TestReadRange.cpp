@@ -6,6 +6,7 @@
 #include <CLucene.h>
 #include <CLucene/index/DocRange.h>
 #include <CLucene/index/IndexReader.h>
+#include <CLucene/index/MultiReader.h>
 #include <CLucene/util/stringUtil.h>
 
 #include <algorithm>
@@ -987,6 +988,279 @@ void TestBlockBasedInterfaces(CuTest* tc) {
 }
 
 //=============================================================================
+// Test: block APIs on MultiTermDocs through MultiReader
+//=============================================================================
+void TestMultiReaderBlockApis(CuTest* tc) {
+    constexpr int32_t firstReaderDocumentCount = 1149;
+    constexpr int32_t secondReaderDocumentCount = 1134;
+    const std::string fieldName = "content";
+    const std::string termText = "target";
+
+    std::vector<std::string> firstDocuments;
+    std::vector<std::string> secondDocuments;
+    firstDocuments.reserve(firstReaderDocumentCount);
+    secondDocuments.reserve(secondReaderDocumentCount);
+    for (int32_t i = 0; i < firstReaderDocumentCount; ++i) {
+        firstDocuments.emplace_back(termText + " " + termText);
+    }
+    for (int32_t i = 0; i < secondReaderDocumentCount; ++i) {
+        secondDocuments.emplace_back(termText + " " + termText + " " + termText);
+    }
+
+    RAMDirectory firstDirectory;
+    RAMDirectory secondDirectory;
+    writeTestIndex(fieldName, &firstDirectory, IndexVersion::kV4, firstDocuments);
+    writeTestIndex(fieldName, &secondDirectory, IndexVersion::kV4, secondDocuments);
+
+    ValueArray<IndexReader*> readers(2);
+    readers[0] = IndexReader::open(&firstDirectory);
+    readers[1] = IndexReader::open(&secondDirectory);
+    auto* reader = _CLNEW MultiReader(&readers, true);
+    std::exception_ptr eptr;
+    Term* term = nullptr;
+
+    try {
+        std::wstring fieldNameW = StringUtil::string_to_wstring(fieldName);
+        std::wstring termTextW = StringUtil::string_to_wstring(termText);
+        term = _CLNEW Term(fieldNameW.c_str(), termTextW.c_str());
+
+        TermDocs* nextDocs = reader->termDocs();
+        nextDocs->seek(term);
+        TermDocsResult expected = readWithNext(nextDocs);
+        nextDocs->close();
+        _CLDELETE(nextDocs);
+
+        TermDocs* blockDocs = reader->termDocs();
+        blockDocs->seek(term);
+        TermDocsResult actual;
+        DocRange docRange;
+        bool sawSecondReader = false;
+        bool sawBlockMetadata = false;
+        bool sawSecondReaderBlockBoundary = false;
+        bool blockDocsAreOrdered = true;
+        bool blockMetadataIsValid = true;
+        int32_t previousDoc = -1;
+        std::vector<uint32_t> blockSizes;
+        while (blockDocs->readBlock(&docRange)) {
+            blockDocsAreOrdered = blockDocsAreOrdered && docRange.doc_many_size_ > 0;
+            blockSizes.push_back(docRange.doc_many_size_);
+
+            int32_t actualMaxFreq = 0;
+            for (uint32_t i = 0; i < docRange.doc_many_size_; ++i) {
+                int32_t doc = (*docRange.doc_many)[i];
+                int32_t freq = (*docRange.freq_many)[i];
+                blockDocsAreOrdered = blockDocsAreOrdered && doc > previousDoc;
+                previousDoc = doc;
+                actual.docs.push_back(doc);
+                actual.freqs.push_back(freq);
+                actualMaxFreq = std::max(actualMaxFreq, freq);
+                sawSecondReader = sawSecondReader || doc >= firstReaderDocumentCount;
+            }
+
+            int32_t maxBlockFreq = blockDocs->getMaxBlockFreq();
+            int32_t maxBlockNorm = blockDocs->getMaxBlockNorm();
+            int32_t lastDocInBlock = blockDocs->getLastDocInBlock();
+            if (maxBlockFreq >= 0 && maxBlockNorm >= 0) {
+                sawBlockMetadata = true;
+                blockMetadataIsValid = blockMetadataIsValid && maxBlockFreq >= actualMaxFreq;
+            }
+            if (lastDocInBlock >= 0) {
+                const int32_t lastDocInRange =
+                        (*docRange.doc_many)[docRange.doc_many_size_ - 1];
+                blockMetadataIsValid =
+                        blockMetadataIsValid &&
+                        lastDocInBlock >= lastDocInRange;
+                sawSecondReaderBlockBoundary = sawSecondReaderBlockBoundary ||
+                                               (*docRange.doc_many)[0] >= firstReaderDocumentCount;
+            }
+        }
+        blockDocs->close();
+        _CLDELETE(blockDocs);
+
+        assertTrueMsg(_T("all composite block docs must match next()"),
+                      compareTermDocsResults(expected, actual));
+        assertTrueMsg(_T("composite block docs must remain ordered"), blockDocsAreOrdered);
+        assertTrueMsg(_T("composite block read must reach the second reader"), sawSecondReader);
+        assertTrueMsg(_T("composite block metadata must be available"), sawBlockMetadata);
+        assertTrueMsg(_T("composite block metadata must cross the reader boundary"),
+                      sawSecondReaderBlockBoundary);
+        assertTrueMsg(_T("block metadata must cover the returned physical block"),
+                      blockMetadataIsValid);
+
+        const std::vector<uint32_t> expectedBlockSizes = {511, 512, 126, 511, 512, 111};
+        assertTrueMsg(_T("composite reader must preserve short physical tail blocks"),
+                      blockSizes == expectedBlockSizes);
+
+        for (int32_t target : {1023, firstReaderDocumentCount - 1, firstReaderDocumentCount,
+                               firstReaderDocumentCount + 37}) {
+            TermDocs* skippedDocs = reader->termDocs();
+            skippedDocs->seek(term);
+            skippedDocs->skipToBlock(target);
+
+            std::vector<int32_t> actualTail;
+            DocRange skippedRange;
+            while (skippedDocs->readBlock(&skippedRange)) {
+                for (uint32_t i = 0; i < skippedRange.doc_many_size_; ++i) {
+                    int32_t doc = (*skippedRange.doc_many)[i];
+                    if (target >= firstReaderDocumentCount) {
+                        assertTrue(doc >= firstReaderDocumentCount);
+                    }
+                    if (doc >= target) {
+                        actualTail.push_back(doc);
+                    }
+                }
+            }
+            skippedDocs->close();
+            _CLDELETE(skippedDocs);
+
+            std::vector<int32_t> expectedTail;
+            for (int32_t doc : expected.docs) {
+                if (doc >= target) {
+                    expectedTail.push_back(doc);
+                }
+            }
+            assertTrue(actualTail == expectedTail);
+        }
+    } catch (...) {
+        eptr = std::current_exception();
+    }
+
+    FINALLY(eptr, {
+        _CLDECDELETE(term);
+        reader->close();
+        _CLDELETE(reader);
+    })
+
+    std::cout << "\nTestMultiReaderBlockApis success" << std::endl;
+}
+
+//=============================================================================
+// Test: changing child readers invalidates block state even when the new child
+// has fewer postings than a skip block.
+//=============================================================================
+void TestMultiReaderBlockSkipAcrossShortReaders(CuTest* tc) {
+    constexpr int32_t firstReaderDocumentCount = 128;
+    constexpr int32_t secondReaderDocumentCount = 11;
+    const std::string fieldName = "content";
+    const std::string termText = "target";
+
+    std::vector<std::string> firstDocuments(firstReaderDocumentCount, termText);
+    std::vector<std::string> secondDocuments(secondReaderDocumentCount, termText);
+    RAMDirectory firstDirectory;
+    RAMDirectory secondDirectory;
+    writeTestIndex(fieldName, &firstDirectory, IndexVersion::kV4, firstDocuments);
+    writeTestIndex(fieldName, &secondDirectory, IndexVersion::kV4, secondDocuments);
+
+    ValueArray<IndexReader*> readers(2);
+    readers[0] = IndexReader::open(&firstDirectory);
+    readers[1] = IndexReader::open(&secondDirectory);
+    auto* reader = _CLNEW MultiReader(&readers, true);
+    std::exception_ptr eptr;
+    Term* term = nullptr;
+
+    try {
+        std::wstring fieldNameW = StringUtil::string_to_wstring(fieldName);
+        std::wstring termTextW = StringUtil::string_to_wstring(termText);
+        term = _CLNEW Term(fieldNameW.c_str(), termTextW.c_str());
+
+        TermDocs* termDocs = reader->termDocs();
+        termDocs->seek(term);
+
+        DocRange firstRange;
+        assertTrue(termDocs->readBlock(&firstRange));
+        assertEquals(firstReaderDocumentCount, firstRange.doc_many_size_);
+        assertTrue(!termDocs->skipToBlock(firstReaderDocumentCount - 1));
+
+        // The second child has no skip list, so only MultiTermDocs can report
+        // the state transition that invalidates a WAND block cache.
+        assertTrue(termDocs->skipToBlock(firstReaderDocumentCount));
+
+        DocRange secondRange;
+        assertTrue(termDocs->readBlock(&secondRange));
+        assertEquals(secondReaderDocumentCount, secondRange.doc_many_size_);
+        for (uint32_t i = 0; i < secondRange.doc_many_size_; ++i) {
+            assertEquals(firstReaderDocumentCount + static_cast<int32_t>(i),
+                         (*secondRange.doc_many)[i]);
+        }
+        assertTrue(!termDocs->readBlock(&secondRange));
+
+        termDocs->close();
+        _CLDELETE(termDocs);
+    } catch (...) {
+        eptr = std::current_exception();
+    }
+
+    FINALLY(eptr, {
+        _CLDECDELETE(term);
+        reader->close();
+        _CLDELETE(reader);
+    })
+
+    std::cout << "\nTestMultiReaderBlockSkipAcrossShortReaders success" << std::endl;
+}
+
+//=============================================================================
+// Test: after skipping a block in a large child, entering a short child still
+// reports the reader transition to a block-WAND caller.
+//=============================================================================
+void TestMultiReaderBlockSkipIntoShortReader(CuTest* tc) {
+    constexpr int32_t firstReaderDocumentCount = 1149;
+    constexpr int32_t secondReaderDocumentCount = 11;
+    const std::string fieldName = "content";
+    const std::string termText = "target";
+
+    std::vector<std::string> firstDocuments(firstReaderDocumentCount, termText);
+    std::vector<std::string> secondDocuments(secondReaderDocumentCount, termText);
+    RAMDirectory firstDirectory;
+    RAMDirectory secondDirectory;
+    writeTestIndex(fieldName, &firstDirectory, IndexVersion::kV4, firstDocuments);
+    writeTestIndex(fieldName, &secondDirectory, IndexVersion::kV4, secondDocuments);
+
+    ValueArray<IndexReader*> readers(2);
+    readers[0] = IndexReader::open(&firstDirectory);
+    readers[1] = IndexReader::open(&secondDirectory);
+    auto* reader = _CLNEW MultiReader(&readers, true);
+    std::exception_ptr eptr;
+    Term* term = nullptr;
+
+    try {
+        std::wstring fieldNameW = StringUtil::string_to_wstring(fieldName);
+        std::wstring termTextW = StringUtil::string_to_wstring(termText);
+        term = _CLNEW Term(fieldNameW.c_str(), termTextW.c_str());
+
+        TermDocs* termDocs = reader->termDocs();
+        termDocs->seek(term);
+
+        // This skip enters the first reader's final short physical block.
+        assertTrue(termDocs->skipToBlock(1023));
+        // This one changes readers; the new reader has df < skipInterval.
+        assertTrue(termDocs->skipToBlock(firstReaderDocumentCount));
+
+        DocRange shortReaderRange;
+        assertTrue(termDocs->readBlock(&shortReaderRange));
+        assertEquals(secondReaderDocumentCount, shortReaderRange.doc_many_size_);
+        for (uint32_t i = 0; i < shortReaderRange.doc_many_size_; ++i) {
+            assertEquals(firstReaderDocumentCount + static_cast<int32_t>(i),
+                         (*shortReaderRange.doc_many)[i]);
+        }
+        assertTrue(!termDocs->readBlock(&shortReaderRange));
+
+        termDocs->close();
+        _CLDELETE(termDocs);
+    } catch (...) {
+        eptr = std::current_exception();
+    }
+
+    FINALLY(eptr, {
+        _CLDECDELETE(term);
+        reader->close();
+        _CLDELETE(reader);
+    })
+
+    std::cout << "\nTestMultiReaderBlockSkipIntoShortReader success" << std::endl;
+}
+
+//=============================================================================
 // Suite registration
 //=============================================================================
 CuSuite* testReadRange() {
@@ -1000,6 +1274,9 @@ CuSuite* testReadRange() {
     SUITE_ADD_TEST(suite, TestReadRangeVersions);
     SUITE_ADD_TEST(suite, TestReadRangeEdgeCases);
     SUITE_ADD_TEST(suite, TestBlockBasedInterfaces);
+    SUITE_ADD_TEST(suite, TestMultiReaderBlockApis);
+    SUITE_ADD_TEST(suite, TestMultiReaderBlockSkipAcrossShortReaders);
+    SUITE_ADD_TEST(suite, TestMultiReaderBlockSkipIntoShortReader);
 
     return suite;
 }
