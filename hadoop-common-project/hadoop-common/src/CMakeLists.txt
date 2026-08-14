@@ -45,10 +45,22 @@ include(HadoopJNI)
 
 # Require zlib.
 set(STORED_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
-hadoop_set_find_shared_library_version("1")
+if(NOT APPLE)
+    hadoop_set_find_shared_library_version("1")
+endif()
 find_package(ZLIB REQUIRED)
 set(CMAKE_FIND_LIBRARY_SUFFIXES ${STORED_CMAKE_FIND_LIBRARY_SUFFIXES})
-get_filename_component(HADOOP_ZLIB_LIBRARY ${ZLIB_LIBRARIES} NAME)
+if(APPLE)
+    # macOS keeps no libz.1.dylib on disk - it lives in the dyld shared cache, and the SDK
+    # carries only a libz.1.tbd stub - so searching for a versioned dylib above finds
+    # nothing and the REQUIRED find_package aborts the build. zlib is never linked into
+    # libhadoop (only its headers are used); ZlibCompressor.c dlopen()s it by basename at
+    # run time, and dlopen("libz.1.dylib") does resolve against the shared cache. So let
+    # the plain search supply the headers and name the runtime library outright.
+    set(HADOOP_ZLIB_LIBRARY "libz.1.dylib")
+else()
+    get_filename_component(HADOOP_ZLIB_LIBRARY ${ZLIB_LIBRARIES} NAME)
+endif()
 
 # Look for bzip2.
 set(STORED_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
