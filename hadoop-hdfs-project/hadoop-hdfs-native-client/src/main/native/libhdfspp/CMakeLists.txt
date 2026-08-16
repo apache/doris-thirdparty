@@ -259,6 +259,21 @@ include_directories( SYSTEM
   ${PROTOBUF_INCLUDE_DIRS}
 )
 
+# Doris never links libhdfspp - be/CMakeLists.txt sets BUILD_LIBHDFSPP OFF - and on macOS the
+# library cannot be linked at all.  It is compiled against Homebrew LLVM's libc++ headers, which
+# are configured without Apple's availability annotations, so std::exception_ptr's post-macOS-14
+# entry points (__cxa_init_primary_exception, exception_ptr::__from_native_exception_pointer) are
+# emitted whatever -mmacosx-version-min says, while -lc++ still resolves against the SDK's system
+# libc++.  Against a macOS 14 SDK those two symbols are missing, libhdfspp.dylib fails to link,
+# and it takes the whole make down with it - libhdfs.a included.
+#
+# libhdfs does need the x-platform object libraries out of this tree, so build those and stop
+# there.  Every compile setting they depend on is already in place above this point.
+if(APPLE)
+    add_subdirectory(lib/x-platform)
+    return()
+endif()
+
 add_subdirectory(third_party/uriparser2)
 add_subdirectory(lib)
 if(NOT HDFSPP_LIBRARY_ONLY)
