@@ -204,12 +204,11 @@ check_cxx_source_compiles(
     }"
     THREAD_LOCAL_SUPPORTED)
 if (APPLE)
-    # libhdfspp's shared library links the static libsasl2 found under the Doris thirdparty
-    # prefix, whose GSSAPI plugin leaves gss_* undefined. Linux' ld tolerates undefined
-    # symbols in a .so; macOS' ld does not, so the dylib fails to link and takes the whole
-    # make down with it - libhdfs.a included. SASL is used by libhdfspp alone, which Doris
-    # never links (be/CMakeLists.txt sets BUILD_LIBHDFSPP OFF), so turn it off through the
-    # escape hatch libhdfspp/CMakeLists.txt documents.
+    # macOS stops after the x-platform object libraries libhdfs needs and never builds
+    # libhdfspp itself - see main/native/libhdfspp/CMakeLists.txt for why.  SASL has no other
+    # consumer, so skip looking for it through the escape hatch that file documents; the
+    # static libsasl2 under the Doris thirdparty prefix would not link here anyway, its
+    # GSSAPI plugin leaves gss_* undefined and macOS' ld, unlike Linux', rejects that.
     set(NO_SASL 1)
 endif()
 if (THREAD_LOCAL_SUPPORTED)
