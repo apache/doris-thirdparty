@@ -1,0 +1,243 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+# Builds the third party tree for one target platform and uploads the archive to the
+# `automation` release. build.yml calls this once per platform.
+#
+# This is a reusable workflow rather than a matrix so that each platform is a separate
+# job in the caller and can be depended on individually: `update-docker` only consumes
+# the Linux x86_64 archive, but as one matrix job it had to wait for every platform.
+# The package lists and the toolchain are derived from RUNNER_OS / RUNNER_ARCH, which
+# is what the per-platform matrix entries used to carry.
+
+name: Build target
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: "Display name of the target platform, e.g. Linux-arm64"
+        required: true
+        type: string
+      runs_on:
+        description: "Runner label to build on"
+        required: true
+        type: string
+      thirdparty_commit_hash:
+        description: "apache/doris commit that last touched thirdparty/, stamped into the archive"
+        required: true
+        type: string
+      tolerate_failure:
+        description: "Report success even if the build fails, so this platform cannot hold up a release"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    name: ${{ inputs.target }}
+    runs-on: ${{ inputs.runs_on }}
+    permissions:
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CMAKE_VERSION: 3.25.3
+      # Every run of this job is a cold build of the whole tree, and one changed package
+      # in apache/doris rebuilds all ~80 of them. Compile the cmake-based packages
+      # through ccache and carry the cache across runs so a rebuild costs what actually
+      # changed. This is also what makes the bounded retry in the prerelease job
+      # affordable: today a flaky download mirror can cost three full builds.
+      # Needs apache/doris to honour ENABLE_THIRDPARTY_CCACHE; until it does, this is
+      # an unused variable and the cache stays empty.
+      ENABLE_THIRDPARTY_CCACHE: 'ON'
+      CCACHE_COMPRESS: '1'
+      # The whole repository shares a 10 GB Actions cache budget and four platforms save
+      # into it, so keep each one inside a quarter of that.
+      CCACHE_MAXSIZE: '2G'
+      # thrift's configure finds the dotnet the runner images ship, so `make` runs
+      # `dotnet build -c Release` for lib/netstd. On macOS the build itself takes
+      # seconds, and then the compiler server it leaves behind holds the stdout it
+      # inherited for its full 10 minute keep-alive while nothing happens: 600.0s on
+      # macos-14 and 598.8s on macos-15-intel in run 31988123966. Do not start a shared
+      # compiler server, and do not keep MSBuild worker nodes around either.
+      UseSharedCompilation: 'false'
+      MSBUILDDISABLENODEREUSE: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - name: Prepare ccache directory
+        run: |
+          ccache_dir="${RUNNER_TEMP}/ccache"
+          mkdir -p "${ccache_dir}"
+          echo "CCACHE_DIR=${ccache_dir}" >>"${GITHUB_ENV}"
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          # A key that is fresh every run, so a build always saves a new entry, plus a
+          # prefix match that picks up the newest previous one.
+          key: ccache-${{ inputs.target }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ inputs.target }}-
+
+      - name: Checkout easimon/maximize-build-space
+        if: ${{ inputs.target == 'Linux' }}
+        run: |
+          git clone -b v7 https://github.com/easimon/maximize-build-space
+
+      #- name: Maximize build space
+      #  if: ${{ inputs.target == 'Linux' }}
+      #  uses: ./maximize-build-space
+      #  with:
+      #      root-reserve-mb: 4096
+      #      swap-size-mb: 8192
+      #      remove-dotnet: 'true'
+      #      remove-android: 'true'
+      #      remove-haskell: 'true'
+      #      remove-codeql: 'true'
+      #      remove-docker-images: 'true'
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          repository: 'apache/doris'
+
+      - name: Download
+        run: |
+          cd thirdparty
+          curl -L https://github.com/${{ github.repository }}/releases/download/automation/doris-thirdparty-source.tgz \
+            -o doris-thirdparty-source.tgz
+          tar -zxvf doris-thirdparty-source.tgz
+
+          # The gcc.gnu.org git endpoint occasionally rate-limits hosted runners and
+          # leaves this header empty in the cached source archive. Repair only an
+          # invalid copy, and verify the mirror content before replacing it.
+          tsan_header="src/tsan_interface_atomic.h"
+          expected_md5="d72679bea167d6a513d959f5abd149dc"
+          actual_md5="$(openssl dgst -md5 "${tsan_header}" | awk '{ print $NF }')"
+          if [[ "${actual_md5}" != "${expected_md5}" ]]; then
+            tsan_header_tmp="${tsan_header}.tmp"
+            trap 'rm -f "${tsan_header_tmp}"' EXIT
+            curl --fail --location --retry 3 \
+              https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-7/libsanitizer/include/sanitizer/tsan_interface_atomic.h \
+              --output "${tsan_header_tmp}"
+            actual_md5="$(openssl dgst -md5 "${tsan_header_tmp}" | awk '{ print $NF }')"
+            [[ "${actual_md5}" == "${expected_md5}" ]]
+            mv "${tsan_header_tmp}" "${tsan_header}"
+            trap - EXIT
+          fi
+
+      - name: Prepare for ${{ inputs.runs_on }}
+        run: |
+          # Doris's lance-c build prefers Rust 1.91.0 when it is installed.
+          # Pin it here so hosted-runner toolchain updates do not break locked Rust dependencies.
+          rustup toolchain install 1.91.0 --profile minimal
+          rustup run 1.91.0 rustc --version
+
+          if [[ "${RUNNER_OS}" == 'macOS' ]]; then
+            # Install packages except cmake
+            brew install \
+              'm4' 'automake' 'autoconf' 'libtool' 'pkg-config' 'texinfo' 'coreutils' \
+              'gnu-getopt' 'python@3' 'ninja' 'ccache' 'bison' 'byacc' 'gettext' 'wget' \
+              'pcre' 'openjdk@11' 'maven' 'node' 'llvm@20' || true
+            # Arrow 24 requires CMake 3.25 or newer.
+            brew unlink cmake || true
+            wget "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-macos-universal.tar.gz"
+            tar -xzf "cmake-${CMAKE_VERSION}-macos-universal.tar.gz"
+            sudo cp -r "cmake-${CMAKE_VERSION}-macos-universal/CMake.app/Contents/"* /usr/local/
+            cmake --version
+          else
+            export DEFAULT_DIR='/opt/doris'
+            export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
+
+            sudo apt update
+            sudo apt-cache policy cmake
+            sudo DEBIAN_FRONTEND=noninteractive apt install --yes \
+              'build-essential' 'automake' 'autoconf' 'libtool-bin' 'pkg-config' \
+              'cmake=3.22.1-1ubuntu1.22.04.2' 'ninja-build' 'ccache' 'python-is-python3' \
+              'bison' 'byacc' 'flex' 'binutils-dev' 'libiberty-dev' 'curl' 'git' 'zip' \
+              'unzip' 'autopoint' 'openjdk-8-jdk' 'openjdk-8-jdk-headless' 'maven'
+
+            if [[ "${RUNNER_ARCH}" == 'ARM64' ]]; then
+              toolchain='ldb_toolchain_gen_aarch64.sh'
+            else
+              toolchain='ldb_toolchain_gen.sh'
+            fi
+            mkdir -p "${DEFAULT_DIR}"
+            wget "https://github.com/amosbird/ldb_toolchain_gen/releases/download/v0.25/${toolchain}" \
+              -q -O /tmp/ldb_toolchain_gen.sh
+            bash /tmp/ldb_toolchain_gen.sh "${DEFAULT_DIR}/ldb-toolchain"
+          fi
+
+      - name: Build and Upload
+        continue-on-error: ${{ inputs.tolerate_failure }}
+        run: |
+          if [[ "${RUNNER_OS}" == 'Linux' ]]; then
+            export DEFAULT_DIR='/opt/doris'
+            export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
+            export PATH="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 1 -type d -name 'bin'):${PATH}"
+            export JAVA_HOME="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 0)"
+            export DORIS_TOOLCHAIN=clang
+          else
+            export MACOSX_DEPLOYMENT_TARGET=12.0
+          fi
+
+          export CMAKE_POLICY_VERSION_MINIMUM=3.10
+          export CUSTOM_CMAKE="/usr/local/bin/cmake"
+          cd thirdparty
+          # Diagnostics only - build-thirdparty.sh is what insists on ccache being here.
+          ccache --zero-stats || true
+          ./build-thirdparty.sh -j "$(nproc)"
+          ccache --show-stats || true
+
+          thirdparty_commit_hash="${{ inputs.thirdparty_commit_hash }}"
+          if [[ -z "${thirdparty_commit_hash}" ]]; then
+            echo 'Thirdparty commit hash is empty' >&2
+            exit 1
+          fi
+          echo "${thirdparty_commit_hash}" >installed/_doris_thirdparty_commit_
+
+          kernel="$(uname -s | awk '{print tolower($0)}')"
+          arch="$(uname -m)"
+          archive="doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
+          rm -f "${archive}"
+          tar -cf - installed | xz -z -T0 - >"${archive}"
+
+          assets=("${archive}")
+          if [[ "${kernel}" == 'linux' && "${arch}" == 'aarch64' ]]; then
+            # Preserve the existing Linux ARM64 URL used by Doris release jobs.
+            cp "${archive}" doris-thirdparty-prebuild-arm64.tar.xz
+            assets+=(doris-thirdparty-prebuild-arm64.tar.xz)
+          fi
+          # Drop the old assets first: `gh release upload --clobber` intermittently
+          # exits 1 with "release not found" while deleting the asset it is
+          # replacing, even though the upload itself went through.
+          for asset in "${assets[@]}"; do
+            gh release delete-asset automation "${asset}" --yes || true
+          done
+          gh release upload --clobber automation "${assets[@]}"
+
+      # Saved even when the build failed: what it did manage to compile is exactly what
+      # the retry should not have to compile again.
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ inputs.target }}-${{ github.run_id }}
