@@ -27,10 +27,20 @@ on:
   schedule:
     - cron: '*/30 * * * *'
 
+# A full third party build runs for hours while the schedule fires every 30
+# minutes. Without a concurrency group the runs stack up and race each other on
+# the same release tag.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   prerelease:
     name: Prerelease
-    runs-on: macos-14
+    # This job only resolves a hash and pre-fetches sources, so it does not need
+    # a macOS runner. ubuntu-latest also ships GNU md5sum, which keeps archive
+    # verification on rather than at the mercy of what the runner happens to have.
+    runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -39,9 +49,11 @@ jobs:
     outputs:
       should_release: ${{ steps.check_diff.outputs.should_release }}
       thirdparty_commit_hash: ${{ steps.check_diff.outputs.thirdparty_commit_hash }}
+      doris_version: ${{ steps.check_diff.outputs.doris_version }}
+      attempt: ${{ steps.check_diff.outputs.attempt }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: 'apache/doris'
           fetch-depth: 0
@@ -53,15 +65,28 @@ jobs:
               ! gh release list | awk -F "\t" '{ print $3 }' | grep 'automation' >/dev/null; then
             gh release create -t 'Apache Doris Third Party Prebuilt' automation
           fi
-          last_version="$(gh release view automation | sed -n -E 's/Doris Version: \*(.*)\*.*/\1/p')"
+          max_attempts=3
+
+          # The release note is the only state this pipeline keeps. Read it once
+          # so the three fields below cannot come from three different revisions.
+          note="$(gh release view automation)"
+          last_version="$(echo "${note}" | sed -n -E 's/Doris Version: \*(.*)\*.*/\1/p')"
+          last_status="$(echo "${note}" | sed -n -E 's/Status: \*(.*)\*.*/\1/p')"
+          last_attempt="$(echo "${note}" | sed -n -E 's/Attempts: \*([0-9]+)\*.*/\1/p')"
+          # A note without a usable counter must not enable retries: treating it
+          # as attempt 0 is what turns every scheduled run into a full rebuild.
+          [[ "${last_attempt}" =~ ^[0-9]+$ ]] || last_attempt="${max_attempts}"
           current_version="$(git log -1 --format='%H')"
           thirdparty_commit_hash="$(git log -1 --format='%H' -- thirdparty)"
 
           echo "Last Version: ${last_version}"
+          echo "Last Status: ${last_status}"
+          echo "Last Attempt: ${last_attempt}"
           echo "Current Version: ${current_version}"
           echo "Thirdparty Commit: ${thirdparty_commit_hash}"
 
           should_release=false
+          attempt=1
           if [[ -z "${last_version}" ]]; then
             echo "The first release was detected."
             should_release=true
@@ -73,10 +98,17 @@ jobs:
               echo -e "Detect changes:\n${content}"
               should_release=true
             fi
+          elif [[ "${last_status}" == 'FAILURE' ]] && [[ "${last_attempt}" -lt "${max_attempts}" ]]; then
+            # Downloads from third party mirrors fail often enough that a single
+            # red run should not park master until the next thirdparty/ commit
+            # lands. Retry a bounded number of times, never forever.
+            attempt=$((last_attempt + 1))
+            echo "Previous build failed, retrying (attempt ${attempt}/${max_attempts})."
+            should_release=true
           fi
 
           if "${should_release}"; then
-            echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*" >release_note.md
+            echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*\nAttempts: *${attempt}*" >release_note.md
           else
             gh release view automation | sed -n '/--/,$p' | awk '{ if (NR > 1) print $0 }' | sed "{
               s/Update Time:.*/Update Time: *$(date)*/
@@ -87,6 +119,8 @@ jobs:
 
           echo "should_release=${should_release}" >> $GITHUB_OUTPUT
           echo "thirdparty_commit_hash=${thirdparty_commit_hash}" >> $GITHUB_OUTPUT
+          echo "doris_version=${current_version}" >> $GITHUB_OUTPUT
+          echo "attempt=${attempt}" >> $GITHUB_OUTPUT
 
       - name: Download Source and Upload
         if: steps.check_diff.outputs.should_release == 'true'
@@ -96,6 +130,10 @@ jobs:
 
           tar -zcvf doris-thirdparty-source.tgz src
 
+          # Drop the old asset first: `gh release upload --clobber` intermittently
+          # exits 1 with "release not found" while deleting the asset it is
+          # replacing, even though the upload itself went through.
+          gh release delete-asset automation doris-thirdparty-source.tgz --yes || true
           gh release upload --clobber automation doris-thirdparty-source.tgz
 
   build:
@@ -234,7 +272,7 @@ jobs:
       #      remove-docker-images: 'true'
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: 'apache/doris'
 
@@ -329,6 +367,12 @@ jobs:
             cp "${archive}" doris-thirdparty-prebuild-arm64.tar.xz
             assets+=(doris-thirdparty-prebuild-arm64.tar.xz)
           fi
+          # Drop the old assets first: `gh release upload --clobber` intermittently
+          # exits 1 with "release not found" while deleting the asset it is
+          # replacing, even though the upload itself went through.
+          for asset in "${assets[@]}"; do
+            gh release delete-asset automation "${asset}" --yes || true
+          done
           gh release upload --clobber automation "${assets[@]}"
 
   update-docker:
@@ -489,6 +533,7 @@ jobs:
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DORIS_VERSION: ${{ needs.prerelease.outputs.doris_version }}
     permissions:
       contents: write
     steps:
@@ -496,18 +541,25 @@ jobs:
         run: |
           gh release download automation
 
-          content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
-          echo -ne "${content}\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          # Write the version this run actually built rather than parsing it back
+          # out of the note, so the terminal state never depends on the note
+          # having survived intact.
+          echo -ne "Update Time: *$(date)*\nDoris Version: *${DORIS_VERSION}*\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit --latest -F release_note.md automation
 
   failure:
     name: Failure
-    needs: [build, update-docker]
-    if: always() && failure()
+    needs: [prerelease, build, update-docker]
+    # Only report on a build that actually ran. If prerelease itself failed there
+    # is no version to record, and writing an empty one is exactly what used to
+    # make the next scheduled run rebuild from scratch, forever.
+    if: always() && failure() && needs.prerelease.result == 'success'
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DORIS_VERSION: ${{ needs.prerelease.outputs.doris_version }}
+      ATTEMPT: ${{ needs.prerelease.outputs.attempt }}
     permissions:
       contents: write
     steps:
@@ -515,10 +567,12 @@ jobs:
         run: |
           gh release download automation
 
-          content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
-          if [[ -z "${content}" ]]; then
-            echo 'Unable to preserve release provenance in the failure note' >&2
-            exit 1
-          fi
-          echo -ne "${content}\nStatus: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          # Keep Doris Version: the prerelease job keys off it, and dropping it
+          # made every scheduled run look like a first release. #405 guarded this
+          # by reading the line back out of the note and bailing out when it was
+          # missing, which protects an intact note but cannot repair one that is
+          # already broken -- and a note that has lost the line is exactly the
+          # state that keeps the rebuild loop running. Take the value from the
+          # prerelease job instead, so it is always available.
+          echo -ne "Update Time: *$(date)*\nDoris Version: *${DORIS_VERSION}*\nStatus: *FAILURE*\nAttempts: *${ATTEMPT}*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit --latest -F release_note.md automation
