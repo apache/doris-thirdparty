@@ -35,9 +35,11 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: write
+    outputs:
+      doris_version: ${{ steps.release_note.outputs.doris_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: 'apache/doris'
           ref: ${{ inputs.doris_ref }}
@@ -51,11 +53,14 @@ jobs:
           fi
 
       - name: Update Release Note
+        id: release_note
         run: |
           current_version="$(git log -1 --format='%H')"
           echo "Current Version: ${current_version}"
           echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nDoris Ref: *${{ inputs.doris_ref }}*\nStatus: *BUILDING*" >release_note.md
           gh release edit -F release_note.md automation
+
+          echo "doris_version=${current_version}" >> $GITHUB_OUTPUT
 
       - name: Download Source and Upload
         run: |
@@ -169,7 +174,7 @@ jobs:
       #      remove-docker-images: 'true'
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: 'apache/doris'
           ref: ${{ inputs.doris_ref }}
@@ -248,18 +253,23 @@ jobs:
         run: |
           gh release download automation
 
-          content="$(gh release view automation | sed -n '/Update Time:/,/Doris Version:/p')"
+          content="$(gh release view automation | sed -n '/Update Time:/,/Doris Ref:/p')"
           echo -ne "${content}\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit --latest -F release_note.md automation
 
   failure:
     name: Failure
-    needs: [build]
-    if: failure()
+    needs: [prerelease, build]
+    # This workflow writes to the same `automation` release as the scheduled
+    # master build. Dropping Doris Version here left master's prerelease job
+    # unable to tell what it had last built, so it rebuilt from scratch on every
+    # following 30 minute tick.
+    if: always() && failure() && needs.prerelease.result == 'success'
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DORIS_VERSION: ${{ needs.prerelease.outputs.doris_version }}
     permissions:
       contents: write
     steps:
@@ -267,5 +277,5 @@ jobs:
         run: |
           gh release download automation
 
-          echo -ne "Status: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          echo -ne "Update Time: *$(date)*\nDoris Version: *${DORIS_VERSION}*\nDoris Ref: *${{ inputs.doris_ref }}*\nStatus: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit --latest -F release_note.md automation

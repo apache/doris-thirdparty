@@ -17,9 +17,21 @@
 
 name: Build (3.0)
 
+# Scheduled builds are switched off for branch-3.0. Every polled run rebuilt the
+# whole third party tree and went red, 48 times a day, and the branch no longer
+# receives thirdparty/ changes often enough to justify polling for them. Trigger
+# it by hand from the Actions tab when a build is actually needed.
 on:
-  schedule:
-    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Force run build job when manually triggered"
+        required: false
+        default: "true"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
   prerelease:
@@ -32,9 +44,10 @@ jobs:
       contents: write
     outputs:
       should_release: ${{ steps.check_diff.outputs.should_release }}
+      doris_version: ${{ steps.check_diff.outputs.doris_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: 'apache/doris'
           ref: 'branch-3.0'
@@ -81,6 +94,7 @@ jobs:
           gh release edit -F release_note.md "${tag_name}"
 
           echo "should_release=${should_release}" >> $GITHUB_OUTPUT
+          echo "doris_version=${current_version}" >> $GITHUB_OUTPUT
 
       - name: Download Source and Upload
         if: steps.check_diff.outputs.should_release == 'true'
@@ -97,7 +111,7 @@ jobs:
   build:
     name: Build
     needs: prerelease
-    if: needs.prerelease.outputs.should_release == 'true'
+    if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
     strategy:
       matrix:
         config:
@@ -198,7 +212,7 @@ jobs:
             remove-docker-images: 'true'
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: 'apache/doris'
           ref: 'branch-3.0'
@@ -266,11 +280,12 @@ jobs:
   success:
     name: Success
     needs: [prerelease, build]
-    if: needs.prerelease.outputs.should_release == 'true'
+    if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DORIS_VERSION: ${{ needs.prerelease.outputs.doris_version }}
     permissions:
       contents: write
     steps:
@@ -280,18 +295,24 @@ jobs:
 
           gh release download "${tag_name}"
 
-          content="$(gh release view "${tag_name}" | sed -n '/Update Time:/,/Doris Version:/p')"
-          echo -ne "${content}\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          # Write the version this run actually built rather than parsing it back
+          # out of the note, so the terminal state never depends on the note
+          # having survived intact.
+          echo -ne "Update Time: *$(date)*\nDoris Version: *${DORIS_VERSION}*\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit -F release_note.md "${tag_name}"
 
   failure:
     name: Failure
-    needs: [build]
-    if: failure()
+    needs: [prerelease, build]
+    # Only report on a build that actually ran. If prerelease itself failed there
+    # is no version to record, and writing an empty one is exactly what used to
+    # make the next run rebuild from scratch.
+    if: always() && failure() && needs.prerelease.result == 'success'
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DORIS_VERSION: ${{ needs.prerelease.outputs.doris_version }}
     permissions:
       contents: write
     steps:
@@ -301,5 +322,7 @@ jobs:
 
           gh release download "${tag_name}"
 
-          echo -ne "Status: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          # Keep Doris Version: the prerelease job keys off it, and dropping it
+          # made every following run look like a first release.
+          echo -ne "Update Time: *$(date)*\nDoris Version: *${DORIS_VERSION}*\nStatus: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit -F release_note.md "${tag_name}"

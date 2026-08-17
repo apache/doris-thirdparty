@@ -18,13 +18,31 @@
 name: Build (3.1)
 
 on:
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Force run build job when manually triggered"
+        required: false
+        default: "true"
   schedule:
     - cron: '*/30 * * * *'
+
+# A full third party build runs for hours while the schedule fires every 30
+# minutes. Without a concurrency group the runs stack up and race each other on
+# the same release tag.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
   prerelease:
     name: Prerelease
-    runs-on: macos-14
+    # ubuntu-latest ships GNU md5sum. On a macOS runner download-thirdparty.sh
+    # finds no md5sum, skips verification altogether and packs whatever it got
+    # into the source tarball, including the 0-byte files a failed download
+    # leaves behind. The build jobs then fail on a checksum the prerelease job
+    # never looked at.
+    runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -32,9 +50,11 @@ jobs:
       contents: write
     outputs:
       should_release: ${{ steps.check_diff.outputs.should_release }}
+      doris_version: ${{ steps.check_diff.outputs.doris_version }}
+      attempt: ${{ steps.check_diff.outputs.attempt }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: 'apache/doris'
           ref: 'branch-3.1'
@@ -45,18 +65,31 @@ jobs:
         run: |
           tag_name='automation-3.1'
           title="Apache Doris Third Party Prebuilt (${tag_name/automation-/})"
+          max_attempts=3
 
           if [[ -z "$(gh release list)" ]] ||
               ! gh release list | awk -F "\t" '{ print $3 }' | grep "${tag_name}" >/dev/null; then
             gh release create -t "${title}" "${tag_name}"
           fi
-          last_version="$(gh release view "${tag_name}" | sed -n -E 's/Doris Version: \*(.*)\*.*/\1/p')"
+
+          # The release note is the only state this pipeline keeps. Read it once
+          # so the three fields below cannot come from three different revisions.
+          note="$(gh release view "${tag_name}")"
+          last_version="$(echo "${note}" | sed -n -E 's/Doris Version: \*(.*)\*.*/\1/p')"
+          last_status="$(echo "${note}" | sed -n -E 's/Status: \*(.*)\*.*/\1/p')"
+          last_attempt="$(echo "${note}" | sed -n -E 's/Attempts: \*([0-9]+)\*.*/\1/p')"
+          # A note without a usable counter must not enable retries: treating it
+          # as attempt 0 is what turns every scheduled run into a full rebuild.
+          [[ "${last_attempt}" =~ ^[0-9]+$ ]] || last_attempt="${max_attempts}"
           current_version="$(git log -1 --format='%H')"
 
           echo "Last Version: ${last_version}"
+          echo "Last Status: ${last_status}"
+          echo "Last Attempt: ${last_attempt}"
           echo "Current Version: ${current_version}"
 
           should_release=false
+          attempt=1
           if [[ -z "${last_version}" ]]; then
             echo "The first release was detected."
             should_release=true
@@ -68,10 +101,17 @@ jobs:
               echo -e "Detect changes:\n${content}"
               should_release=true
             fi
+          elif [[ "${last_status}" == 'FAILURE' ]] && [[ "${last_attempt}" -lt "${max_attempts}" ]]; then
+            # Downloads from third party mirrors fail often enough that a single
+            # red run should not park the branch until the next thirdparty/
+            # commit lands. Retry a bounded number of times, never forever.
+            attempt=$((last_attempt + 1))
+            echo "Previous build failed, retrying (attempt ${attempt}/${max_attempts})."
+            should_release=true
           fi
 
           if "${should_release}"; then
-            echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*" >release_note.md
+            echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*\nAttempts: *${attempt}*" >release_note.md
           else
             gh release view "${tag_name}" | sed -n '/--/,$p' | awk '{ if (NR > 1) print $0 }' | sed "{
               s/Update Time:.*/Update Time: *$(date)*/
@@ -81,6 +121,8 @@ jobs:
           gh release edit -F release_note.md "${tag_name}"
 
           echo "should_release=${should_release}" >> $GITHUB_OUTPUT
+          echo "doris_version=${current_version}" >> $GITHUB_OUTPUT
+          echo "attempt=${attempt}" >> $GITHUB_OUTPUT
 
       - name: Download Source and Upload
         if: steps.check_diff.outputs.should_release == 'true'
@@ -88,21 +130,41 @@ jobs:
           tag_name='automation-3.1'
 
           cd thirdparty
+          # Pre-download packages whose mirror in branch-3.1's vars.sh is blocked
+          # or gone on GH Actions runners:
+          #   lzo: fossies.org returns 410 Gone
+          #   libuuid: nchc.dl.sourceforge.net (TW mirror) is unreachable
+          # Both are fixed upstream in apache/doris; this keeps the pipeline
+          # green until that lands and is a no-op once it does, because the
+          # checksums are identical.
+          mkdir -p src
+          curl -fL "https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz" \
+            -o src/lzo-2.10.tar.gz
+          curl -fL "https://downloads.sourceforge.net/project/libuuid/libuuid-1.0.3.tar.gz" \
+            -o src/libuuid-1.0.3.tar.gz
           sed '/# unpacking thirdpart archives/,$d' download-thirdparty.sh | bash -
 
           tar -zcvf doris-thirdparty-source.tgz src
 
+          gh release delete-asset "${tag_name}" doris-thirdparty-source.tgz --yes || true
           gh release upload --clobber "${tag_name}" doris-thirdparty-source.tgz
 
   build:
     name: Build
     needs: prerelease
-    if: needs.prerelease.outputs.should_release == 'true'
+    if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
     strategy:
+      # One platform going red must not cancel the others: a cancelled matrix
+      # leg reports nothing, so a single failure used to hide the real state of
+      # the other two platforms.
+      fail-fast: false
       matrix:
         config:
           - name: macOS-x86_64
             os: macos-15-intel
+            # Intel macOS runners are on their way out; do not let them block
+            # the arm64 and Linux artifacts.
+            continue-on-error: true
             packages: >-
               'm4'
               'automake'
@@ -176,29 +238,20 @@ jobs:
               'maven'
 
     runs-on: ${{ matrix.config.os }}
+    continue-on-error: ${{ matrix.config.continue-on-error == true }}
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Checkout easimon/maximize-build-space
-        if: ${{ matrix.config.name == 'Linux' }}
-        run: |
-          git clone -b v7 https://github.com/easimon/maximize-build-space
-
-      - name: Maximize build space
-        if: ${{ matrix.config.name == 'Linux' }}
-        uses: ./maximize-build-space
-        with:
-            root-reserve-mb: 4096
-            swap-size-mb: 8192
-            remove-dotnet: 'true'
-            remove-android: 'true'
-            remove-haskell: 'true'
-            remove-codeql: 'true'
-            remove-docker-images: 'true'
+      # easimon/maximize-build-space is deliberately not used here. It hands the
+      # reclaimed space to an LVM mounted on the workspace but reserves only
+      # root-reserve-mb on /, and gcc writes its assembler temporaries to /tmp on
+      # /. That is how the 2.0 pipeline died on "No space left on device" while
+      # building aws-sdk-cpp. The stock runner disk is what master and 4.0 build
+      # on today.
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: 'apache/doris'
           ref: 'branch-3.1'
@@ -255,22 +308,39 @@ jobs:
           export CMAKE_POLICY_VERSION_MINIMUM=3.10
           export CUSTOM_CMAKE="/usr/local/bin/cmake"
           cd thirdparty
+          # Repair packages that may be empty if the source tarball was built
+          # before the mirror fixes:
+          #   lzo: fossies.org returns 410 Gone
+          #   libuuid: nchc.dl.sourceforge.net (TW mirror) is unreachable
+          if [[ ! -s src/lzo-2.10.tar.gz ]]; then
+            curl -fL "https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz" \
+              -o src/lzo-2.10.tar.gz
+          fi
+          if [[ ! -s src/libuuid-1.0.3.tar.gz ]]; then
+            curl -fL "https://downloads.sourceforge.net/project/libuuid/libuuid-1.0.3.tar.gz" \
+              -o src/libuuid-1.0.3.tar.gz
+          fi
           ./build-thirdparty.sh -j "$(nproc)"
 
           kernel="$(uname -s | awk '{print tolower($0)}')"
           arch="$(uname -m)"
           rm -rf "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
           tar -cf - installed | xz -z -T0 - >"doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
+          # Drop the old asset first: `gh release upload --clobber` intermittently
+          # exits 1 with "release not found" while deleting the asset it is
+          # replacing, even though the upload itself went through.
+          gh release delete-asset "${tag_name}" "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz" --yes || true
           gh release upload --clobber "${tag_name}" "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
 
   success:
     name: Success
     needs: [prerelease, build]
-    if: needs.prerelease.outputs.should_release == 'true'
+    if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DORIS_VERSION: ${{ needs.prerelease.outputs.doris_version }}
     permissions:
       contents: write
     steps:
@@ -280,18 +350,25 @@ jobs:
 
           gh release download "${tag_name}"
 
-          content="$(gh release view "${tag_name}" | sed -n '/Update Time:/,/Doris Version:/p')"
-          echo -ne "${content}\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          # Write the version this run actually built rather than parsing it back
+          # out of the note, so the terminal state never depends on the note
+          # having survived intact.
+          echo -ne "Update Time: *$(date)*\nDoris Version: *${DORIS_VERSION}*\nStatus: *SUCCESS*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit -F release_note.md "${tag_name}"
 
   failure:
     name: Failure
-    needs: [build]
-    if: failure()
+    needs: [prerelease, build]
+    # Only report on a build that actually ran. If prerelease itself failed there
+    # is no version to record, and writing an empty one is exactly what used to
+    # make the next scheduled run rebuild from scratch, forever.
+    if: always() && failure() && needs.prerelease.result == 'success'
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DORIS_VERSION: ${{ needs.prerelease.outputs.doris_version }}
+      ATTEMPT: ${{ needs.prerelease.outputs.attempt }}
     permissions:
       contents: write
     steps:
@@ -301,5 +378,7 @@ jobs:
 
           gh release download "${tag_name}"
 
-          echo -ne "Status: *FAILURE*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
+          # Keep Doris Version: the prerelease job keys off it, and dropping it
+          # made every scheduled run look like a first release.
+          echo -ne "Update Time: *$(date)*\nDoris Version: *${DORIS_VERSION}*\nStatus: *FAILURE*\nAttempts: *${ATTEMPT}*\n\n## SHA256 Checksums\n\`\`\`\n$(sha256sum *)\n\`\`\`" >release_note.md
           gh release edit -F release_note.md "${tag_name}"
