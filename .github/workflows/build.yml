@@ -44,10 +44,12 @@ jobs:
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MACOS_X86_MAX_AGE_DAYS: ${{ vars.MACOS_X86_MAX_AGE_DAYS || '7' }}
     permissions:
       contents: write
     outputs:
       should_release: ${{ steps.check_diff.outputs.should_release }}
+      should_build_macos_x86: ${{ steps.check_diff.outputs.should_build_macos_x86 }}
       thirdparty_commit_hash: ${{ steps.check_diff.outputs.thirdparty_commit_hash }}
       doris_version: ${{ steps.check_diff.outputs.doris_version }}
       attempt: ${{ steps.check_diff.outputs.attempt }}
@@ -107,6 +109,26 @@ jobs:
             should_release=true
           fi
 
+          # The macOS x86_64 leg is by far the slowest of the four - 4h22m41s of the
+          # 5h01m run 31988123966 took, against 1h27m54s for Linux arm64 - and it is
+          # already allowed to fail without holding up a release. Rebuild it only once
+          # its published archive has gone stale rather than on every thirdparty change.
+          should_build_macos_x86="${should_release}"
+          if [[ "${should_build_macos_x86}" == 'true' ]]; then
+            macos_x86_asset='doris-thirdparty-prebuilt-darwin-x86_64.tar.xz'
+            asset_updated_at="$(gh release view automation --json assets \
+              --jq ".assets[] | select(.name == \"${macos_x86_asset}\") | .updatedAt")" || asset_updated_at=''
+            if [[ -n "${asset_updated_at}" ]]; then
+              age_days="$(( ($(date -u +%s) - $(date -u -d "${asset_updated_at}" +%s)) / 86400 ))"
+              echo "macOS x86_64 archive is ${age_days} day(s) old, rebuild threshold is ${MACOS_X86_MAX_AGE_DAYS} day(s)"
+              if [[ "${age_days}" -lt "${MACOS_X86_MAX_AGE_DAYS}" ]]; then
+                should_build_macos_x86=false
+              fi
+            else
+              echo "No macOS x86_64 archive published yet, building it"
+            fi
+          fi
+
           if "${should_release}"; then
             echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*\nAttempts: *${attempt}*" >release_note.md
           else
@@ -118,6 +140,7 @@ jobs:
           gh release edit -F release_note.md automation
 
           echo "should_release=${should_release}" >> $GITHUB_OUTPUT
+          echo "should_build_macos_x86=${should_build_macos_x86}" >> $GITHUB_OUTPUT
           echo "thirdparty_commit_hash=${thirdparty_commit_hash}" >> $GITHUB_OUTPUT
           echo "doris_version=${current_version}" >> $GITHUB_OUTPUT
           echo "attempt=${attempt}" >> $GITHUB_OUTPUT
@@ -136,252 +159,67 @@ jobs:
           gh release delete-asset automation doris-thirdparty-source.tgz --yes || true
           gh release upload --clobber automation doris-thirdparty-source.tgz
 
-  build:
+  # One job per platform instead of one matrix job, so that `update-docker` can depend
+  # on the Linux x86_64 archive alone. As a matrix it had to wait for all four: in run
+  # 31988123966 the archive it consumes was published at 05:19 and the Docker job did
+  # not start until 06:58, held up by macOS x86_64.
+  build-linux-x86_64:
     name: Build
     needs: prerelease
     if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
-    strategy:
-      fail-fast: false
-      matrix:
-        config:
-          - name: macOS-x86_64
-            os: macos-15-intel
-            continue-on-error: true
-            packages: >-
-              'm4'
-              'automake'
-              'autoconf'
-              'libtool'
-              'pkg-config'
-              'texinfo'
-              'coreutils'
-              'gnu-getopt'
-              'python@3'
-              'ninja'
-              'ccache'
-              'bison'
-              'byacc'
-              'gettext'
-              'wget'
-              'pcre'
-              'openjdk@11'
-              'maven'
-              'node'
-              'llvm@20'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-target.yml
+    with:
+      target: Linux
+      runs_on: ubuntu-22.04
+      thirdparty_commit_hash: ${{ needs.prerelease.outputs.thirdparty_commit_hash }}
 
-          - name: macOS-arm64
-            os: macos-14
-            packages: >-
-              'm4'
-              'automake'
-              'autoconf'
-              'libtool'
-              'pkg-config'
-              'texinfo'
-              'coreutils'
-              'gnu-getopt'
-              'python@3'
-              'ninja'
-              'ccache'
-              'bison'
-              'byacc'
-              'gettext'
-              'wget'
-              'pcre'
-              'openjdk@11'
-              'maven'
-              'node'
-              'llvm@20'
+  build-linux-arm64:
+    name: Build
+    needs: prerelease
+    if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-target.yml
+    with:
+      target: Linux-arm64
+      runs_on: ubuntu-22.04-arm
+      thirdparty_commit_hash: ${{ needs.prerelease.outputs.thirdparty_commit_hash }}
 
-          - name: Linux
-            os: ubuntu-22.04
-            toolchain: ldb_toolchain_gen.sh
-            packages: >-
-              'build-essential'
-              'automake'
-              'autoconf'
-              'libtool-bin'
-              'pkg-config'
-              'cmake=3.22.1-1ubuntu1.22.04.2'
-              'ninja-build'
-              'ccache'
-              'python-is-python3'
-              'bison'
-              'byacc'
-              'flex'
-              'binutils-dev'
-              'libiberty-dev'
-              'curl'
-              'git'
-              'zip'
-              'unzip'
-              'autopoint'
-              'openjdk-8-jdk'
-              'openjdk-8-jdk-headless'
-              'maven'
+  build-macos-arm64:
+    name: Build
+    needs: prerelease
+    if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-target.yml
+    with:
+      target: macOS-arm64
+      runs_on: macos-14
+      thirdparty_commit_hash: ${{ needs.prerelease.outputs.thirdparty_commit_hash }}
 
-          - name: Linux-arm64
-            os: ubuntu-22.04-arm
-            toolchain: ldb_toolchain_gen_aarch64.sh
-            packages: >-
-              'build-essential'
-              'automake'
-              'autoconf'
-              'libtool-bin'
-              'pkg-config'
-              'cmake=3.22.1-1ubuntu1.22.04.2'
-              'ninja-build'
-              'ccache'
-              'python-is-python3'
-              'bison'
-              'byacc'
-              'flex'
-              'binutils-dev'
-              'libiberty-dev'
-              'curl'
-              'git'
-              'zip'
-              'unzip'
-              'autopoint'
-              'openjdk-8-jdk'
-              'openjdk-8-jdk-headless'
-              'maven'
-
-    runs-on: ${{ matrix.config.os }}
-    continue-on-error: ${{ matrix.config.continue-on-error == true }}
-    env:
-      GH_REPO: ${{ github.repository }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      CMAKE_VERSION: 3.25.3
-    steps:
-      - name: Checkout easimon/maximize-build-space
-        if: ${{ matrix.config.name == 'Linux' }}
-        run: |
-          git clone -b v7 https://github.com/easimon/maximize-build-space
-
-      #- name: Maximize build space
-      #  if: ${{ matrix.config.name == 'Linux' }}
-      #  uses: ./maximize-build-space
-      #  with:
-      #      root-reserve-mb: 4096
-      #      swap-size-mb: 8192
-      #      remove-dotnet: 'true'
-      #      remove-android: 'true'
-      #      remove-haskell: 'true'
-      #      remove-codeql: 'true'
-      #      remove-docker-images: 'true'
-
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          repository: 'apache/doris'
-
-      - name: Download
-        run: |
-          cd thirdparty
-          curl -L https://github.com/${{ github.repository }}/releases/download/automation/doris-thirdparty-source.tgz \
-            -o doris-thirdparty-source.tgz
-          tar -zxvf doris-thirdparty-source.tgz
-
-          # The gcc.gnu.org git endpoint occasionally rate-limits hosted runners and
-          # leaves this header empty in the cached source archive. Repair only an
-          # invalid copy, and verify the mirror content before replacing it.
-          tsan_header="src/tsan_interface_atomic.h"
-          expected_md5="d72679bea167d6a513d959f5abd149dc"
-          actual_md5="$(openssl dgst -md5 "${tsan_header}" | awk '{ print $NF }')"
-          if [[ "${actual_md5}" != "${expected_md5}" ]]; then
-            tsan_header_tmp="${tsan_header}.tmp"
-            trap 'rm -f "${tsan_header_tmp}"' EXIT
-            curl --fail --location --retry 3 \
-              https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-7/libsanitizer/include/sanitizer/tsan_interface_atomic.h \
-              --output "${tsan_header_tmp}"
-            actual_md5="$(openssl dgst -md5 "${tsan_header_tmp}" | awk '{ print $NF }')"
-            [[ "${actual_md5}" == "${expected_md5}" ]]
-            mv "${tsan_header_tmp}" "${tsan_header}"
-            trap - EXIT
-          fi
-
-      - name: Prepare for ${{ matrix.config.os }}
-        run: |
-          # Doris's lance-c build prefers Rust 1.91.0 when it is installed.
-          # Pin it here so hosted-runner toolchain updates do not break locked Rust dependencies.
-          rustup toolchain install 1.91.0 --profile minimal
-          rustup run 1.91.0 rustc --version
-
-          if [[ "${{ matrix.config.name }}" =~ macOS-* ]]; then
-            # Install packages except cmake
-            brew install ${{ matrix.config.packages }} || true
-            # Arrow 24 requires CMake 3.25 or newer.
-            brew unlink cmake || true
-            wget "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-macos-universal.tar.gz"
-            tar -xzf "cmake-${CMAKE_VERSION}-macos-universal.tar.gz"
-            sudo cp -r "cmake-${CMAKE_VERSION}-macos-universal/CMake.app/Contents/"* /usr/local/
-            cmake --version
-          else
-            export DEFAULT_DIR='/opt/doris'
-            export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
-
-            sudo apt update
-            sudo apt-cache policy cmake
-            sudo DEBIAN_FRONTEND=noninteractive apt install --yes ${{ matrix.config.packages }}
-
-            mkdir -p "${DEFAULT_DIR}"
-            wget "https://github.com/amosbird/ldb_toolchain_gen/releases/download/v0.25/${{ matrix.config.toolchain }}" \
-              -q -O /tmp/ldb_toolchain_gen.sh
-            bash /tmp/ldb_toolchain_gen.sh "${DEFAULT_DIR}/ldb-toolchain"
-          fi
-
-      - name: Build and Upload
-        run: |
-          if [[ "${{ matrix.config.name }}" == Linux* ]]; then
-            export DEFAULT_DIR='/opt/doris'
-            export PATH="${DEFAULT_DIR}/ldb-toolchain/bin:${PATH}"
-            export PATH="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 1 -type d -name 'bin'):${PATH}"
-            export JAVA_HOME="$(find /usr/lib/jvm/java-8-openjdk* -maxdepth 0)"
-            export DORIS_TOOLCHAIN=clang
-          else
-            export MACOSX_DEPLOYMENT_TARGET=12.0
-          fi
-
-          export CMAKE_POLICY_VERSION_MINIMUM=3.10
-          export CUSTOM_CMAKE="/usr/local/bin/cmake"
-          cd thirdparty
-          ./build-thirdparty.sh -j "$(nproc)"
-
-          thirdparty_commit_hash="${{ needs.prerelease.outputs.thirdparty_commit_hash }}"
-          if [[ -z "${thirdparty_commit_hash}" ]]; then
-            echo 'Thirdparty commit hash is empty' >&2
-            exit 1
-          fi
-          echo "${thirdparty_commit_hash}" >installed/_doris_thirdparty_commit_
-
-          kernel="$(uname -s | awk '{print tolower($0)}')"
-          arch="$(uname -m)"
-          archive="doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
-          rm -f "${archive}"
-          tar -cf - installed | xz -z -T0 - >"${archive}"
-
-          assets=("${archive}")
-          if [[ "${kernel}" == 'linux' && "${arch}" == 'aarch64' ]]; then
-            # Preserve the existing Linux ARM64 URL used by Doris release jobs.
-            cp "${archive}" doris-thirdparty-prebuild-arm64.tar.xz
-            assets+=(doris-thirdparty-prebuild-arm64.tar.xz)
-          fi
-          # Drop the old assets first: `gh release upload --clobber` intermittently
-          # exits 1 with "release not found" while deleting the asset it is
-          # replacing, even though the upload itself went through.
-          for asset in "${assets[@]}"; do
-            gh release delete-asset automation "${asset}" --yes || true
-          done
-          gh release upload --clobber automation "${assets[@]}"
+  # Skipped while its published archive is still fresh enough - see the prerelease job.
+  build-macos-x86_64:
+    name: Build
+    needs: prerelease
+    if: needs.prerelease.outputs.should_build_macos_x86 == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-target.yml
+    with:
+      target: macOS-x86_64
+      runs_on: macos-15-intel
+      tolerate_failure: true
+      thirdparty_commit_hash: ${{ needs.prerelease.outputs.thirdparty_commit_hash }}
 
   update-docker:
     name: Update Docker Image
-    needs: [prerelease, build]
-    # macOS failures must not block Docker when the current Linux x86_64 package is available.
+    needs: [prerelease, build-linux-x86_64]
+    # Only the Linux x86_64 archive goes into the image, so nothing else is waited for.
     if: |
       always() &&
-      needs.build.result != 'cancelled' &&
+      needs.build-linux-x86_64.result != 'cancelled' &&
       (needs.prerelease.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     env:
@@ -527,8 +365,13 @@ jobs:
 
   success:
     name: Success
-    needs: [prerelease, build, update-docker]
-    if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
+    needs: [prerelease, build-linux-x86_64, build-linux-arm64, build-macos-arm64, build-macos-x86_64, update-docker]
+    # `!cancelled() && !failure()` rather than the default: build-macos-x86_64 is
+    # skipped on most runs, and a skipped dependency would otherwise skip this job and
+    # leave the release note stuck at BUILDING forever.
+    if: |
+      !cancelled() && !failure() &&
+      (needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true'))
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
@@ -549,7 +392,7 @@ jobs:
 
   failure:
     name: Failure
-    needs: [prerelease, build, update-docker]
+    needs: [prerelease, build-linux-x86_64, build-linux-arm64, build-macos-arm64, build-macos-x86_64, update-docker]
     # Only report on a build that actually ran. If prerelease itself failed there
     # is no version to record, and writing an empty one is exactly what used to
     # make the next scheduled run rebuild from scratch, forever.
