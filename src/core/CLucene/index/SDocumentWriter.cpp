@@ -504,6 +504,26 @@ void SDocumentsWriter<T>::ThreadState::FieldData::addPosition(Token *token) {
         code = (code * 31) + tokenText[upto++];
     uint32_t hashPos = code & postingsHashMask;
 
+    if (upto < tokenTextLen) {
+        for (int32_t i = upto; i < tokenTextLen; i++) {
+            if (tokenText[i] != CLUCENE_END_OF_WORD) {
+                char error_msg[512];
+                if constexpr (std::is_same_v<T, char>) {
+                    snprintf(error_msg, sizeof(error_msg),
+                             "Inverted index does not support terms with null byte (\\0) in the "
+                             "middle. "
+                             "Found null at position %d, but non-null character at position %d. "
+                             "Term prefix: '%.*s'.",
+                             upto, i, std::min(upto, 50), tokenText);
+                } else {
+                    snprintf(error_msg, sizeof(error_msg),
+                             "Term contains null character in the middle at position %d.", upto);
+                }
+                _CLTHROWA(CL_ERR_IllegalArgument, error_msg);
+            }
+        }
+    }
+
     assert(!postingsCompacted);
 
     // Locate Posting in hash
