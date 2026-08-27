@@ -816,7 +816,7 @@ public:
     const TermNumMapType &getBufferedDeleteTerms() override {_CLTHROW_NOT_IMPLEMENT}
     bool updateDocument(Term *t, CL_NS(document)::Document *doc, CL_NS(analysis)::Analyzer *analyzer) override {_CLTHROW_NOT_IMPLEMENT}
     bool bufferDeleteTerms(const CL_NS(util)::ArrayBase<Term *> *terms) override {_CLTHROW_NOT_IMPLEMENT}
-    int64_t getRAMUsed() override {_CLTHROW_NOT_IMPLEMENT}
+    int64_t getRAMUsed() override { return numBytesUsed; }
     const std::vector<int32_t> *getBufferedDeleteDocIDs() override {_CLTHROW_NOT_IMPLEMENT}
 
     bool hasProx() override;
