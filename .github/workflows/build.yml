@@ -80,32 +80,33 @@ jobs:
           [[ "${last_attempt}" =~ ^[0-9]+$ ]] || last_attempt="${max_attempts}"
           current_version="$(git log -1 --format='%H')"
           thirdparty_commit_hash="$(git log -1 --format='%H' -- thirdparty)"
+          last_thirdparty_commit_hash=''
+          if [[ -n "${last_version}" ]] && git cat-file -e "${last_version}^{commit}" 2>/dev/null; then
+            last_thirdparty_commit_hash="$(git log -1 --format='%H' "${last_version}" -- thirdparty)"
+          fi
 
           echo "Last Version: ${last_version}"
           echo "Last Status: ${last_status}"
           echo "Last Attempt: ${last_attempt}"
           echo "Current Version: ${current_version}"
+          echo "Last Thirdparty Commit: ${last_thirdparty_commit_hash}"
           echo "Thirdparty Commit: ${thirdparty_commit_hash}"
 
           should_release=false
           attempt=1
-          if [[ -z "${last_version}" ]]; then
+          if [[ -z "${last_version}" || -z "${last_thirdparty_commit_hash}" ]]; then
             echo "The first release was detected."
             should_release=true
-          elif [[ "${last_version}" != "${current_version}" ]]; then
-            cmd="git diff --name-only ${last_version} ${current_version} | grep -E '^thirdparty/'"
-            echo "Execute: ${cmd}"
-            content="$(eval "${cmd}")" || true
-            if [[ -n "${content}" ]]; then
-              echo -e "Detect changes:\n${content}"
-              should_release=true
-            fi
-          elif [[ "${last_status}" == 'FAILURE' ]] && [[ "${last_attempt}" -lt "${max_attempts}" ]]; then
+          elif [[ "${last_thirdparty_commit_hash}" != "${thirdparty_commit_hash}" ]]; then
+            echo "A new thirdparty commit was detected."
+            should_release=true
+          elif [[ "${last_status}" =~ ^(FAILURE|BUILDING)$ ]] &&
+              [[ "${last_attempt}" -lt "${max_attempts}" ]]; then
             # Downloads from third party mirrors fail often enough that a single
-            # red run should not park master until the next thirdparty/ commit
-            # lands. Retry a bounded number of times, never forever.
+            # red or interrupted run should not park master until the next
+            # thirdparty/ commit lands. Retry a bounded number of times, never forever.
             attempt=$((last_attempt + 1))
-            echo "Previous build failed, retrying (attempt ${attempt}/${max_attempts})."
+            echo "Previous build did not finish, retrying (attempt ${attempt}/${max_attempts})."
             should_release=true
           fi
 
@@ -158,6 +159,19 @@ jobs:
           # replacing, even though the upload itself went through.
           gh release delete-asset automation doris-thirdparty-source.tgz --yes || true
           gh release upload --clobber automation doris-thirdparty-source.tgz
+
+      # Check Diff records BUILDING before source preparation starts. If a mirror
+      # leaves a bad source archive, the platform builds never run, so the regular
+      # failure job cannot repair that state. Record this failure inside prerelease
+      # so the next scheduled run takes the bounded retry path.
+      - name: Record Prerelease Failure
+        if: failure() && steps.check_diff.outputs.should_release == 'true'
+        env:
+          DORIS_VERSION: ${{ steps.check_diff.outputs.doris_version }}
+          ATTEMPT: ${{ steps.check_diff.outputs.attempt }}
+        run: |
+          echo -ne "Update Time: *$(date)*\nDoris Version: *${DORIS_VERSION}*\nStatus: *FAILURE*\nAttempts: *${ATTEMPT}*" >release_note.md
+          gh release edit -F release_note.md automation
 
   # One job per platform instead of one matrix job, so that `update-docker` can depend
   # on the Linux x86_64 archive alone. As a matrix it had to wait for all four: in run
@@ -217,9 +231,11 @@ jobs:
     name: Update Docker Image
     needs: [prerelease, build-linux-x86_64]
     # Only the Linux x86_64 archive goes into the image, so nothing else is waited for.
+    # Require that archive's build to succeed: skipped is not usable provenance.
     if: |
       always() &&
-      needs.build-linux-x86_64.result != 'cancelled' &&
+      needs.prerelease.result == 'success' &&
+      needs.build-linux-x86_64.result == 'success' &&
       (needs.prerelease.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     env:
@@ -393,9 +409,8 @@ jobs:
   failure:
     name: Failure
     needs: [prerelease, build-linux-x86_64, build-linux-arm64, build-macos-arm64, build-macos-x86_64, update-docker]
-    # Only report on a build that actually ran. If prerelease itself failed there
-    # is no version to record, and writing an empty one is exactly what used to
-    # make the next scheduled run rebuild from scratch, forever.
+    # Prerelease records its own source-preparation failure before this fan-out.
+    # This job reports only failures after the platform builds were allowed to run.
     if: always() && failure() && needs.prerelease.result == 'success'
     runs-on: ubuntu-latest
     env:
