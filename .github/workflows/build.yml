@@ -24,6 +24,10 @@ on:
         description: "Force run build job when manually triggered"
         required: false
         default: "true"
+      nodejs_version:
+        description: "Build a versioned Docker canary with this Node.js version; leave empty for the normal latest images"
+        required: false
+        default: ""
   schedule:
     - cron: '*/30 * * * *'
 
@@ -45,6 +49,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MACOS_X86_MAX_AGE_DAYS: ${{ vars.MACOS_X86_MAX_AGE_DAYS || '7' }}
+      NODEJS_VERSION_OVERRIDE: ${{ github.event.inputs.nodejs_version }}
     permissions:
       contents: write
     outputs:
@@ -129,15 +134,18 @@ jobs:
             fi
           fi
 
-          if "${should_release}"; then
+          if [[ -n "${NODEJS_VERSION_OVERRIDE}" ]]; then
+            echo "Node.js Docker canary requested; leave the automation release state unchanged"
+          elif "${should_release}"; then
             echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*\nAttempts: *${attempt}*" >release_note.md
+            gh release edit -F release_note.md automation
           else
             gh release view automation | sed -n '/--/,$p' | awk '{ if (NR > 1) print $0 }' | sed "{
               s/Update Time:.*/Update Time: *$(date)*/
               s/Doris Version:.*/Doris Version: *${current_version}*/
             }" >release_note.md
+            gh release edit -F release_note.md automation
           fi
-          gh release edit -F release_note.md automation
 
           echo "should_release=${should_release}" >> $GITHUB_OUTPUT
           echo "should_build_macos_x86=${should_build_macos_x86}" >> $GITHUB_OUTPUT
@@ -166,7 +174,7 @@ jobs:
   build-linux-x86_64:
     name: Build
     needs: prerelease
-    if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
+    if: github.event.inputs.nodejs_version == '' && (needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true'))
     permissions:
       contents: write
     uses: ./.github/workflows/build-target.yml
@@ -178,7 +186,7 @@ jobs:
   build-linux-arm64:
     name: Build
     needs: prerelease
-    if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
+    if: github.event.inputs.nodejs_version == '' && (needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true'))
     permissions:
       contents: write
     uses: ./.github/workflows/build-target.yml
@@ -190,7 +198,7 @@ jobs:
   build-macos-arm64:
     name: Build
     needs: prerelease
-    if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
+    if: github.event.inputs.nodejs_version == '' && (needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true'))
     permissions:
       contents: write
     uses: ./.github/workflows/build-target.yml
@@ -203,7 +211,7 @@ jobs:
   build-macos-x86_64:
     name: Build
     needs: prerelease
-    if: needs.prerelease.outputs.should_build_macos_x86 == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
+    if: github.event.inputs.nodejs_version == '' && (needs.prerelease.outputs.should_build_macos_x86 == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true'))
     permissions:
       contents: write
     uses: ./.github/workflows/build-target.yml
@@ -225,6 +233,7 @@ jobs:
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODEJS_VERSION_OVERRIDE: ${{ github.event.inputs.nodejs_version }}
     steps:
       - name: Verify Linux x86_64 prebuilt provenance
         run: |
@@ -289,13 +298,29 @@ jobs:
             -o Dockerfile.upstream
 
           python3 - << 'PYEOF'
-          import sys, re
+          import os, re
 
           with open('Dockerfile.upstream') as f:
               content = f.read()
 
           # Normalize line endings (raw.githubusercontent.com may serve \r\n)
           content = content.replace('\r\n', '\n')
+
+          # A manual canary overrides only the Node.js ARG in the fetched
+          # upstream Dockerfile. Scheduled builds continue to inherit the
+          # current apache/doris default without pinning it here.
+          nodejs_version = os.environ.get('NODEJS_VERSION_OVERRIDE', '').strip()
+          if nodejs_version:
+              assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', nodejs_version), \
+                  f'Invalid Node.js version: {nodejs_version}'
+              content, substitutions = re.subn(
+                  r'^ARG NODEJS_VERSION=.*$',
+                  f'ARG NODEJS_VERSION={nodejs_version}',
+                  content,
+                  count=1,
+                  flags=re.MULTILINE,
+              )
+              assert substitutions == 1, 'Node.js ARG not found in upstream Dockerfile'
 
           # Patch 1: replace "clone & build thirdparty" block with downloading
           # our prebuilt artifact. The block starts with "# clone lastest source
@@ -349,7 +374,7 @@ jobs:
           build-args: |
             GITHUB_REPOSITORY=${{ github.repository }}
           push: true
-          tags: ${{ vars.DOCKER_TAGS || 'apache/doris:build-env-ldb-toolchain-latest' }}
+          tags: ${{ github.event.inputs.nodejs_version && format('apache/doris:build-env-ldb-toolchain-node{0}', github.event.inputs.nodejs_version) || vars.DOCKER_TAGS || 'apache/doris:build-env-ldb-toolchain-latest' }}
           platforms: linux/amd64
 
       - name: Build and Push Docker Image (no-avx2)
@@ -360,8 +385,30 @@ jobs:
           build-args: |
             GITHUB_REPOSITORY=${{ github.repository }}
           push: true
-          tags: ${{ vars.DOCKER_TAGS_NOAVX2 || 'apache/doris:build-env-ldb-toolchain-no-avx2-latest' }}
+          tags: ${{ github.event.inputs.nodejs_version && format('apache/doris:build-env-ldb-toolchain-no-avx2-node{0}', github.event.inputs.nodejs_version) || vars.DOCKER_TAGS_NOAVX2 || 'apache/doris:build-env-ldb-toolchain-no-avx2-latest' }}
           platforms: linux/amd64
+
+      - name: Verify Node.js Docker canary
+        if: github.event.inputs.nodejs_version != ''
+        env:
+          NODEJS_VERSION: ${{ github.event.inputs.nodejs_version }}
+        run: |
+          image="apache/doris:build-env-ldb-toolchain-node${NODEJS_VERSION}"
+          docker buildx build \
+            --build-arg BASE_IMAGE="${image}" \
+            --build-arg EXPECTED_NODEJS_VERSION="${NODEJS_VERSION}" \
+            --no-cache \
+            --platform linux/amd64 \
+            --progress plain \
+            - <<'EOF'
+          ARG BASE_IMAGE
+          FROM ${BASE_IMAGE}
+          ARG EXPECTED_NODEJS_VERSION
+          RUN actual_node="$(node --version)" \
+              && actual_npm="$(npm --version)" \
+              && test "${actual_node}" = "v${EXPECTED_NODEJS_VERSION}" \
+              && echo "Verified node ${actual_node}, npm ${actual_npm}"
+          EOF
 
   success:
     name: Success
@@ -370,6 +417,7 @@ jobs:
     # skipped on most runs, and a skipped dependency would otherwise skip this job and
     # leave the release note stuck at BUILDING forever.
     if: |
+      github.event.inputs.nodejs_version == '' &&
       !cancelled() && !failure() &&
       (needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true'))
     runs-on: ubuntu-latest
@@ -396,7 +444,7 @@ jobs:
     # Only report on a build that actually ran. If prerelease itself failed there
     # is no version to record, and writing an empty one is exactly what used to
     # make the next scheduled run rebuild from scratch, forever.
-    if: always() && failure() && needs.prerelease.result == 'success'
+    if: always() && failure() && needs.prerelease.result == 'success' && github.event.inputs.nodejs_version == ''
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
