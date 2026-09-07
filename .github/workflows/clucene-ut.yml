@@ -78,7 +78,7 @@ jobs:
 
   run_clucene_ut_macos:
     name: CLucene UT (MacOS)
-    runs-on: macos-12
+    runs-on: macos-15
     steps:
     - name: "Checkout ${{ github.event.pull_request.number }} ${{ github.event.pull_request.head.sha }}"
       uses: actions/checkout@v4
@@ -108,9 +108,36 @@ jobs:
           'maven' \
           'node' \
           'llvm@16'
+
+    - name: "Ensure Correct Xcode"
+      run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+
+    - name: "Set SDKROOT"
+      run: echo "SDKROOT=$(xcrun --show-sdk-path)" >> $GITHUB_ENV
+
+    - name: "Set Compiler"
+      run: |
+        echo "CC=$(xcrun --find clang)" >> $GITHUB_ENV
+        echo "CXX=$(xcrun --find clang++)" >> $GITHUB_ENV
+
+    - name: "Set Compilation Flags"
+      run: |
+        echo "CFLAGS=-isysroot $(xcrun --show-sdk-path)" >> $GITHUB_ENV
+        echo "CXXFLAGS=-isysroot $(xcrun --show-sdk-path)" >> $GITHUB_ENV
+
+    - name: "Use Homebrew LLVM"
+      run: |
+        echo "CC=$(brew --prefix llvm@16)/bin/clang" >> $GITHUB_ENV
+        echo "CXX=$(brew --prefix llvm@16)/bin/clang++" >> $GITHUB_ENV
+
     - name: "Run"
       run: |
         set -x
+        export SDKROOT=$(xcrun --show-sdk-path)
+        export CC=$(xcrun --find clang)
+        export CXX=$(xcrun --find clang++)
+        export CFLAGS="-isysroot $(xcrun --show-sdk-path)"
+        export CXXFLAGS="-isysroot $(xcrun --show-sdk-path)"
         mkdir build && cd build
         cmake ../
         make cl_test
