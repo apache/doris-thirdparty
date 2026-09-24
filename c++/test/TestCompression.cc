@@ -369,4 +369,57 @@ namespace orc {
     testSeekDecompressionStream(CompressionKind_LZ4);
     testSeekDecompressionStream(CompressionKind_SNAPPY);
   }
+
+  // ZLIB chunks are decoded by libdeflate, which must reject malformed chunks instead of
+  // returning partial data.
+  TEST(Compression, zlib_malformed_chunks) {
+    MemoryOutputStream memStream(DEFAULT_MEM_STREAM_SIZE);
+    MemoryPool* pool = getDefaultPool();
+    char testData[1000];
+    generateRandomData(testData, sizeof(testData), true);
+    compressAndVerify(CompressionKind_ZLIB, &memStream, CompressionStrategy_SPEED, 1024, 1024,
+                      *pool, testData, sizeof(testData));
+    const std::string compressed(memStream.getData(), memStream.getLength());
+    // A single chunk whose 3-byte header has the "original" bit cleared.
+    ASSERT_EQ(0, compressed[0] & 1);
+    ASSERT_EQ(compressed.size() - 3,
+              (static_cast<size_t>(static_cast<unsigned char>(compressed[0])) |
+               static_cast<size_t>(static_cast<unsigned char>(compressed[1])) << 8 |
+               static_cast<size_t>(static_cast<unsigned char>(compressed[2])) << 16) >>
+                  1);
+
+    auto decompressAll = [pool](const std::string& stream, uint64_t blockSize) {
+      auto decompressStream = createDecompressor(
+          CompressionKind_ZLIB,
+          std::make_unique<SeekableArrayInputStream>(stream.data(), stream.size()), blockSize,
+          *pool, getDefaultReaderMetrics());
+      std::string result;
+      const void* data;
+      int size;
+      while (decompressStream->Next(&data, &size)) {
+        result.append(static_cast<const char*>(data), static_cast<size_t>(size));
+      }
+      return result;
+    };
+    EXPECT_EQ(std::string(testData, sizeof(testData)), decompressAll(compressed, 1024));
+
+    // The decompressed chunk does not fit in the block buffer.
+    EXPECT_THROW(decompressAll(compressed, 512), ParseError);
+
+    // The chunk header claims more bytes than the stream holds.
+    EXPECT_THROW(decompressAll(compressed.substr(0, compressed.size() - 1), 1024), ParseError);
+
+    // The deflate payload is cut in half and the header is adjusted to match.
+    std::string truncated = compressed.substr(0, 3 + (compressed.size() - 3) / 2);
+    const size_t truncatedHeader = (truncated.size() - 3) << 1;
+    truncated[0] = static_cast<char>(truncatedHeader & 0xff);
+    truncated[1] = static_cast<char>((truncatedHeader >> 8) & 0xff);
+    truncated[2] = static_cast<char>((truncatedHeader >> 16) & 0xff);
+    EXPECT_THROW(decompressAll(truncated, 1024), ParseError);
+
+    // The first deflate block uses the reserved block type.
+    std::string corrupted = compressed;
+    corrupted[3] = 0x07;
+    EXPECT_THROW(decompressAll(corrupted, 1024), ParseError);
+  }
 }  // namespace orc

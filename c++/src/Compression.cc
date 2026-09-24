@@ -28,11 +28,7 @@
 #include <iomanip>
 #include <iostream>
 
-// Only used on x86 or x86_64
-#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(__i386__) || \
-  defined(__i386) || defined(_M_IX86)
 #include <libdeflate.h>
-#endif
 
 #include <sstream>
 
@@ -792,9 +788,6 @@ namespace orc {
     outputBufferLength = 0;
   }
 
-// Only used on x86 or x86_64
-#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(__i386__) || \
-  defined(__i386) || defined(_M_IX86)
   class ZlibDecompressionStreamByLibDeflate : public BlockDecompressionStream {
    public:
     ZlibDecompressionStreamByLibDeflate(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool,
@@ -827,7 +820,6 @@ namespace orc {
    private:
     libdeflate_decompressor* decompressor;
   };
-#endif
 
   class SnappyDecompressionStream : public BlockDecompressionStream {
    public:
@@ -1230,15 +1222,8 @@ namespace orc {
       case CompressionKind_NONE:
         return input;
       case CompressionKind_ZLIB:
-// Only used on x86 or x86_64
-#if defined(__x86_64__) || defined(_M_X64) || defined(i386) || defined(__i386__) || \
-  defined(__i386) || defined(_M_IX86)
         return std::make_unique<ZlibDecompressionStreamByLibDeflate>(std::move(input), blockSize, pool,
                                                                metrics);
-#else
-        return std::make_unique<ZlibDecompressionStream>(std::move(input), blockSize, pool,
-                                                         metrics);
-#endif
       case CompressionKind_SNAPPY:
         return std::make_unique<SnappyDecompressionStream>(std::move(input), blockSize, pool,
                                                            metrics);
