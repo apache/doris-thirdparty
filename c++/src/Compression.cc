@@ -744,7 +744,8 @@ namespace orc {
 
    private:
     // may need to stitch together multiple input buffers;
-    // to give snappy a contiguous block
+    // to give snappy a contiguous block. Allocated on the first chunk that spans input
+    // buffers, so streams whose chunks are always contiguous do not pay a block per stream.
     DataBuffer<char> inputDataBuffer;
   };
 
@@ -752,7 +753,7 @@ namespace orc {
                                                      size_t blockSize, MemoryPool& _pool,
                                                      ReaderMetrics* _metrics)
       : DecompressionStream(std::move(inStream), blockSize, _pool, _metrics),
-        inputDataBuffer(pool, blockSize) {}
+        inputDataBuffer(pool, 0) {}
 
   void BlockDecompressionStream::NextDecompress(const void** data, int* size,
                                                 size_t availableSize) {
