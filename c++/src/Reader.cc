@@ -36,6 +36,18 @@
 #include <vector>
 
 namespace orc {
+  namespace {
+    bool getWriterUsedProlepticGregorian(const proto::Footer& footer) {
+      if (footer.has_calendar()) {
+        return footer.calendar() == proto::PROLEPTIC_GREGORIAN;
+      }
+      if (!footer.has_writer()) {
+        return false;
+      }
+      return footer.writer() != WriterId::ORC_JAVA_WRITER;
+    }
+  }  // namespace
+
   // ORC files writen by these versions of cpp writers have inconsistent bloom filter
   // hashing. Bloom filters of them should not be used.
   static const char* BAD_CPP_BLOOM_FILTER_VERSIONS[] = {
@@ -271,6 +283,7 @@ namespace orc {
         firstRowOfStripe(*contents->pool, 0),
         enableEncodedBlock(opts.getEnableLazyDecoding()),
         readerTimezone(getTimezoneByName(opts.getTimezoneName())),
+        useProlepticGregorianValue(opts.getUseProlepticGregorian()),
         filter(_filter),
         stringDictFilter(_stringDictFilter) {
     uint64_t numberOfStripes;
@@ -325,7 +338,9 @@ namespace orc {
       sargs = opts.getSearchArgument();
       sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), footer->rowindexstride(),
                                           getWriterVersionImpl(_contents.get()),
-                                          contents->readerMetrics));
+                                          contents->readerMetrics, nullptr,
+                                          contents->writerUsedProlepticGregorian,
+                                          opts.getUseProlepticGregorian()));
     }
 
     skipBloomFilters = hasBadBloomFilters();
@@ -738,6 +753,7 @@ namespace orc {
     contents->schema = convertType(footer->types(0), *footer);
     contents->blockSize = getCompressionBlockSize(*contents->postscript);
     contents->compression = convertCompressionKind(*contents->postscript);
+    contents->writerUsedProlepticGregorian = getWriterUsedProlepticGregorian(*footer);
   }
 
   std::string ReaderImpl::getSerializedFileTail() const {
@@ -821,6 +837,10 @@ namespace orc {
     } else {
       return WriterId::ORC_JAVA_WRITER;
     }
+  }
+
+  bool ReaderImpl::writerUsedProlepticGregorian() const {
+    return contents->writerUsedProlepticGregorian;
   }
 
   std::string ReaderImpl::getSoftwareVersion() const {
@@ -1040,7 +1060,9 @@ namespace orc {
       auto sargs = opts.getSearchArgument();
       sargsApplier.reset(new SargsApplier(*contents->schema, sargs.get(), footer->rowindexstride(),
                                           getWriterVersionImpl(contents.get()),
-                                          contents->readerMetrics));
+                                          contents->readerMetrics, nullptr,
+                                          contents->writerUsedProlepticGregorian,
+                                          opts.getUseProlepticGregorian()));
 
       if (sargsApplier == nullptr || contents->metadata == nullptr) {
         return allStripesNeeded;

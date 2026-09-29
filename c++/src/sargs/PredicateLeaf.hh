@@ -120,7 +120,9 @@ namespace orc {
      * Evaluate current PredicateLeaf based on ColumnStatistics and BloomFilter
      */
     TruthValue evaluate(const WriterVersion writerVersion, const proto::ColumnStatistics& colStats,
-                        const BloomFilter* bloomFilter) const;
+                        const BloomFilter* bloomFilter,
+                        bool writerUsedProlepticGregorian = true,
+                        bool useProlepticGregorian = true) const;
 
     std::string toString() const;
 
@@ -138,7 +140,9 @@ namespace orc {
 
     std::string columnDebugString() const;
 
-    TruthValue evaluatePredicateMinMax(const proto::ColumnStatistics& colStats) const;
+    TruthValue evaluatePredicateMinMax(const proto::ColumnStatistics& colStats,
+                                       bool writerUsedProlepticGregorian,
+                                       bool useProlepticGregorian) const;
 
     TruthValue evaluatePredicateBloomFiter(const BloomFilter* bloomFilter, bool hasNull) const;
 
