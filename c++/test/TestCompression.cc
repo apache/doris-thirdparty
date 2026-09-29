@@ -25,6 +25,8 @@
 #include "wrap/orc-proto-wrapper.hh"
 
 #include <algorithm>
+#include <cstdlib>
+#include <map>
 
 namespace orc {
   const int DEFAULT_MEM_STREAM_SIZE = 1024 * 1024 * 2;  // 2M
@@ -421,5 +423,73 @@ namespace orc {
     std::string corrupted = compressed;
     corrupted[3] = 0x07;
     EXPECT_THROW(decompressAll(corrupted, 1024), ParseError);
+  }
+
+  class CountingMemoryPool : public MemoryPool {
+   public:
+    char* malloc(uint64_t size) override {
+      char* p = static_cast<char*>(std::malloc(size));
+      sizes[p] = size;
+      current += size;
+      peak = std::max(peak, current);
+      return p;
+    }
+    void free(char* p) override {
+      auto it = sizes.find(p);
+      current -= it->second;
+      sizes.erase(it);
+      std::free(p);
+    }
+
+    uint64_t current = 0;
+    uint64_t peak = 0;
+
+   private:
+    std::map<char*, uint64_t> sizes;
+  };
+
+  // Block codecs copy a chunk into a scratch buffer only when it spans input buffers, so a
+  // stream whose chunks are contiguous must not allocate a second block.
+  TEST(Compression, block_decompression_input_buffer_is_lazy) {
+    const uint64_t blockSize = 256 * 1024;
+    std::string testData;
+    for (int i = 0; i < 1000; ++i) {
+      testData.push_back(static_cast<char>('a' + i % 26));
+    }
+    for (CompressionKind kind : {CompressionKind_ZLIB, CompressionKind_ZSTD, CompressionKind_LZ4,
+                                 CompressionKind_SNAPPY}) {
+      SCOPED_TRACE(kind);
+      MemoryOutputStream memStream(DEFAULT_MEM_STREAM_SIZE);
+      compressAndVerify(kind, &memStream, CompressionStrategy_COMPRESSION, 1024, 1024,
+                        *getDefaultPool(), testData.data(), testData.size());
+      const std::string compressed(memStream.getData(), memStream.getLength());
+      ASSERT_EQ(0, compressed[0] & 1);
+
+      // 0 hands over the whole stream in one buffer; 7 splits the chunk across many buffers.
+      for (uint64_t inputBlockSize : {uint64_t{0}, uint64_t{7}}) {
+        SCOPED_TRACE(inputBlockSize);
+        CountingMemoryPool pool;
+        {
+          auto decompressStream =
+              createDecompressor(kind,
+                                 std::make_unique<SeekableArrayInputStream>(
+                                     compressed.data(), compressed.size(), inputBlockSize),
+                                 blockSize, pool, getDefaultReaderMetrics());
+          std::string result;
+          const void* data;
+          int size;
+          while (decompressStream->Next(&data, &size)) {
+            result.append(static_cast<const char*>(data), static_cast<size_t>(size));
+          }
+          EXPECT_EQ(testData, result);
+          if (inputBlockSize == 0) {
+            EXPECT_EQ(blockSize, pool.peak);
+          } else {
+            EXPECT_EQ(blockSize + compressed.size() - 3, pool.peak);
+          }
+        }
+        EXPECT_EQ(0, pool.current);
+      }
+    }
   }
 }  // namespace orc
