@@ -413,6 +413,36 @@ void TestCompactionTokenCounts(CuTest* tc) {
     CuAssertIntEquals(tc, _T("second destination title tokens"), 3, titleCounts[1]);
 }
 
+void TestCompactionDeletedDocumentsSingleDestination(CuTest* tc) {
+    // Match the ordinary DELETE regression: each source has a surviving document
+    // and a deleted 256-token document. The destination has 17 tokens, not 529.
+    const std::string deleted = repeatedToken("alpha", 240) + repeatedToken("omega", 16);
+    RAMDirectory source0;
+    RAMDirectory source1;
+    writeNormsIndex(source0, {{"alpha", "one"}, {deleted, "gone"}});
+    writeNormsIndex(source1,
+                    {{"alpha alpha " + repeatedToken("omega", 14), "two"}, {deleted, "gone"}});
+    MockRAMDirectory destination;
+    destination.setRandomIOExceptionRate(0.0, 0);
+    RAMDirectory scratch;
+    lucene::analysis::SimpleAnalyzer<char> analyzer;
+    IndexWriter writer(&scratch, &analyzer, true);
+    std::vector<lucene::store::Directory*> sources {&source0, &source1};
+    std::vector<std::vector<std::pair<uint32_t, uint32_t>>> mapping {
+            {{0, 0}, {UINT32_MAX, UINT32_MAX}}, {{0, 1}, {UINT32_MAX, UINT32_MAX}}};
+    writer.indexCompaction(sources, {&destination}, mapping, {2});
+    writer.close();
+    auto* reader = IndexReader::open(&destination);
+    const auto bodyTokens = reader->sumTotalTermFreq(_T("body")).value();
+    const auto titleTokens = reader->sumTotalTermFreq(_T("title")).value();
+    const auto documents = reader->maxDoc();
+    reader->close();
+    _CLDELETE(reader);
+    CuAssertIntEquals(tc, _T("surviving documents"), 2, documents);
+    CuAssertIntEquals(tc, _T("surviving body tokens"), 17, bodyTokens);
+    CuAssertIntEquals(tc, _T("surviving title tokens"), 2, titleTokens);
+}
+
 void TestCompactionWithoutFrequencies(CuTest* tc) {
     for (bool norms : {false, true}) {
         RAMDirectory source;
@@ -456,6 +486,7 @@ CuSuite* testIndexCompaction() {
     SUITE_ADD_TEST(suite, TestMergeNullBitmapEmptyIndexSrcBitmapValues);
     SUITE_ADD_TEST(suite, TestMergeNullBitmapIgnoreDoc);
     SUITE_ADD_TEST(suite, TestCompactionTokenCounts);
+    SUITE_ADD_TEST(suite, TestCompactionDeletedDocumentsSingleDestination);
     SUITE_ADD_TEST(suite, TestCompactionWithoutFrequencies);
 
     return suite;
