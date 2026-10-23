@@ -76,8 +76,13 @@ size_t encodeZigzag256(const uint32_t* in, size_t n, uint8_t* out);
 size_t encodeDelta1_128(const uint32_t* in, size_t n, uint8_t* out);
 size_t encodeDelta1_256(const uint32_t* in, size_t n, uint8_t* out);
 
+// The decoders may load up to kDecodePadding bytes past `end` (the loaded values are never
+// used), so the buffer must be readable that far.
+constexpr size_t kDecodePadding = 16;
+
 // Decoders write exactly n values to out and return the number of input bytes consumed.
-// Reading never goes past `end`; a malformed or truncated stream throws CL_ERR_CorruptIndex.
+// Nothing at or after `end` is interpreted; a malformed or truncated stream throws
+// CL_ERR_CorruptIndex.
 size_t decodeZigzag128(const uint8_t* in, const uint8_t* end, size_t n, uint32_t* out);
 size_t decodeZigzag256(const uint8_t* in, const uint8_t* end, size_t n, uint32_t* out);
 size_t decodeDelta1_128(const uint8_t* in, const uint8_t* end, size_t n, uint32_t* out);

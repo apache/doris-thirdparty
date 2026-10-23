@@ -21,6 +21,10 @@
 #include <cstring>
 #include <utility>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+
 #include "CLucene/_ApiHeader.h"
 #include "CLucene/debug/error.h"
 
@@ -56,10 +60,6 @@ inline uint32_t bitLength(uint32_t x) {
     return x == 0 ? 0 : 32 - static_cast<uint32_t>(__builtin_clz(x));
 }
 
-inline uint32_t maskOf(uint32_t b) {
-    return b >= 32 ? ~0u : (1u << b) - 1;
-}
-
 inline uint32_t load32(const uint8_t* p, size_t bytes) {
     uint32_t v = 0;
     memcpy(&v, p, bytes);
@@ -70,6 +70,14 @@ inline uint32_t load32(const uint8_t* p, size_t bytes) {
 // Delta transforms
 // ---------------------------------------------------------------------------------
 
+// Eight 32-bit lanes; the compiler maps them to whatever vector registers the target has. The
+// functions passing them by value are internal, so the ABI note of GCC does not matter.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wpsabi"
+#endif
+typedef uint32_t U32x8 __attribute__((vector_size(32)));
+typedef uint32_t U32x8Unaligned __attribute__((vector_size(32), aligned(4), may_alias));
+
 struct ZigzagDelta {
     static uint32_t forward(uint32_t cur, uint32_t prev) {
         uint32_t d = cur - prev;
@@ -77,11 +85,13 @@ struct ZigzagDelta {
     }
     // The signed difference a transformed value stands for.
     static uint32_t toDelta(uint32_t t) { return (t >> 1) ^ (0u - (t & 1)); }
+    static U32x8 toDelta(U32x8 t) { return (t >> 1) ^ (0u - (t & 1u)); }
 };
 
 struct Delta1 {
     static uint32_t forward(uint32_t cur, uint32_t prev) { return cur - prev - 1; }
     static uint32_t toDelta(uint32_t t) { return t + 1; }
+    static U32x8 toDelta(U32x8 t) { return t + 1u; }
 };
 
 // ---------------------------------------------------------------------------------
@@ -90,10 +100,62 @@ struct Delta1 {
 // plain horizontal packing of 32 consecutive values, with L == 8 the vertical layout.
 // ---------------------------------------------------------------------------------
 
+#ifdef __AVX2__
+// Horizontal unpacking with AVX2. Eight consecutive b-bit values occupy exactly b bytes, so the
+// pattern of a group of eight is the same for the four groups of a unit. For b <= 25 every
+// value lies within four bytes: the bytes of the first four values are picked from 16 bytes
+// loaded at the start of the group, those of the other four from 16 bytes loaded at byte
+// 4*b/8, then shifted right by their bit offset.
+constexpr int kMaxShuffledWidth = 25;
+// The loads of the last group reach this many bytes past the 4*b bytes of a unit.
+constexpr size_t kUnpackOverread = 16;
+
+struct HorizontalTables {
+    uint8_t shuffle[kMaxShuffledWidth + 1][32];
+    uint32_t shift[kMaxShuffledWidth + 1][8];
+};
+
+constexpr HorizontalTables makeHorizontalTables() {
+    HorizontalTables t = {};
+    for (int b = 1; b <= kMaxShuffledWidth; ++b) {
+        for (int k = 0; k < 8; ++k) {
+            const int half = k / 4;
+            const int rel = k * b - (half ? 8 * ((4 * b) >> 3) : 0);
+            t.shift[b][k] = rel & 7;
+            for (int j = 0; j < 4; ++j) {
+                t.shuffle[b][half * 16 + (k % 4) * 4 + j] = (rel >> 3) + j;
+            }
+        }
+    }
+    return t;
+}
+
+constexpr HorizontalTables kHorizontalTables = makeHorizontalTables();
+#else
+constexpr size_t kUnpackOverread = 0;
+#endif
+
 template <int B, int L>
 void unpackUnit(const uint8_t* in, uint32_t* out) {
     if constexpr (B == 0) {
         memset(out, 0, kGroup * L * sizeof(uint32_t));
+#ifdef __AVX2__
+    } else if constexpr (L == 1 && B <= kMaxShuffledWidth) {
+        const __m256i shuffle =
+                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(kHorizontalTables.shuffle[B]));
+        const __m256i shift =
+                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(kHorizontalTables.shift[B]));
+        const __m256i mask = _mm256_set1_epi32(static_cast<int>((1u << B) - 1));
+        for (int g = 0; g < 4; ++g) {
+            const uint8_t* p = in + g * B;
+            __m256i bytes = _mm256_inserti128_si256(
+                    _mm256_castsi128_si256(_mm_loadu_si128(reinterpret_cast<const __m128i*>(p))),
+                    _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + ((4 * B) >> 3))), 1);
+            __m256i v = _mm256_and_si256(
+                    _mm256_srlv_epi32(_mm256_shuffle_epi8(bytes, shuffle), shift), mask);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(out + 8 * g), v);
+        }
+#endif
     } else {
         uint32_t w[B * L];
         memcpy(w, in, sizeof(w));
@@ -126,25 +188,40 @@ constexpr std::array<UnpackFn, 33> kUnpackHorizontal =
 constexpr std::array<UnpackFn, 33> kUnpackVertical =
         makeUnpackTable<kLanes>(std::make_index_sequence<33> {});
 
-// Packs 32 rows x L lanes (values at i*L+l) into b*L words.
-void packUnit(const uint32_t* v, size_t lanes, uint32_t b, uint32_t* words) {
-    const uint32_t mask = maskOf(b);
-    for (size_t l = 0; l < lanes; ++l) {
-        uint64_t acc = 0;
-        uint32_t bits = 0;
-        size_t j = 0;
-        for (size_t i = 0; i < kGroup; ++i) {
-            acc |= static_cast<uint64_t>(v[i * lanes + l] & mask) << bits;
-            bits += b;
-            if (bits >= 32) {
-                words[j * lanes + l] = static_cast<uint32_t>(acc);
-                ++j;
-                acc >>= 32;
-                bits -= 32;
+// The inverse of unpackUnit: packs 32 rows x L lanes (values at i*L+l) into B*L words.
+template <int B, int L>
+void packUnit(const uint32_t* v, uint32_t* words) {
+    if constexpr (B != 0) {
+        uint32_t w[B * L] = {};
+        constexpr uint32_t mask = B == 32 ? ~0u : (1u << (B % 32)) - 1;
+        PFOR_UNROLL
+        for (int i = 0; i < 32; ++i) {
+            const int bit = i * B;
+            const int j = bit >> 5;
+            const int s = bit & 31;
+            for (int l = 0; l < L; ++l) {
+                const uint32_t x = v[i * L + l] & mask;
+                w[j * L + l] |= x << s;
+                if (s + B > 32) {
+                    w[(j + 1) * L + l] |= x >> (32 - s);
+                }
             }
         }
+        memcpy(words, w, sizeof(w));
     }
 }
+
+using PackFn = void (*)(const uint32_t*, uint32_t*);
+
+template <int L, size_t... B>
+constexpr std::array<PackFn, 33> makePackTable(std::index_sequence<B...>) {
+    return {{&packUnit<static_cast<int>(B), L>...}};
+}
+
+constexpr std::array<PackFn, 33> kPackHorizontal =
+        makePackTable<1>(std::make_index_sequence<33> {});
+constexpr std::array<PackFn, 33> kPackVertical =
+        makePackTable<kLanes>(std::make_index_sequence<33> {});
 
 inline size_t packedSize(size_t k, uint32_t b, bool vertical) {
     return vertical ? kGroup * b : (k * b + 7) / 8;
@@ -157,17 +234,21 @@ size_t packValues(const uint32_t* t, size_t k, uint32_t b, bool vertical, uint8_
     }
     if (vertical) {
         uint32_t words[kLanes * 32];
-        packUnit(t, kLanes, b, words);
+        kPackVertical[b](t, words);
         memcpy(out, words, kGroup * b);
         return kGroup * b;
     }
     uint8_t* o = out;
     for (size_t g = 0; g < k; g += kGroup) {
         const size_t n = std::min(kGroup, k - g);
-        uint32_t buf[kGroup] = {};
-        memcpy(buf, t + g, n * sizeof(uint32_t));
         uint32_t words[32];
-        packUnit(buf, 1, b, words);
+        if (n == kGroup) {
+            kPackHorizontal[b](t + g, words);
+        } else {
+            uint32_t buf[kGroup] = {};
+            memcpy(buf, t + g, n * sizeof(uint32_t));
+            kPackHorizontal[b](buf, words);
+        }
         const size_t bytes = n == kGroup ? 4 * b : (n * b + 7) / 8;
         memcpy(o, words, bytes);
         o += bytes;
@@ -211,10 +292,6 @@ uint8_t* putFirst(uint8_t* o, uint32_t x) {
 constexpr uint32_t kRawList = 0xff;
 constexpr uint32_t kVarint4 = 1u << 24;
 
-inline size_t varintSize(uint32_t x) {
-    return x < kVarint1 ? 1 : x < kVarint2 ? 2 : x < kVarint3 ? 3 : x < kVarint4 ? 4 : 5;
-}
-
 uint8_t* putVarint(uint8_t* o, uint32_t x) {
     if (x < kVarint1) {
         *o++ = static_cast<uint8_t>(x);
@@ -239,12 +316,25 @@ uint8_t* putVarint(uint8_t* o, uint32_t x) {
     return o;
 }
 
-// Size of the hi parts section of a list block; sets `raw` if the raw form is the smaller.
-size_t hiListSize(const uint32_t* hi, size_t n, bool& raw) {
-    size_t varints = 0;
-    for (size_t i = 0; i < n; ++i) {
-        varints += varintSize(hi[i]);
+// Bytes of the hi parts (t >> b) of the `exceptions` values wider than b, written as variable
+// length integers; maxBits is the width of the widest value.
+inline size_t hiVarintBytes(const uint32_t* t, size_t k, uint32_t b, uint32_t maxBits,
+                            size_t exceptions) {
+    if (maxBits - b <= 7) {
+        return exceptions; // every hi part is below 128, one byte each
     }
+    size_t bytes = 0;
+    for (size_t i = 0; i < k; ++i) {
+        const uint32_t hi = t[i] >> b;
+        bytes += (hi != 0) *
+                 (1 + (hi >= kVarint1) + (hi >= kVarint2) + (hi >= kVarint3) + (hi >= kVarint4));
+    }
+    return bytes;
+}
+
+// Size of the hi parts section of a list block with n exceptions; sets `raw` if the raw form
+// is the smaller.
+inline size_t hiListSize(size_t varints, size_t n, bool& raw) {
     const size_t rawSize = 1 + 4 * n;
     raw = rawSize < varints;
     return raw ? rawSize : varints;
@@ -270,12 +360,25 @@ size_t encodeBlock(const uint32_t* t, size_t k, bool vertical, uint8_t* out) {
         return o - out;
     }
 
-    uint32_t hist[33] = {};
+    // histogram of the bit lengths; four counters break the dependency between equal values
+    uint32_t hists[4][33] = {};
+    size_t h = 0;
+    for (; h + 4 <= k; h += 4) {
+        ++hists[0][bitLength(t[h])];
+        ++hists[1][bitLength(t[h + 1])];
+        ++hists[2][bitLength(t[h + 2])];
+        ++hists[3][bitLength(t[h + 3])];
+    }
+    for (; h < k; ++h) {
+        ++hists[0][bitLength(t[h])];
+    }
+    uint32_t hist[33];
     uint32_t maxBits = 0;
-    for (size_t i = 0; i < k; ++i) {
-        const uint32_t bl = bitLength(t[i]);
-        ++hist[bl];
-        maxBits = std::max(maxBits, bl);
+    for (uint32_t bl = 0; bl <= 32; ++bl) {
+        hist[bl] = hists[0][bl] + hists[1][bl] + hists[2][bl] + hists[3][bl];
+        if (hist[bl] != 0) {
+            maxBits = bl;
+        }
     }
 
     // Choose the packed width and the way the values wider than it are patched.
@@ -298,15 +401,10 @@ size_t encodeBlock(const uint32_t* t, size_t k, bool vertical, uint8_t* out) {
         }
         const size_t listBase = 2 + packed + exceptions;
         if (exceptions <= 255 && listBase + exceptions < best.cost) {
-            uint32_t hi[256];
-            size_t n = 0;
-            for (size_t i = 0; i < k; ++i) {
-                if (t[i] >> b != 0) {
-                    hi[n++] = t[i] >> b;
-                }
-            }
             bool raw;
-            const size_t cost = listBase + hiListSize(hi, n, raw);
+            const size_t cost = listBase + hiListSize(hiVarintBytes(t, k, static_cast<uint32_t>(b),
+                                                                    maxBits, exceptions),
+                                                      exceptions, raw);
             if (cost < best.cost) {
                 best = {cost, kModeList, static_cast<uint32_t>(b)};
             }
@@ -330,7 +428,7 @@ size_t encodeBlock(const uint32_t* t, size_t k, bool vertical, uint8_t* out) {
             }
         }
         bool raw;
-        hiListSize(hi, n, raw);
+        hiListSize(hiVarintBytes(t, k, b, maxBits, n), n, raw);
         if (raw) {
             *o++ = kRawList;
             memcpy(o, hi, 4 * n);
@@ -447,21 +545,80 @@ void unpackValues(Reader& r, size_t k, uint32_t b, bool vertical, uint32_t* t) {
     if (vertical) {
         kUnpackVertical[b](r.p, t);
     } else {
+        // Units are read with kUnpackOverread bytes more than they have, which kDecodePadding
+        // allows past the end.
+        static_assert(kUnpackOverread <= kDecodePadding, "see PForCodec.h");
+        static_assert(8 <= kDecodePadding, "see PForCodec.h");
         size_t g = 0;
         const uint8_t* p = r.p;
         for (; g + kGroup <= k; g += kGroup, p += 4 * b) {
             kUnpackHorizontal[b](p, t + g);
         }
-        if (g < k) {
-            const size_t n = k - g;
-            uint8_t buf[4 * 32] = {};
-            memcpy(buf, p, (n * b + 7) / 8);
-            uint32_t tmp[kGroup];
-            kUnpackHorizontal[b](buf, tmp);
-            memcpy(t + g, tmp, n * sizeof(uint32_t));
+        // fewer than 32 values left: each one comes from the 8 bytes at its first byte
+        const uint32_t mask = b >= 32 ? ~0u : (1u << b) - 1;
+        for (size_t i = 0; g + i < k; ++i) {
+            uint64_t word;
+            memcpy(&word, p + ((i * b) >> 3), sizeof(word));
+            t[g + i] = static_cast<uint32_t>(word >> ((i * b) & 7)) & mask;
         }
     }
     r.p += bytes;
+}
+
+#ifdef __AVX2__
+// For a byte of the exception bitmap, the index into the (still packed) hi parts of the value of
+// each lane: the number of exceptions before that lane.
+struct ExpandTable {
+    uint32_t index[256][8];
+};
+
+constexpr ExpandTable makeExpandTable() {
+    ExpandTable t = {};
+    for (int bits = 0; bits < 256; ++bits) {
+        uint32_t before = 0;
+        for (int lane = 0; lane < 8; ++lane) {
+            t.index[bits][lane] = before;
+            before += (bits >> lane) & 1;
+        }
+    }
+    return t;
+}
+
+constexpr ExpandTable kExpandTable = makeExpandTable();
+#endif
+
+// t[i] |= hi[n] << b for the n-th set bit i of the bitmap. `hi` must have 8 readable entries
+// after the last exception.
+inline void applyBitmapExceptions(uint32_t* t, const uint8_t* bitmap, size_t k, const uint32_t* hi,
+                                  uint32_t b) {
+    size_t n = 0;
+    size_t byte = 0;
+#ifdef __AVX2__
+    const __m128i shift = _mm_cvtsi32_si128(static_cast<int>(b));
+    const __m256i lanes = _mm256_setr_epi32(1, 2, 4, 8, 16, 32, 64, 128);
+    for (; byte < k / 8; ++byte) {
+        const uint32_t bits = bitmap[byte];
+        const __m256i spread = _mm256_permutevar8x32_epi32(
+                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(hi + n)),
+                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(kExpandTable.index[bits])));
+        const __m256i set = _mm256_cmpeq_epi32(
+                _mm256_and_si256(_mm256_set1_epi32(static_cast<int>(bits)), lanes), lanes);
+        __m256i* dst = reinterpret_cast<__m256i*>(t + 8 * byte);
+        _mm256_storeu_si256(
+                dst, _mm256_or_si256(_mm256_loadu_si256(dst),
+                                     _mm256_and_si256(_mm256_sll_epi32(spread, shift), set)));
+        n += __builtin_popcount(bits);
+    }
+#endif
+    for (; byte < (k + 7) / 8; ++byte) {
+        for (uint32_t bits = bitmap[byte]; bits != 0; bits &= bits - 1) {
+            const size_t i = byte * 8 + __builtin_ctz(bits);
+            if (i >= k) {
+                corrupt("PFOR: bad exception position");
+            }
+            t[i] |= hi[n++] << b;
+        }
+    }
 }
 
 // Decodes the next block of k deltas into t.
@@ -526,19 +683,11 @@ void decodeBlock(Reader& r, size_t k, bool vertical, uint32_t* t) {
         for (size_t i = 0; i < bitmapBytes; ++i) {
             count += __builtin_popcount(bitmap[i]);
         }
-        uint32_t hi[256];
+        uint32_t hi[256 + 8];
         unpackValues(r, count, bx, false, hi);
+        memset(hi + count, 0, 8 * sizeof(uint32_t)); // the vector code reads whole registers
         unpackValues(r, k, b, vertical, t);
-        size_t n = 0;
-        for (size_t byte = 0; byte < bitmapBytes; ++byte) {
-            for (uint32_t bits = bitmap[byte]; bits != 0; bits &= bits - 1) {
-                const size_t i = byte * 8 + __builtin_ctz(bits);
-                if (i >= k) {
-                    corrupt("PFOR: bad exception position");
-                }
-                t[i] |= hi[n++] << b;
-            }
-        }
+        applyBitmapExceptions(t, bitmap, k, hi, b);
     }
 }
 
@@ -564,45 +713,41 @@ size_t encodeImpl(const uint32_t* in, size_t n, uint8_t* out) {
     return o - out;
 }
 
-// out[i] = cur + x[0] + ... + x[i] for i < k, returns the last value. The serial dependency of
-// the running sum limits the speed, so large blocks are split in four segments whose sums are
-// known up front and whose running sums then advance independently.
-inline uint32_t prefixSum(uint32_t cur, const uint32_t* x, size_t k, uint32_t* out) {
+// Inclusive prefix sum within the 8 lanes.
+inline U32x8 scan8(U32x8 x) {
+    const U32x8 zero = {};
+    x += __builtin_shufflevector(x, zero, 8, 0, 1, 2, 3, 4, 5, 6);
+    x += __builtin_shufflevector(x, zero, 8, 8, 0, 1, 2, 3, 4, 5);
+    x += __builtin_shufflevector(x, zero, 8, 8, 8, 8, 0, 1, 2, 3);
+    return x;
+}
+
+// Turns the k transformed values t into out[i] = cur + delta(t[0]) + ... + delta(t[i]) and
+// returns the last value. Eight values are scanned at a time; the scan of a group does not
+// depend on the running total, which only costs one add per group.
+template <class Transform>
+inline uint32_t accumulate(uint32_t cur, const uint32_t* t, size_t k, uint32_t* out) {
     size_t i = 0;
-    if (k >= 32) {
-        const size_t seg = k / 4;
-        uint32_t sum[3] = {0, 0, 0};
-        for (size_t j = 0; j < 3; ++j) {
-            for (size_t m = 0; m < seg; ++m) {
-                sum[j] += x[j * seg + m];
-            }
+    if (k >= 8) {
+        U32x8 total = {cur, cur, cur, cur, cur, cur, cur, cur};
+        for (; i + 8 <= k; i += 8) {
+            U32x8 x = scan8(Transform::toDelta(*reinterpret_cast<const U32x8Unaligned*>(t + i)));
+            *reinterpret_cast<U32x8Unaligned*>(out + i) = x + total;
+            total += __builtin_shufflevector(x, x, 7, 7, 7, 7, 7, 7, 7, 7);
         }
-        uint32_t a0 = cur;
-        uint32_t a1 = a0 + sum[0];
-        uint32_t a2 = a1 + sum[1];
-        uint32_t a3 = a2 + sum[2];
-        for (size_t m = 0; m < seg; ++m) {
-            a0 += x[m];
-            a1 += x[seg + m];
-            a2 += x[2 * seg + m];
-            a3 += x[3 * seg + m];
-            out[m] = a0;
-            out[seg + m] = a1;
-            out[2 * seg + m] = a2;
-            out[3 * seg + m] = a3;
-        }
-        cur = a3;
-        i = 4 * seg;
+        cur = total[0];
     }
     for (; i < k; ++i) {
-        cur += x[i];
+        cur += Transform::toDelta(t[i]);
         out[i] = cur;
     }
     return cur;
 }
 
+// Everything it calls is inlined: the arguments are few and the reader state stays in registers.
 template <class Transform, size_t kBlock, bool kVertical>
-size_t decodeImpl(const uint8_t* in, const uint8_t* end, size_t n, uint32_t* out) {
+__attribute__((flatten)) size_t decodeImpl(const uint8_t* in, const uint8_t* end, size_t n,
+                                           uint32_t* out) {
     if (n == 0) {
         return 0;
     }
@@ -613,10 +758,7 @@ size_t decodeImpl(const uint8_t* in, const uint8_t* end, size_t n, uint32_t* out
     for (size_t i = 1; i < n;) {
         const size_t k = std::min(kBlock, n - i);
         decodeBlock(r, k, kVertical && k == kBlock, t);
-        for (size_t j = 0; j < k; ++j) {
-            t[j] = Transform::toDelta(t[j]);
-        }
-        cur = prefixSum(cur, t, k, out + i);
+        cur = accumulate<Transform>(cur, t, k, out + i);
         i += k;
     }
     return r.p - in;

@@ -744,20 +744,22 @@ void test_pfor_codec_golden(CuTest* tc) {
         file.insert(file.end(), chunk, chunk + got);
     }
     fclose(f);
+    const size_t fileBytes = file.size();
+    file.resize(fileBytes + pfor::kDecodePadding); // the decoders may look past the stream
 
-    CuAssertTrue(tc, file.size() >= 8 && memcmp(file.data(), "PFG1", 4) == 0);
+    CuAssertTrue(tc, fileBytes >= 8 && memcmp(file.data(), "PFG1", 4) == 0);
     uint32_t cases;
     memcpy(&cases, file.data() + 4, 4);
     size_t pos = 8;
     for (uint32_t c = 0; c < cases; ++c) {
-        CuAssertTrue(tc, pos + 10 <= file.size());
+        CuAssertTrue(tc, pos + 10 <= fileBytes);
         uint8_t variant = file[pos];
         uint8_t id = file[pos + 1];
         uint32_t n, len;
         memcpy(&n, file.data() + pos + 2, 4);
         memcpy(&len, file.data() + pos + 6, 4);
         pos += 10;
-        CuAssertTrue(tc, variant < 4 && pos + len <= file.size());
+        CuAssertTrue(tc, variant < 4 && pos + len <= fileBytes);
 
         const CodecVariant& v = kCodecVariants[variant];
         std::vector<uint32_t> expected = goldenArray(id, n);
@@ -767,7 +769,7 @@ void test_pfor_codec_golden(CuTest* tc) {
         CuAssertTrueWithMessage(tc, v.name, expected == decoded);
         pos += len;
     }
-    CuAssertTrue(tc, pos == file.size());
+    CuAssertTrue(tc, pos == fileBytes);
 }
 
 // The two data files written by older versions: *_arm.dat uses the 128 layout and
@@ -796,7 +798,7 @@ void test_pfor_codec_legacy_files(CuTest* tc) {
 
         for (int part = 0; part < 2; ++part) {
             uint32_t size = input->readVInt();
-            std::vector<uint8_t> buf(size);
+            std::vector<uint8_t> buf(size + pfor::kDecodePadding);
             input->readBytes(buf.data(), size);
             std::vector<uint32_t> decoded(arraySize);
             CodecDecodeFn decode = part == 0 ? file.decodeDocs : file.decodeFreqs;
@@ -831,6 +833,7 @@ void test_pfor_codec_roundtrip(CuTest* tc) {
 
                 // decode from a buffer of exactly the encoded size
                 enc.resize(len);
+                enc.resize(len + pfor::kDecodePadding);
                 std::vector<uint32_t> decoded(n);
                 size_t used = v.decode(enc.data(), enc.data() + len, n, decoded.data());
                 CuAssertTrueWithMessage(tc, v.name, used == len);
@@ -851,6 +854,7 @@ void test_pfor_codec_corrupt(CuTest* tc) {
 
             for (size_t cut : {size_t(0), size_t(1), enc.size() / 3, enc.size() - 1}) {
                 std::vector<uint8_t> truncated(enc.begin(), enc.begin() + cut);
+                truncated.resize(cut + pfor::kDecodePadding);
                 std::vector<uint32_t> decoded(n);
                 bool corrupt = false;
                 try {
@@ -864,11 +868,11 @@ void test_pfor_codec_corrupt(CuTest* tc) {
     }
 
     // a bit width above 32 in a block header
-    const uint8_t bad[] = {0x05, 0x3f, 0x00};
+    uint8_t bad[3 + pfor::kDecodePadding] = {0x05, 0x3f, 0x00};
     uint32_t out[8];
     bool corrupt = false;
     try {
-        pfor::decodeDelta1_128(bad, bad + sizeof(bad), 4, out);
+        pfor::decodeDelta1_128(bad, bad + 3, 4, out);
     } catch (CLuceneError& e) {
         corrupt = e.number() == CL_ERR_CorruptIndex;
     }
