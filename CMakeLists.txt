@@ -219,8 +219,6 @@ find_package(Zstd REQUIRED)
 #sse2neon
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/3rdparty/sse2neon)
 
-#TurboPFOR
-ADD_SUBDIRECTORY (src/ext/for)
 ADD_SUBDIRECTORY (src/shared)
 ADD_SUBDIRECTORY (src/core)
 ADD_SUBDIRECTORY (src/test)
