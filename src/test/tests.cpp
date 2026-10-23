@@ -21,6 +21,7 @@ unittest tests[] = {
         {"testStringReader", testStringReader},
         {"IndexCompress", testIndexCompress},
         {"TestUTF8Chars", testUTF8CharsSuite},
+        {"testPFOR", testPFORSuite},
 #ifdef TEST_CONTRIB_LIBS
         {"chinese", testchinese},
 #endif

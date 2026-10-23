@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 #include "PFORUtil.h"
-#include "vp4.h"
+#include "CLucene/util/PForCodec.h"
 #if (defined(__i386) || defined(__x86_64__))
 #include <cpuid.h>
 #endif
@@ -26,6 +26,37 @@
 CL_NS_USE(index)
 
 namespace {
+// The P4* entry points take no length. They read from buffers that the callers pad by
+// PFOR_BLOCK_SIZE, which is what the decoders need after the end of a stream.
+size_t decodeDelta1_256(unsigned char* in, size_t n, uint32_t* out) {
+    return lucene::util::pfor::decodeDelta1_256(in, in + lucene::util::pfor::encodedSizeBound(n), n,
+                                                out);
+}
+size_t decodeZigzag256(unsigned char* in, size_t n, uint32_t* out) {
+    return lucene::util::pfor::decodeZigzag256(in, in + lucene::util::pfor::encodedSizeBound(n), n,
+                                               out);
+}
+size_t decodeDelta1_128(unsigned char* in, size_t n, uint32_t* out) {
+    return lucene::util::pfor::decodeDelta1_128(in, in + lucene::util::pfor::encodedSizeBound(n), n,
+                                                out);
+}
+size_t decodeZigzag128(unsigned char* in, size_t n, uint32_t* out) {
+    return lucene::util::pfor::decodeZigzag128(in, in + lucene::util::pfor::encodedSizeBound(n), n,
+                                               out);
+}
+size_t encodeDelta1_256(uint32_t* in, size_t n, unsigned char* out) {
+    return lucene::util::pfor::encodeDelta1_256(in, n, out);
+}
+size_t encodeZigzag256(uint32_t* in, size_t n, unsigned char* out) {
+    return lucene::util::pfor::encodeZigzag256(in, n, out);
+}
+size_t encodeDelta1_128(uint32_t* in, size_t n, unsigned char* out) {
+    return lucene::util::pfor::encodeDelta1_128(in, n, out);
+}
+size_t encodeZigzag128(uint32_t* in, size_t n, unsigned char* out) {
+    return lucene::util::pfor::encodeZigzag128(in, n, out);
+}
+
 using DEC_FUNC = size_t (*)(unsigned char *__restrict, size_t, uint32_t *__restrict);
 using ENC_FUNC = size_t (*)(uint32_t *__restrict in, size_t n, unsigned char *__restrict out);
 DEC_FUNC g_p4nd1dec;
@@ -101,10 +132,10 @@ __attribute__((constructor)) void SelectPFORFunctions() {
     bool sse2 = (edx & bit_SSE2) != 0;
     bool sse42 = (ecx & bit_SSE4_2) != 0;
 #if defined(USE_AVX2)
-    g_p4nd1dec = p4nd1dec256v32;
-    g_p4nzdec = p4nzdec256v32;
-    g_p4nd1enc = p4nd1enc256v32;
-    g_p4nzenc = p4nzenc256v32;
+    g_p4nd1dec = decodeDelta1_256;
+    g_p4nzdec = decodeZigzag256;
+    g_p4nd1enc = encodeDelta1_256;
+    g_p4nzenc = encodeZigzag256;
 #else
     g_p4nd1dec = DefaultDDEC;
     g_p4nzdec = DefaultDEC;
@@ -112,10 +143,10 @@ __attribute__((constructor)) void SelectPFORFunctions() {
     g_p4nzenc = DefaultENC;
 #endif
 #else
-    g_p4nd1dec = p4nd1dec32;
-    g_p4nzdec = p4nzdec32;
-    g_p4nd1enc = p4nd1enc32;
-    g_p4nzenc = p4nzenc32;
+    g_p4nd1dec = decodeDelta1_128;
+    g_p4nzdec = decodeZigzag128;
+    g_p4nd1enc = encodeDelta1_128;
+    g_p4nzenc = encodeZigzag128;
 #endif
 }
 
@@ -174,7 +205,18 @@ uint32_t PforUtil::decodePos(IndexInput* in, std::vector<uint32_t>& buffer) {
         uint32_t serializedSize = in->readVInt();
         std::vector<uint8_t> buf(serializedSize + PFOR_BLOCK_SIZE);
         in->readBytes(buf.data(), serializedSize);
-        P4NZDEC(buf.data(), size, buffer.data());
+        // the same function as P4NZDEC, with the length of the stream
+#if (defined(__i386) || defined(__x86_64__))
+#if defined(USE_AVX2)
+        lucene::util::pfor::decodeZigzag256(buf.data(), buf.data() + serializedSize, size,
+                                            buffer.data());
+#else
+        DefaultDEC(buf.data(), size, buffer.data());
+#endif
+#else
+        lucene::util::pfor::decodeZigzag128(buf.data(), buf.data() + serializedSize, size,
+                                            buffer.data());
+#endif
     } else {
         for (uint32_t i = 0; i < size; i++) {
             buffer[i] = in->readVInt();

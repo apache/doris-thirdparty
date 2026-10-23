@@ -107,6 +107,7 @@ SET(test_files ./tests.cpp
         ./util/TestStrConvert.cpp
         ./query/TestMultiPhraseQuery.cpp
         ./store/TestUTF8Chars.cpp
+        ./store/testPFOR.cpp
         ${test_HEADERS})
 IF (USE_SHARED_OBJECT_FILES)
     GET_SHARED_FILES(clucene_shared_Files)
@@ -237,12 +238,6 @@ IF (ENABLE_COMPILE_TESTS)
                 DEPENDS cl_test-gcov)
     ENDIF (GccFlagGcov)
 
-    ADD_CUSTOM_TARGET(ic-make
-            COMMENT "Running pfor make"
-            COMMAND ls ${CMAKE_SOURCE_DIR}/src/ext/for
-            COMMAND ls ${CMAKE_BINARY_DIR}
-            COMMAND make -j 8
-            COMMAND cp ${CMAKE_SOURCE_DIR}/src/ext/for/libic.a ${CMAKE_BINARY_DIR}/bin/)
     #target for running all tests
     ADD_CUSTOM_TARGET(test-all
             COMMAND ${EXECUTABLE_OUTPUT_PATH}/cl_test-pedantic
@@ -272,9 +267,9 @@ IF (BUILD_STATIC_LIBRARIES)
                 LINK_FLAGS "-fsanitize=address -static-libasan")
     endif ()
     IF (UNIX)
-	    TARGET_LINK_LIBRARIES(cl_test clucene-core-static clucene-shared-static pthread ic ${EXTRA_LIBS} ${Roaring_LIBRARY})
+	    TARGET_LINK_LIBRARIES(cl_test clucene-core-static clucene-shared-static pthread ${EXTRA_LIBS} ${Roaring_LIBRARY})
     ELSE ()
-	    TARGET_LINK_LIBRARIES(cl_test clucene-core-static clucene-shared-static ic gtest ${EXTRA_LIBS} ${Roaring_LIBRARY})
+	    TARGET_LINK_LIBRARIES(cl_test clucene-core-static clucene-shared-static gtest ${EXTRA_LIBS} ${Roaring_LIBRARY})
     ENDIF (UNIX)
 
     SET(DATA_SOURCE_DIR ${clucene_SOURCE_DIR}/src/test/data)

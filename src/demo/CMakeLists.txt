@@ -37,12 +37,10 @@ ADD_EXECUTABLE(cl_demo_index EXCLUDE_FROM_ALL
 #./TestAnalyzer.cpp
 #${demo_HEADERS}
 #)
-#add_library(ic STATIC IMPORTED)
 
-#set_target_properties(ic PROPERTIES IMPORTED_LOCATION "${clucene-ext_SOURCE_DIR}/for/libic.a")
 
-TARGET_LINK_LIBRARIES(cl_demo clucene-core-static clucene-shared-static  ic ${EXTRA_LIBS})
-TARGET_LINK_LIBRARIES(cl_demo_index clucene-core-static clucene-shared-static  ic ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(cl_demo clucene-core-static clucene-shared-static  ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(cl_demo_index clucene-core-static clucene-shared-static  ${EXTRA_LIBS})
 
 ADD_EXECUTABLE(allIndex EXCLUDE_FROM_ALL
         ./allIndex.cpp
@@ -51,7 +49,7 @@ ADD_EXECUTABLE(allIndex EXCLUDE_FROM_ALL
         ${clucene-shared_SOURCE_DIR}/CLucene/util/dirent.cpp
         ${demo_HEADERS}
 )
-TARGET_LINK_LIBRARIES(allIndex clucene-core-static clucene-shared-static clucene-contribs-lib ic ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(allIndex clucene-core-static clucene-shared-static clucene-contribs-lib ${EXTRA_LIBS})
 
 ADD_EXECUTABLE(abnormal EXCLUDE_FROM_ALL
         ./abnormal.cpp
@@ -60,7 +58,7 @@ ADD_EXECUTABLE(abnormal EXCLUDE_FROM_ALL
         ${clucene-shared_SOURCE_DIR}/CLucene/util/dirent.cpp
         ${demo_HEADERS}
 )
-TARGET_LINK_LIBRARIES(abnormal clucene-core-static clucene-shared-static clucene-contribs-lib ic ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(abnormal clucene-core-static clucene-shared-static clucene-contribs-lib ${EXTRA_LIBS})
 
 ADD_EXECUTABLE(search EXCLUDE_FROM_ALL
         ./search.cpp
@@ -68,7 +66,7 @@ ADD_EXECUTABLE(search EXCLUDE_FROM_ALL
         ${clucene-shared_SOURCE_DIR}/CLucene/util/dirent.cpp
         ${demo_HEADERS}
 )
-TARGET_LINK_LIBRARIES(search clucene-core-static clucene-shared-static clucene-contribs-lib ic ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(search clucene-core-static clucene-shared-static clucene-contribs-lib ${EXTRA_LIBS})
 
 ADD_EXECUTABLE(strSearch EXCLUDE_FROM_ALL
         ./strSearch.cpp
@@ -77,7 +75,7 @@ ADD_EXECUTABLE(strSearch EXCLUDE_FROM_ALL
         ${clucene-shared_SOURCE_DIR}/CLucene/util/dirent.cpp
         ${demo_HEADERS}
 )
-TARGET_LINK_LIBRARIES(strSearch clucene-core-static clucene-shared-static clucene-contribs-lib ic ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(strSearch clucene-core-static clucene-shared-static clucene-contribs-lib ${EXTRA_LIBS})
 
 ADD_EXECUTABLE(pointSearch4 EXCLUDE_FROM_ALL
         ./pointSearch4.cpp
@@ -86,7 +84,7 @@ ADD_EXECUTABLE(pointSearch4 EXCLUDE_FROM_ALL
         ${clucene-shared_SOURCE_DIR}/CLucene/util/dirent.cpp
         ${demo_HEADERS}
 )
-TARGET_LINK_LIBRARIES(pointSearch4 clucene-core-static clucene-shared-static clucene-contribs-lib ic ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(pointSearch4 clucene-core-static clucene-shared-static clucene-contribs-lib ${EXTRA_LIBS})
 
 ADD_EXECUTABLE(pointSearch8 EXCLUDE_FROM_ALL
         ./pointSearch8.cpp
@@ -95,7 +93,7 @@ ADD_EXECUTABLE(pointSearch8 EXCLUDE_FROM_ALL
         ${clucene-shared_SOURCE_DIR}/CLucene/util/dirent.cpp
         ${demo_HEADERS}
 )
-TARGET_LINK_LIBRARIES(pointSearch8 clucene-core-static clucene-shared-static clucene-contribs-lib ic ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(pointSearch8 clucene-core-static clucene-shared-static clucene-contribs-lib ${EXTRA_LIBS})
 
 ADD_EXECUTABLE(demo EXCLUDE_FROM_ALL
         ./demo.cpp
@@ -104,4 +102,4 @@ ADD_EXECUTABLE(demo EXCLUDE_FROM_ALL
         ${clucene-shared_SOURCE_DIR}/CLucene/util/dirent.cpp
         ${demo_HEADERS}
 )
-TARGET_LINK_LIBRARIES(demo clucene-core-static clucene-shared-static clucene-contribs-lib ic ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(demo clucene-core-static clucene-shared-static clucene-contribs-lib ${EXTRA_LIBS})
