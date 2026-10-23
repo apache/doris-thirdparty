@@ -119,18 +119,22 @@ DecodeFn legacyFreqDecoder(bool compatibleRead) {
 #endif
 }
 
-// Reads a length prefixed serialized array. The buffer is padded so that readers may
-// look slightly past the payload; `size` is the payload length.
-size_t readSerialized(IndexInput* in, std::vector<uint8_t>& buf) {
-    uint32_t size = in->readVInt();
-    buf.resize(size + PFOR_BLOCK_SIZE);
-    in->readBytes(buf.data(), size);
-    return size;
+// Scratch space for one serialized array. It is per thread and only grows, so the arrays, which
+// are small and handled one after another, cost neither an allocation nor clearing the buffer.
+std::vector<uint8_t>& scratch(size_t size) {
+    thread_local std::vector<uint8_t> buf;
+    if (buf.size() < size) {
+        buf.resize(size);
+    }
+    return buf;
 }
 
+// Reads a length prefixed serialized array and decodes n values of it. The decoders may look
+// kDecodePadding bytes past the payload.
 void decodeSerialized(IndexInput* in, DecodeFn fn, size_t n, uint32_t* out) {
-    std::vector<uint8_t> buf;
-    size_t size = readSerialized(in, buf);
+    uint32_t size = in->readVInt();
+    std::vector<uint8_t>& buf = scratch(size + lucene::util::pfor::kDecodePadding);
+    in->readBytes(buf.data(), size);
     fn(buf.data(), buf.data() + size, n, out);
 }
 
@@ -192,7 +196,7 @@ void PforUtil::encodePos(IndexOutput* out, std::vector<uint32_t>& buffer) {
 #ifdef __AVX2__
     out->writeByte((char)CodeMode::kPfor256);
     out->writeVInt(buffer.size());
-    std::vector<uint8_t> compress(lucene::util::pfor::encodedSizeBound(buffer.size()));
+    std::vector<uint8_t>& compress = scratch(lucene::util::pfor::encodedSizeBound(buffer.size()));
     size_t compressSize =
             lucene::util::pfor::encodeZigzag256(buffer.data(), buffer.size(), compress.data());
     out->writeVInt(compressSize);
@@ -200,7 +204,7 @@ void PforUtil::encodePos(IndexOutput* out, std::vector<uint32_t>& buffer) {
 #elif defined(__ARM_NEON)
     out->writeByte((char)CodeMode::kPfor128);
     out->writeVInt(buffer.size());
-    std::vector<uint8_t> compress(lucene::util::pfor::encodedSizeBound(buffer.size()));
+    std::vector<uint8_t>& compress = scratch(lucene::util::pfor::encodedSizeBound(buffer.size()));
     size_t compressSize =
             lucene::util::pfor::encodeZigzag128(buffer.data(), buffer.size(), compress.data());
     out->writeVInt(compressSize);
@@ -238,7 +242,8 @@ void PforUtil::pfor_encode(IndexOutput* out, std::vector<uint32_t>& docDeltaBuff
 #ifdef __AVX2__
     out->writeByte((char)CodeMode::kPfor256);
     out->writeVInt(docDeltaBuffer.size());
-    std::vector<uint8_t> compress(lucene::util::pfor::encodedSizeBound(docDeltaBuffer.size()));
+    std::vector<uint8_t>& compress =
+            scratch(lucene::util::pfor::encodedSizeBound(docDeltaBuffer.size()));
     size_t size = 0;
     size = lucene::util::pfor::encodeDelta1_256(docDeltaBuffer.data(), docDeltaBuffer.size(),
                                                 compress.data());
@@ -253,7 +258,8 @@ void PforUtil::pfor_encode(IndexOutput* out, std::vector<uint32_t>& docDeltaBuff
 #elif defined(__ARM_NEON)
     out->writeByte((char)CodeMode::kPfor128);
     out->writeVInt(docDeltaBuffer.size());
-    std::vector<uint8_t> compress(lucene::util::pfor::encodedSizeBound(docDeltaBuffer.size()));
+    std::vector<uint8_t>& compress =
+            scratch(lucene::util::pfor::encodedSizeBound(docDeltaBuffer.size()));
     size_t size = 0;
     size = lucene::util::pfor::encodeDelta1_128(docDeltaBuffer.data(), docDeltaBuffer.size(),
                                                 compress.data());
