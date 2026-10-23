@@ -1284,7 +1284,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     // first level vector index is src_index_id
     // <std::wstring, ValueArray<uint8_t>> key is field name, value is the norm of src_doc_id
     std::vector<std::map<std::wstring, std::vector<uint8_t>>> srcFieldNormsMapValues(numIndices);
-    std::map<std::wstring, uint64_t> srcFieldTotalTermCountMap;
+    std::vector<std::map<std::wstring, uint64_t>> destFieldTokenCounts(numDestIndexes);
 
     try {
         // check hasProx, indexVersion
@@ -1322,7 +1322,18 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
                 FieldInfo* fi = fieldInfos->fieldInfo(i);
                 // Is this Field indexed and field need norms ?
                 if (fi->isIndexed && !fi->omitNorms) {
+                    // Without frequencies, byte norms cannot recover exact lengths
+                    // (e.g. 41 tokens encode as 40). The caller must rebuild such an
+                    // index from its source documents instead of publishing stale totals.
+                    if (!fi->hasProx) {
+                        _CLTHROWA(CL_ERR_UnsupportedOperation,
+                                  "Index compaction with norms requires term frequencies; "
+                                  "rebuild the index from source documents");
+                    }
                     hasNorms = true;
+                    for (auto& counts : destFieldTokenCounts) {
+                        counts.emplace(fi->name, 0);
+                    }
                 }
             }
         }
@@ -1349,8 +1360,6 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
                             srcFieldNormsMapValues[srcIndex][fi->name].emplace_back(
                                     normBuffer.values[j]);
                         }
-                        srcFieldTotalTermCountMap[fi->name] +=
-                                reader->sumTotalTermFreq(fi->name).value_or(0);
                     }
                 }
             }
@@ -1427,11 +1436,11 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         }
 
         /// merge terms
-        mergeTerms(hasProx, hasNorms, indexVersion, destFieldNormsMapValues);
+        mergeTerms(hasProx, hasNorms, indexVersion, destFieldNormsMapValues, destFieldTokenCounts);
 
         /// merge norms if have
         if (hasNorms){
-            mergeNorms(dest_index_docs, srcFieldTotalTermCountMap, srcFieldNormsMapValues, normsOutputList);
+            mergeNorms(dest_index_docs, destFieldTokenCounts, srcFieldNormsMapValues, normsOutputList);
         }
 
         /// merge null_bitmap
@@ -1665,7 +1674,8 @@ protected:
 };
 
 void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVersion,
-        const std::vector<std::map<std::wstring, std::vector<uint8_t>>>& destFieldNormsMapValues) {
+        const std::vector<std::map<std::wstring, std::vector<uint8_t>>>& destFieldNormsMapValues,
+        std::vector<std::map<std::wstring, uint64_t>>& destFieldTokenCounts) {
     auto queue = _CLNEW SegmentMergeQueue(readers.size());
     auto numSrcIndexes = readers.size();
     //std::vector<TermPositions *> postingsList(numSrcIndexes);
@@ -1766,6 +1776,8 @@ void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVers
 
         std::vector<int32_t> dfs(numDestIndexes, 0);
         std::vector<int32_t> lastDocs(numDestIndexes, 0);
+        const bool fieldHasNorms = !fieldInfos->fieldInfo(smallestTerm->field())->omitNorms;
+        std::vector<uint64_t> termTokenCounts(fieldHasNorms ? numDestIndexes : 0, 0);
         while (destPostingQueues->size()) {
             if (destPostingQueues->top() != nullptr) {
                 auto destDoc = destPostingQueues->pop();
@@ -1773,6 +1785,12 @@ void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVers
                 auto destDocId = destDoc->destDocId;
                 auto destFreq = destDoc->destFreq;
                 auto& descPositions = destDoc->destPositions;
+                // Only postings with a valid destination reach this queue. Summing
+                // their frequencies excludes deleted documents and attributes each
+                // token to its destination segment, including after a segment split.
+                if (fieldHasNorms) {
+                    termTokenCounts[destIdx] += destFreq;
+                }
                 if (infoStream != nullptr) {
                     for (int i = 0; i < _trans_vec.size(); ++i) {
                         // find pair < destIdx, destDocId > in _trans_vec[i] to get the index of the pair
@@ -1882,6 +1900,9 @@ void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVers
         }
 
         for (int i = 0; i < numDestIndexes; ++i) {
+            if (fieldHasNorms) {
+                destFieldTokenCounts[i].at(smallestTerm->field()) += termTokenCounts[i];
+            }
             if (dfs[i] == 0) {
                 if (infoStream != nullptr) {
                     std::string name = lucene_wcstoutf8string(smallestTerm->text(), smallestTerm->textLength());
@@ -1969,7 +1990,7 @@ void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVers
 }
 
 void IndexWriter::mergeNorms(std::vector<uint32_t> dest_index_docs,
-                             std::map<std::wstring, uint64_t> srcFieldTotalTermCountMap,
+                             const std::vector<std::map<std::wstring, uint64_t>>& destFieldTokenCounts,
                              std::vector<std::map<std::wstring, std::vector<uint8_t>>> srcFieldNormsMapValues,
                              std::vector<lucene::store::IndexOutput *> normsOutputList) {
     //Func - Merges the norms for all fields
@@ -2028,11 +2049,7 @@ void IndexWriter::mergeNorms(std::vector<uint32_t> dest_index_docs,
                     std::fill(destFieldNormsMap[fieldName].begin(),
                               destFieldNormsMap[fieldName].end(), 0);
                 }
-                if (i == 0) {
-                    normsOutputList[i]->writeLong(srcFieldTotalTermCountMap[fieldName]);
-                } else {
-                    normsOutputList[i]->writeLong(0);
-                }
+                normsOutputList[i]->writeLong(destFieldTokenCounts[i].at(fieldName));
                 auto& destFieldNorms = destFieldNormsMap[fieldName];
                 normsOutputList[i]->writeBytes(destFieldNorms.data(), destDocCount);
             }

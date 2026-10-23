@@ -329,11 +329,12 @@ public:
     void writeFields(lucene::store::Directory* d, std::string segment);
     // merge terms and write files
     void mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVersion,
-            const std::vector<std::map<std::wstring, std::vector<uint8_t>>>& destFieldNormsMapValues);
+            const std::vector<std::map<std::wstring, std::vector<uint8_t>>>& destFieldNormsMapValues,
+            std::vector<std::map<std::wstring, uint64_t>>& destFieldTokenCounts);
     // merge norms and write files
     void mergeNorms(
             std::vector<uint32_t> dest_index_docs,
-            std::map<std::wstring, uint64_t> srcFieldTotalTermCountMap,
+            const std::vector<std::map<std::wstring, uint64_t>>& destFieldTokenCounts,
             std::vector<std::map<std::wstring, std::vector<uint8_t>>> srcFieldNormsMapValues,
             std::vector<lucene::store::IndexOutput*> normsOutputList);
     // merge null_bitmap

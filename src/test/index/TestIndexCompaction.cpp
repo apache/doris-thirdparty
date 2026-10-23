@@ -21,6 +21,7 @@
 #include <vector>
 #include "CLucene/debug/mem.h"
 #include "test.h"
+#include "store/MockRAMDirectory.h"
 #include "CLucene/debug/error.h"
 #include "CLucene/index/IndexWriter.h"
 #include "CLucene/store/IndexInput.h"
@@ -332,6 +333,151 @@ void TestMergeNullBitmapIgnoreDoc(CuTest *tc) {
 
 
 
+static void writeNormsIndex(RAMDirectory& dir,
+                           const std::vector<std::pair<std::string, std::string>>& documents,
+                           bool norms = true, bool frequencies = true) {
+    lucene::analysis::SimpleAnalyzer<char> analyzer;
+    analyzer.set_stopwords(nullptr);
+    lucene::util::SStringReader<char> bodyReader;
+    lucene::util::SStringReader<char> titleReader;
+    lucene::document::Document doc;
+    auto* body = _CLNEW lucene::document::Field(
+            _T("body"), lucene::document::Field::STORE_NO | lucene::document::Field::INDEX_TOKENIZED);
+    auto* title = _CLNEW lucene::document::Field(
+            _T("title"), lucene::document::Field::STORE_NO | lucene::document::Field::INDEX_TOKENIZED);
+    for (auto* field : {body, title}) {
+        field->setOmitNorms(!norms);
+        field->setOmitTermFreqAndPositions(!frequencies);
+        doc.add(*field);
+    }
+    IndexWriter writer(&dir, &analyzer, true);
+    writer.setMaxBufferedDocs(-1);
+    writer.setRAMBufferSizeMB(512);
+    writer.setUseCompoundFile(false);
+    for (const auto& values : documents) {
+        bodyReader.init(values.first.data(), values.first.size(), false);
+        titleReader.init(values.second.data(), values.second.size(), false);
+        body->setValue(analyzer.tokenStream(body->name(), &bodyReader), true);
+        title->setValue(analyzer.tokenStream(title->name(), &titleReader), true);
+        writer.addDocument(&doc);
+    }
+    writer.close();
+}
+
+static std::string repeatedToken(const char* token, size_t count) {
+    std::string text;
+    for (size_t i = 0; i < count; ++i) {
+        text += token;
+        text += ' ';
+    }
+    return text;
+}
+
+void TestCompactionTokenCounts(CuTest* tc) {
+    RAMDirectory source0;
+    RAMDirectory source1;
+    writeNormsIndex(source0, {{"alpha", "one two"},
+                             {repeatedToken("deleted", 257), repeatedToken("gone", 73)},
+                             {"alpha alpha " + repeatedToken("omega", 14), ""}});
+    // Length 41 is not exactly representable in a byte norm. The token total
+    // must come from the retained postings, not from decoding the norms.
+    writeNormsIndex(source1, {{"alpha " + repeatedToken("omega", 40), "one"},
+                             {"", "one two three"}});
+    // Compaction closes its output directories. The test directory keeps the
+    // files available for reopening, as filesystem directories do in Doris.
+    MockRAMDirectory destination0;
+    MockRAMDirectory destination1;
+    destination0.setRandomIOExceptionRate(0.0, 0);
+    destination1.setRandomIOExceptionRate(0.0, 0);
+    RAMDirectory scratch;
+    lucene::analysis::SimpleAnalyzer<char> analyzer;
+    IndexWriter writer(&scratch, &analyzer, true);
+    std::vector<lucene::store::Directory*> sources {&source0, &source1};
+    std::vector<lucene::store::Directory*> destinations {&destination0, &destination1};
+    std::vector<std::vector<std::pair<uint32_t, uint32_t>>> mapping {
+            {{0, 0}, {UINT32_MAX, UINT32_MAX}, {1, 0}}, {{0, 1}, {1, 1}}};
+    writer.indexCompaction(sources, destinations, mapping, {2, 2});
+    writer.close();
+    std::vector<uint64_t> bodyCounts;
+    std::vector<uint64_t> titleCounts;
+    for (auto* directory : destinations) {
+        auto* reader = IndexReader::open(directory);
+        bodyCounts.push_back(reader->sumTotalTermFreq(_T("body")).value());
+        titleCounts.push_back(reader->sumTotalTermFreq(_T("title")).value());
+        reader->close();
+        _CLDELETE(reader);
+    }
+    CuAssertIntEquals(tc, _T("first destination body tokens"), 42, bodyCounts[0]);
+    CuAssertIntEquals(tc, _T("second destination body tokens"), 16, bodyCounts[1]);
+    CuAssertIntEquals(tc, _T("first destination title tokens"), 3, titleCounts[0]);
+    CuAssertIntEquals(tc, _T("second destination title tokens"), 3, titleCounts[1]);
+}
+
+void TestCompactionDeletedDocumentsSingleDestination(CuTest* tc) {
+    // Match the ordinary DELETE regression: each source has a surviving document
+    // and a deleted 256-token document. The destination has 17 tokens, not 529.
+    const std::string deleted = repeatedToken("alpha", 240) + repeatedToken("omega", 16);
+    RAMDirectory source0;
+    RAMDirectory source1;
+    writeNormsIndex(source0, {{"alpha", "one"}, {deleted, "gone"}});
+    writeNormsIndex(source1,
+                    {{"alpha alpha " + repeatedToken("omega", 14), "two"}, {deleted, "gone"}});
+    MockRAMDirectory destination;
+    destination.setRandomIOExceptionRate(0.0, 0);
+    RAMDirectory scratch;
+    lucene::analysis::SimpleAnalyzer<char> analyzer;
+    IndexWriter writer(&scratch, &analyzer, true);
+    std::vector<lucene::store::Directory*> sources {&source0, &source1};
+    std::vector<std::vector<std::pair<uint32_t, uint32_t>>> mapping {
+            {{0, 0}, {UINT32_MAX, UINT32_MAX}}, {{0, 1}, {UINT32_MAX, UINT32_MAX}}};
+    writer.indexCompaction(sources, {&destination}, mapping, {2});
+    writer.close();
+    auto* reader = IndexReader::open(&destination);
+    const auto bodyTokens = reader->sumTotalTermFreq(_T("body")).value();
+    const auto titleTokens = reader->sumTotalTermFreq(_T("title")).value();
+    const auto documents = reader->maxDoc();
+    reader->close();
+    _CLDELETE(reader);
+    CuAssertIntEquals(tc, _T("surviving documents"), 2, documents);
+    CuAssertIntEquals(tc, _T("surviving body tokens"), 17, bodyTokens);
+    CuAssertIntEquals(tc, _T("surviving title tokens"), 2, titleTokens);
+}
+
+void TestCompactionWithoutFrequencies(CuTest* tc) {
+    for (bool norms : {false, true}) {
+        RAMDirectory source;
+        writeNormsIndex(source, {{"alpha alpha", "one one"}, {"deleted", "gone"}},
+                        norms, false);
+        MockRAMDirectory destination;
+        destination.setRandomIOExceptionRate(0.0, 0);
+        RAMDirectory scratch;
+        lucene::analysis::SimpleAnalyzer<char> analyzer;
+        IndexWriter writer(&scratch, &analyzer, true);
+        std::vector<lucene::store::Directory*> sources {&source};
+        std::vector<std::vector<std::pair<uint32_t, uint32_t>>> mapping {
+                {{0, 0}, {UINT32_MAX, UINT32_MAX}}};
+        bool rejected = false;
+        try {
+            writer.indexCompaction(sources, {&destination}, mapping, {1});
+        } catch (CLuceneError& error) {
+            CuAssertIntEquals(tc, _T("missing frequencies require a rebuild"),
+                              CL_ERR_UnsupportedOperation, error.number());
+            rejected = true;
+        }
+        writer.close();
+        CuAssertIntEquals(tc, _T("only norms need exact frequencies"), norms, rejected);
+        if (!norms) {
+            auto* reader = IndexReader::open(&destination);
+            const auto tokens = reader->sumTotalTermFreq(_T("body"));
+            const auto documents = reader->maxDoc();
+            reader->close();
+            _CLDELETE(reader);
+            CuAssertIntEquals(tc, _T("norms remain omitted"), false, tokens.has_value());
+            CuAssertIntEquals(tc, _T("retained document"), 1, documents);
+        }
+    }
+}
+
 CuSuite* testIndexCompaction() {
     CuSuite* suite = CuSuiteNew(_T("CLucene Index Compaction Test"));
 
@@ -339,6 +485,9 @@ CuSuite* testIndexCompaction() {
     SUITE_ADD_TEST(suite, TestMergeNullBitmapEmptySrc);
     SUITE_ADD_TEST(suite, TestMergeNullBitmapEmptyIndexSrcBitmapValues);
     SUITE_ADD_TEST(suite, TestMergeNullBitmapIgnoreDoc);
+    SUITE_ADD_TEST(suite, TestCompactionTokenCounts);
+    SUITE_ADD_TEST(suite, TestCompactionDeletedDocumentsSingleDestination);
+    SUITE_ADD_TEST(suite, TestCompactionWithoutFrequencies);
 
     return suite;
 }
