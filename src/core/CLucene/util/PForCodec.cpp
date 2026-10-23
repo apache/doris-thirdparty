@@ -78,6 +78,14 @@ inline uint32_t load32(const uint8_t* p, size_t bytes) {
 typedef uint32_t U32x8 __attribute__((vector_size(32)));
 typedef uint32_t U32x8Unaligned __attribute__((vector_size(32), aligned(4), may_alias));
 
+// Shuffles the lanes of two vectors, indices 0-7 pick from a and 8-15 from b. Clang and GCC 12+
+// know __builtin_shufflevector, older GCC only has __builtin_shuffle.
+#if defined(__clang__)
+#define PFOR_SHUFFLE(a, b, ...) __builtin_shufflevector(a, b, __VA_ARGS__)
+#else
+#define PFOR_SHUFFLE(a, b, ...) __builtin_shuffle(a, b, (U32x8) {__VA_ARGS__})
+#endif
+
 struct ZigzagDelta {
     static uint32_t forward(uint32_t cur, uint32_t prev) {
         uint32_t d = cur - prev;
@@ -716,9 +724,9 @@ size_t encodeImpl(const uint32_t* in, size_t n, uint8_t* out) {
 // Inclusive prefix sum within the 8 lanes.
 inline U32x8 scan8(U32x8 x) {
     const U32x8 zero = {};
-    x += __builtin_shufflevector(x, zero, 8, 0, 1, 2, 3, 4, 5, 6);
-    x += __builtin_shufflevector(x, zero, 8, 8, 0, 1, 2, 3, 4, 5);
-    x += __builtin_shufflevector(x, zero, 8, 8, 8, 8, 0, 1, 2, 3);
+    x += PFOR_SHUFFLE(x, zero, 8, 0, 1, 2, 3, 4, 5, 6);
+    x += PFOR_SHUFFLE(x, zero, 8, 8, 0, 1, 2, 3, 4, 5);
+    x += PFOR_SHUFFLE(x, zero, 8, 8, 8, 8, 0, 1, 2, 3);
     return x;
 }
 
@@ -733,7 +741,7 @@ inline uint32_t accumulate(uint32_t cur, const uint32_t* t, size_t k, uint32_t* 
         for (; i + 8 <= k; i += 8) {
             U32x8 x = scan8(Transform::toDelta(*reinterpret_cast<const U32x8Unaligned*>(t + i)));
             *reinterpret_cast<U32x8Unaligned*>(out + i) = x + total;
-            total += __builtin_shufflevector(x, x, 7, 7, 7, 7, 7, 7, 7, 7);
+            total += PFOR_SHUFFLE(x, x, 7, 7, 7, 7, 7, 7, 7, 7);
         }
         cur = total[0];
     }
