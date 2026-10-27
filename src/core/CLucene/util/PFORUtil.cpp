@@ -17,12 +17,39 @@
 #include "PFORUtil.h"
 #include "CLucene/debug/error.h"
 #include "CLucene/index/CodeMode.h"
-#include "vp4.h"
+#include "CLucene/util/PForCodec.h"
 #if (defined(__i386) || defined(__x86_64__))
 #include <cpuid.h>
 #endif
 
 CL_NS_DEF(util)
+// The P4* entry points take no length. They read from buffers that the callers pad by
+// PFOR_BLOCK_SIZE, which is what the decoders need after the end of a stream.
+static size_t p4DecDelta1_256(unsigned char *in, size_t n, uint32_t *out) {
+    return pfor::decodeDelta1_256(in, in + pfor::encodedSizeBound(n), n, out);
+}
+static size_t p4DecZigzag256(unsigned char *in, size_t n, uint32_t *out) {
+    return pfor::decodeZigzag256(in, in + pfor::encodedSizeBound(n), n, out);
+}
+static size_t p4DecDelta1_128(unsigned char *in, size_t n, uint32_t *out) {
+    return pfor::decodeDelta1_128(in, in + pfor::encodedSizeBound(n), n, out);
+}
+static size_t p4DecZigzag128(unsigned char *in, size_t n, uint32_t *out) {
+    return pfor::decodeZigzag128(in, in + pfor::encodedSizeBound(n), n, out);
+}
+static size_t p4EncDelta1_256(uint32_t *in, size_t n, unsigned char *out) {
+    return pfor::encodeDelta1_256(in, n, out);
+}
+static size_t p4EncZigzag256(uint32_t *in, size_t n, unsigned char *out) {
+    return pfor::encodeZigzag256(in, n, out);
+}
+static size_t p4EncDelta1_128(uint32_t *in, size_t n, unsigned char *out) {
+    return pfor::encodeDelta1_128(in, n, out);
+}
+static size_t p4EncZigzag128(uint32_t *in, size_t n, unsigned char *out) {
+    return pfor::encodeZigzag128(in, n, out);
+}
+
 using DEC_FUNC = size_t (*)(unsigned char *__restrict, size_t, uint32_t *__restrict);
 using ENC_FUNC = size_t (*)(uint32_t *__restrict in, size_t n, unsigned char *__restrict out);
 DEC_FUNC g_p4nd1dec;
@@ -97,10 +124,10 @@ __attribute__((constructor)) void SelectPFORFunctions() {
     bool sse2 = (edx & bit_SSE2) != 0;
     bool sse42 = (ecx & bit_SSE4_2) != 0;
 #if defined(USE_AVX2)
-    g_p4nd1dec = p4nd1dec256v32;
-    g_p4nzdec = p4nzdec256v32;
-    g_p4nd1enc = p4nd1enc256v32;
-    g_p4nzenc = p4nzenc256v32;
+    g_p4nd1dec = p4DecDelta1_256;
+    g_p4nzdec = p4DecZigzag256;
+    g_p4nd1enc = p4EncDelta1_256;
+    g_p4nzenc = p4EncZigzag256;
 #else
     g_p4nd1dec = DefaultDDEC;
     g_p4nzdec = DefaultDEC;
@@ -108,10 +135,10 @@ __attribute__((constructor)) void SelectPFORFunctions() {
     g_p4nzenc = DefaultENC;
 #endif
 #else
-    g_p4nd1dec = p4nd1dec32;
-    g_p4nzdec = p4nzdec32;
-    g_p4nd1enc = p4nd1enc32;
-    g_p4nzenc = p4nzenc32;
+    g_p4nd1dec = p4DecDelta1_128;
+    g_p4nzdec = p4DecZigzag128;
+    g_p4nd1enc = p4EncDelta1_128;
+    g_p4nzenc = p4EncZigzag128;
 #endif
 }
 
@@ -136,11 +163,11 @@ void pfor_encode(store::IndexOutput* out, std::vector<uint32_t>& docDeltaBuffer,
     out->writeVInt(docDeltaBuffer.size());
     std::vector<uint8_t> compress(4 * docDeltaBuffer.size() + PFOR_BLOCK_SIZE);
     size_t size = 0;
-    size = p4nd1enc256v32(docDeltaBuffer.data(), docDeltaBuffer.size(), compress.data());
+    size = pfor::encodeDelta1_256(docDeltaBuffer.data(), docDeltaBuffer.size(), compress.data());
     out->writeVInt(size);
     out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
     if (has_prox) {
-        size = p4nzenc256v32(freqBuffer.data(), freqBuffer.size(), compress.data());
+        size = pfor::encodeZigzag256(freqBuffer.data(), freqBuffer.size(), compress.data());
         out->writeVInt(size);
         out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
     }
@@ -149,11 +176,11 @@ void pfor_encode(store::IndexOutput* out, std::vector<uint32_t>& docDeltaBuffer,
     out->writeVInt(docDeltaBuffer.size());
     std::vector<uint8_t> compress(4 * docDeltaBuffer.size() + PFOR_BLOCK_SIZE);
     size_t size = 0;
-    size = p4nd1enc32(docDeltaBuffer.data(), docDeltaBuffer.size(), compress.data());
+    size = pfor::encodeDelta1_128(docDeltaBuffer.data(), docDeltaBuffer.size(), compress.data());
     out->writeVInt(size);
     out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
     if (has_prox) {
-        size = p4nzenc32(freqBuffer.data(), freqBuffer.size(), compress.data());
+        size = pfor::encodeZigzag128(freqBuffer.data(), freqBuffer.size(), compress.data());
         out->writeVInt(size);
         out->writeBytes(reinterpret_cast<const uint8_t*>(compress.data()), size);
     }
@@ -195,21 +222,21 @@ uint32_t pfor_decode(store::IndexInput* in, std::vector<uint32_t>& docs, std::ve
 #if defined(USE_AVX2) && defined(__AVX2__)
             // if compatibleRead is true, means we are reading old version arm64 index in x86_64 platform.
             if (compatibleRead) {
-                p4nd1dec32(buf.data(), arraySize, docs.data());
+                pfor::decodeDelta1_128(buf.data(), buf.data() + SerializedSize, arraySize, docs.data());
             } else {
-                p4nd1dec256v32(buf.data(), arraySize, docs.data());
+                pfor::decodeDelta1_256(buf.data(), buf.data() + SerializedSize, arraySize, docs.data());
             }
 #elif (defined(__ARM_NEON))
             // if compatibleRead is true, means we are reading old version x86_64 index in arm64 platform.
             if (compatibleRead) {
-                p4nd1dec256scalarv32(buf.data(), arraySize, docs.data());
+                pfor::decodeDelta1_256(buf.data(), buf.data() + SerializedSize, arraySize, docs.data());
             } else {
-                p4nd1dec32(buf.data(), arraySize, docs.data());
+                pfor::decodeDelta1_128(buf.data(), buf.data() + SerializedSize, arraySize, docs.data());
             }
 #elif (defined(__SSSE3__))
             // if compatibleRead is true, means we are reading old version x86_64 index in x86_64 which does not support avx2.
             if (compatibleRead) {
-                p4nd1dec256scalarv32(buf.data(), arraySize, docs.data());
+                pfor::decodeDelta1_256(buf.data(), buf.data() + SerializedSize, arraySize, docs.data());
             } else {
                 DefaultDDEC(buf.data(), arraySize, docs.data());
             }
@@ -224,21 +251,21 @@ uint32_t pfor_decode(store::IndexInput* in, std::vector<uint32_t>& docs, std::ve
 #if defined(USE_AVX2) && defined(__AVX2__)
             // if compatibleRead is true, means we are reading old version arm64 index in x86_64 platform.
             if (compatibleRead) {
-                p4nzdec32(buf.data(), arraySize, freqs.data());
+                pfor::decodeZigzag128(buf.data(), buf.data() + SerializedSize, arraySize, freqs.data());
             } else {
-                p4nzdec256v32(buf.data(), arraySize, freqs.data());
+                pfor::decodeZigzag256(buf.data(), buf.data() + SerializedSize, arraySize, freqs.data());
             }
 #elif (defined(__ARM_NEON))
             // if compatibleRead is true, means we are reading old version x86_64 index in arm64 platform.
             if (compatibleRead) {
-                p4nzdec256scalarv32(buf.data(), arraySize, freqs.data());
+                pfor::decodeZigzag256(buf.data(), buf.data() + SerializedSize, arraySize, freqs.data());
             } else {
-                p4nzdec32(buf.data(), arraySize, freqs.data());
+                pfor::decodeZigzag128(buf.data(), buf.data() + SerializedSize, arraySize, freqs.data());
             }
 #elif (defined(__SSSE3__))
             // if compatibleRead is true, means we are reading old version x86_64 index in x86_64 which does not support avx2.
             if (compatibleRead) {
-                p4nzdec256scalarv32(buf.data(), arraySize, freqs.data());
+                pfor::decodeZigzag256(buf.data(), buf.data() + SerializedSize, arraySize, freqs.data());
             } else {
                 DefaultDEC(buf.data(), arraySize, freqs.data());
             }
@@ -270,7 +297,7 @@ uint32_t pfor_decode(store::IndexInput* in, std::vector<uint32_t>& docs, std::ve
             std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
             in->readBytes(buf.data(), SerializedSize);
 #if defined(USE_AVX2) && defined(__AVX2__)
-            p4nd1dec256v32(buf.data(), arraySize, docs.data());
+            pfor::decodeDelta1_256(buf.data(), buf.data() + SerializedSize, arraySize, docs.data());
 #else
             _CLTHROWA(CL_ERR_CorruptIndex, "PFOR256 is not supported on this platform");
 #endif
@@ -280,7 +307,7 @@ uint32_t pfor_decode(store::IndexInput* in, std::vector<uint32_t>& docs, std::ve
             std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
             in->readBytes(buf.data(), SerializedSize);
 #if defined(USE_AVX2) && defined(__AVX2__)
-            p4nzdec256v32(buf.data(), arraySize, freqs.data());
+            pfor::decodeZigzag256(buf.data(), buf.data() + SerializedSize, arraySize, freqs.data());
 #else
             _CLTHROWA(CL_ERR_CorruptIndex, "PFOR256 is not supported on this platform");
 #endif
@@ -292,9 +319,9 @@ uint32_t pfor_decode(store::IndexInput* in, std::vector<uint32_t>& docs, std::ve
             std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
             in->readBytes(buf.data(), SerializedSize);
 #if defined(USE_AVX2) && defined(__AVX2__)
-            p4nd1dec32(buf.data(), arraySize, docs.data());
+            pfor::decodeDelta1_128(buf.data(), buf.data() + SerializedSize, arraySize, docs.data());
 #elif (defined(__SSSE3__) || defined(__ARM_NEON))
-            p4nd1dec32(buf.data(), arraySize, docs.data());
+            pfor::decodeDelta1_128(buf.data(), buf.data() + SerializedSize, arraySize, docs.data());
 #else
             _CLTHROWA(CL_ERR_CorruptIndex, "PFOR128 is not supported on this platform");
 #endif
@@ -304,9 +331,9 @@ uint32_t pfor_decode(store::IndexInput* in, std::vector<uint32_t>& docs, std::ve
             std::vector<uint8_t> buf(SerializedSize + PFOR_BLOCK_SIZE);
             in->readBytes(buf.data(), SerializedSize);
 #if defined(USE_AVX2) && defined(__AVX2__)
-            p4nzdec32(buf.data(), arraySize, freqs.data());
+            pfor::decodeZigzag128(buf.data(), buf.data() + SerializedSize, arraySize, freqs.data());
 #elif (defined(__SSSE3__) || defined(__ARM_NEON))
-            p4nzdec32(buf.data(), arraySize, freqs.data());
+            pfor::decodeZigzag128(buf.data(), buf.data() + SerializedSize, arraySize, freqs.data());
 #else
             _CLTHROWA(CL_ERR_CorruptIndex, "PFOR128 is not supported on this platform");
 #endif
