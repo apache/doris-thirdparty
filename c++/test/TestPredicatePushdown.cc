@@ -16,6 +16,8 @@
  * limitations under the License.
  */
 
+#include <tuple>
+
 #include "MemoryInputStream.hh"
 #include "MemoryOutputStream.hh"
 #include "orc/OrcFile.hh"
@@ -25,6 +27,97 @@
 namespace orc {
 
   static const int DEFAULT_MEM_STREAM_SIZE = 10 * 1024 * 1024;  // 10M
+
+  class SeekPastFilteredStripeTest
+      : public testing::TestWithParam<std::tuple<uint64_t, uint64_t, bool, bool, bool>> {};
+
+  class SeekPassThroughFilter : public ORCFilter {
+   public:
+    void filter(ColumnVectorBatch& data, uint16_t* sel, uint16_t size,
+                void* /*arg*/) const override {
+      for (uint16_t row = 0; row < size; ++row) {
+        sel[row] = row;
+      }
+      data.numElements = size;
+    }
+  };
+
+  TEST_P(SeekPastFilteredStripeTest, AdvancesToNextSelectedStripe) {
+    const auto [rowsPerStripe, stripeCount, initializeStripe, restrictRange, lazy] = GetParam();
+    MemoryOutputStream stream(DEFAULT_MEM_STREAM_SIZE);
+    auto type =
+        std::unique_ptr<Type>(Type::buildTypeFromString("struct<id:bigint,payload:bigint>"));
+    WriterOptions options;
+    options.setStripeSize(1).setCompression(CompressionKind_NONE).setRowIndexStride(1000);
+    auto writer = createWriter(*type, &stream, options);
+    auto batch = writer->createRowBatch(rowsPerStripe);
+    auto& root = dynamic_cast<StructVectorBatch&>(*batch);
+    auto& ids = dynamic_cast<LongVectorBatch&>(*root.fields[0]);
+    auto& payloads = dynamic_cast<LongVectorBatch&>(*root.fields[1]);
+    for (uint64_t stripe = 0; stripe < stripeCount; ++stripe) {
+      for (uint64_t row = 0; row < rowsPerStripe; ++row) {
+        ids.data[row] = static_cast<int64_t>(row + (stripe == 1 ? 10000 : 0));
+        payloads.data[row] = static_cast<int64_t>(stripe * rowsPerStripe + row);
+      }
+      root.numElements = ids.numElements = payloads.numElements = rowsPerStripe;
+      writer->add(*batch);
+    }
+    writer->close();
+
+    auto reader = createReader(
+        std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), ReaderOptions());
+    ASSERT_EQ(stripeCount, reader->getNumberOfStripes());
+    ASSERT_EQ(rowsPerStripe, reader->getStripe(0)->getNumberOfRows());
+    RowReaderOptions readOptions;
+    readOptions.searchArgument(SearchArgumentFactory::newBuilder()
+                                   ->lessThan("id", PredicateDataType::LONG, Literal(int64_t(1000)))
+                                   .build());
+    if (restrictRange) {
+      auto stripe = reader->getStripe(0);
+      readOptions.range(stripe->getOffset(), stripe->getLength());
+    }
+    SeekPassThroughFilter filter;
+    if (lazy) {
+      readOptions.filter(std::list<std::string>{"id"});
+    }
+    auto rowReader = reader->createRowReader(readOptions, lazy ? &filter : nullptr);
+    auto result = rowReader->createRowBatch(500);
+    if (initializeStripe) {
+      ASSERT_TRUE(rowReader->next(*result));
+      ASSERT_EQ(500, result->numElements);
+    }
+
+    // The suffix has no selected row groups. An initialized stripe must take the same
+    // path as a fresh seek, including skipping the entirely filtered middle stripe.
+    rowReader->seekToRow(rowsPerStripe - 1);
+    if (stripeCount == 1 || restrictRange) {
+      EXPECT_FALSE(rowReader->next(*result));
+      EXPECT_EQ(0, result->numElements);
+      EXPECT_EQ(restrictRange ? rowsPerStripe : reader->getNumberOfRows(),
+                rowReader->getRowNumber());
+    } else {
+      ASSERT_TRUE(rowReader->next(*result));
+      EXPECT_EQ(rowsPerStripe * 2, rowReader->getRowNumber());
+      ASSERT_EQ(500, result->numElements);
+      auto& values =
+          dynamic_cast<LongVectorBatch&>(*dynamic_cast<StructVectorBatch&>(*result).fields[0]);
+      auto& resultPayloads =
+          dynamic_cast<LongVectorBatch&>(*dynamic_cast<StructVectorBatch&>(*result).fields[1]);
+      for (uint64_t row = 0; row < result->numElements; ++row) {
+        EXPECT_EQ(static_cast<int64_t>(row), values.data[row]);
+        EXPECT_EQ(static_cast<int64_t>(rowsPerStripe * 2 + row), resultPayloads.data[row]);
+      }
+    }
+
+    rowReader->seekToRow(0);
+    ASSERT_TRUE(rowReader->next(*result));
+    EXPECT_EQ(0, rowReader->getRowNumber());
+  }
+
+  INSTANTIATE_TEST_SUITE_P(FilteredSuffix, SeekPastFilteredStripeTest,
+                           testing::Combine(testing::Values(uint64_t(3000), uint64_t(3500)),
+                                            testing::Values(uint64_t(1), uint64_t(3)),
+                                            testing::Bool(), testing::Bool(), testing::Bool()));
 
   void createMemTestFile(MemoryOutputStream& memStream, uint64_t rowIndexStride) {
     MemoryPool* pool = getDefaultPool();

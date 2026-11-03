@@ -196,7 +196,8 @@ namespace orc {
             selectedColumns[*typeId] = true;
           } else {
             std::stringstream buffer;
-            buffer << "Invalid type id selected " << *typeId << " out of " << selectedColumns.size();
+            buffer << "Invalid type id selected " << *typeId << " out of "
+                   << selectedColumns.size();
             throw ParseError(buffer.str());
           }
         }
@@ -351,8 +352,7 @@ namespace orc {
         while (current != nullptr) {
           if (current->getSubtypeCount() == 0) {
             current->setReaderCategory(ReaderCategory::FILTER_CHILD);
-          } else if (current->getKind() == TypeKind::LIST
-                     || current->getKind() == TypeKind::MAP) {
+          } else if (current->getKind() == TypeKind::LIST || current->getKind() == TypeKind::MAP) {
             current->setReaderCategory(ReaderCategory::FILTER_COMPOUND_ELEMENT);
           } else {
             current->setReaderCategory(ReaderCategory::FILTER_PARENT);
@@ -372,8 +372,7 @@ namespace orc {
             if (child->getSubtypeCount() == 0) {
               // Leaf node (no children)
               child->setReaderCategory(ReaderCategory::FILTER_CHILD);
-            } else if (child->getKind() == TypeKind::LIST
-                       || child->getKind() == TypeKind::MAP) {
+            } else if (child->getKind() == TypeKind::LIST || child->getKind() == TypeKind::MAP) {
               child->setReaderCategory(ReaderCategory::FILTER_COMPOUND_ELEMENT);
               // Recursively process its children
               processChildren(child);
@@ -410,8 +409,7 @@ namespace orc {
         while (current != nullptr) {
           if (current->getSubtypeCount() == 0) {
             current->setReaderCategory(ReaderCategory::FILTER_CHILD);
-          } else if (current->getKind() == TypeKind::LIST
-                     || current->getKind() == TypeKind::MAP) {
+          } else if (current->getKind() == TypeKind::LIST || current->getKind() == TypeKind::MAP) {
             current->setReaderCategory(ReaderCategory::FILTER_COMPOUND_ELEMENT);
           } else {
             current->setReaderCategory(ReaderCategory::FILTER_PARENT);
@@ -431,8 +429,7 @@ namespace orc {
             if (child->getSubtypeCount() == 0) {
               // Leaf node (no children)
               child->setReaderCategory(ReaderCategory::FILTER_CHILD);
-            } else if (child->getKind() == TypeKind::LIST
-                       || child->getKind() == TypeKind::MAP) {
+            } else if (child->getKind() == TypeKind::LIST || child->getKind() == TypeKind::MAP) {
               child->setReaderCategory(ReaderCategory::FILTER_COMPOUND_ELEMENT);
               // Recursively process its children
               processChildren(child);
@@ -591,6 +588,17 @@ namespace orc {
         currentRowInStripe =
             advanceToNextRowGroup(currentRowInStripe, rowsInCurrentStripe, footer->rowindexstride(),
                                   sargsApplier->getNextSkippedRows());
+        // A filtered suffix returns the stripe end, not a valid row-group index.
+        // For 3000 rows at stride 1000, seeking group 3 would access past the index.
+        // Initialize the next selected stripe before positioning its column readers.
+        if (currentRowInStripe == rowsInCurrentStripe) {
+          ++currentStripe;
+          currentRowInStripe = 0;
+          startNextStripe(startReadPhase);
+          if (currentStripe >= lastStripe) {
+            return;
+          }
+        }
       }
     }
 
@@ -789,7 +797,8 @@ namespace orc {
     return std::unique_ptr<StripeInformation>(new StripeInformationImpl(
         stripeInfo.offset(), stripeInfo.indexlength(), stripeInfo.datalength(),
         stripeInfo.footerlength(), stripeInfo.numberofrows(), contents->stream.get(),
-        *contents->pool, contents->compression, contents->blockSize, contents->readerMetrics, nullptr));
+        *contents->pool, contents->compression, contents->blockSize, contents->readerMetrics,
+        nullptr));
   }
 
   FileVersion ReaderImpl::getFormatVersion() const {
@@ -1114,21 +1123,22 @@ namespace orc {
     return getMemoryUse(stripeIx, selectedColumns);
   }
 
-  void ReaderImpl::getSelectedColumns(const std::list<std::string>& names, std::vector<bool>& selectedColumns) {
-      selectedColumns.clear();
-      selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
-      ColumnSelector column_selector(contents.get());
-      if (contents->schema->getKind() == STRUCT && names.begin() != names.end()) {
-          for (std::list<std::string>::const_iterator field = names.begin(); field != names.end();
-               ++field) {
-              column_selector.updateSelectedByName(selectedColumns, *field);
-          }
-      } else {
-          // default is to select all columns
-          std::fill(selectedColumns.begin(), selectedColumns.end(), true);
+  void ReaderImpl::getSelectedColumns(const std::list<std::string>& names,
+                                      std::vector<bool>& selectedColumns) {
+    selectedColumns.clear();
+    selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
+    ColumnSelector column_selector(contents.get());
+    if (contents->schema->getKind() == STRUCT && names.begin() != names.end()) {
+      for (std::list<std::string>::const_iterator field = names.begin(); field != names.end();
+           ++field) {
+        column_selector.updateSelectedByName(selectedColumns, *field);
       }
-      column_selector.selectParents(selectedColumns, *contents->schema.get());
-      selectedColumns[0] = true;  // column 0 is selected by default
+    } else {
+      // default is to select all columns
+      std::fill(selectedColumns.begin(), selectedColumns.end(), true);
+    }
+    column_selector.selectParents(selectedColumns, *contents->schema.get());
+    selectedColumns[0] = true;  // column 0 is selected by default
   }
 
   uint64_t ReaderImpl::getMemoryUseByName(const std::list<std::string>& names, int stripeIx) {
@@ -1301,7 +1311,8 @@ namespace orc {
           currentStripeInfo.offset(), currentStripeInfo.indexlength(),
           currentStripeInfo.datalength(), currentStripeInfo.footerlength(),
           currentStripeInfo.numberofrows(), contents->stream.get(), *contents->pool,
-          contents->compression, contents->blockSize, contents->readerMetrics, &currentStripeFooter));
+          contents->compression, contents->blockSize, contents->readerMetrics,
+          &currentStripeFooter));
       streams.clear();
       contents->stream->beforeReadStripe(std::move(currentStripeInformation), selectedColumns,
                                          streams);
