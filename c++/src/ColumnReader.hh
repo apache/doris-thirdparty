@@ -77,6 +77,10 @@ namespace orc {
      */
     virtual const Timezone& getReaderTimezone() const = 0;
 
+    virtual bool writerUsedProlepticGregorian() const = 0;
+
+    virtual bool useProlepticGregorian() const = 0;
+
     /**
      * Get the error stream.
      * @return a pointer to the stream that should get error messages

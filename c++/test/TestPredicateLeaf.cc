@@ -17,6 +17,7 @@
  */
 
 #include "BloomFilter.hh"
+#include "DateUtils.hh"
 #include "Statistics.hh"
 #include "orc/BloomFilter.hh"
 #include "orc/sargs/Literal.hh"
@@ -171,6 +172,13 @@ namespace orc {
   static TruthValue evaluate(const PredicateLeaf& pred, const proto::ColumnStatistics& pbStats,
                              const BloomFilter* bf = nullptr) {
     return pred.evaluate(WriterVersion_ORC_135, pbStats, bf);
+  }
+
+  static TruthValue evaluate(const PredicateLeaf& pred, const proto::ColumnStatistics& pbStats,
+                             const BloomFilter* bf, bool writerUsedProlepticGregorian,
+                             bool useProlepticGregorian) {
+    return pred.evaluate(WriterVersion_ORC_135, pbStats, bf, writerUsedProlepticGregorian,
+                         useProlepticGregorian);
   }
 
   TEST(TestPredicateLeaf, testPredEvalWithColStats) {
@@ -536,6 +544,35 @@ namespace orc {
     EXPECT_EQ(TruthValue::NO_NULL, evaluate(pred, createDateStats(10, 100, true), &bf));
     bf.addLong(15);
     EXPECT_EQ(TruthValue::YES_NO_NULL, evaluate(pred, createDateStats(10.0, 100.0, true), &bf));
+  }
+
+  TEST(TestPredicateLeaf, testDateStatsRebasedAndBloomFilterSkipped) {
+    const int32_t prolepticDate = parseProlepticDate("1500-01-01");
+    const int32_t hybridDate = parseHybridDate("1500-01-01");
+    const int32_t hybridMin = parseHybridDate("1499-12-31");
+    const int32_t hybridMax = parseHybridDate("1500-01-02");
+    PredicateLeaf pred(PredicateLeaf::Operator::EQUALS, PredicateDataType::DATE, "x",
+                       Literal(PredicateDataType::DATE, prolepticDate));
+    BloomFilterImpl bf(10000);
+    bf.addLong(hybridDate);
+
+    EXPECT_EQ(TruthValue::YES_NO,
+              evaluate(pred, createDateStats(hybridMin, hybridMax), &bf, false, true));
+  }
+
+  TEST(TestPredicateLeaf, testTimestampStatsRebasedAndBloomFilterSkipped) {
+    const int64_t millisPerDay = 24 * 60 * 60 * 1000LL;
+    const int64_t prolepticMillis = parseProlepticDate("1500-01-01") * millisPerDay;
+    const int64_t hybridMillis = parseHybridDate("1500-01-01") * millisPerDay;
+    const int64_t hybridMin = parseHybridDate("1499-12-31") * millisPerDay;
+    const int64_t hybridMax = parseHybridDate("1500-01-02") * millisPerDay;
+    PredicateLeaf pred(PredicateLeaf::Operator::EQUALS, PredicateDataType::TIMESTAMP, "x",
+                       Literal(prolepticMillis / 1000, 0));
+    BloomFilterImpl bf(10000);
+    bf.addLong(hybridMillis);
+
+    EXPECT_EQ(TruthValue::YES_NO,
+              evaluate(pred, createTimestampStats(hybridMin, hybridMax), &bf, false, true));
   }
 
   TEST(TestPredicateLeaf, testDateInBloomFilter) {

@@ -101,6 +101,7 @@ namespace orc {
     std::unique_ptr<proto::Metadata> metadata;
     ReaderMetrics* readerMetrics;
     std::unique_ptr<SargsApplier> sargsApplier;
+    bool writerUsedProlepticGregorian;
   };
 
   proto::StripeFooter getStripeFooter(const proto::StripeInformation& info,
@@ -206,6 +207,7 @@ namespace orc {
 
     // desired timezone to return data of timestamp types.
     const Timezone& readerTimezone;
+    bool useProlepticGregorianValue;
 
     std::unique_ptr<ReaderContext> readerContext;
     const ORCFilter* filter;
@@ -301,6 +303,9 @@ namespace orc {
     bool getThrowOnHive11DecimalOverflow() const;
     bool getIsDecimalAsLong() const;
     int32_t getForcedScaleOnHive11Decimal() const;
+    bool useProlepticGregorian() const {
+      return useProlepticGregorianValue;
+    }
   };
 
   class ReaderImpl : public Reader {
@@ -350,6 +355,8 @@ namespace orc {
     WriterId getWriterId() const override;
 
     uint32_t getWriterIdValue() const override;
+
+    bool writerUsedProlepticGregorian() const override;
 
     std::string getSoftwareVersion() const override;
 

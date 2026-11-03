@@ -74,6 +74,14 @@ namespace orc {
     return readerTimezone;
   }
 
+  bool StripeStreamsImpl::writerUsedProlepticGregorian() const {
+    return reader.getFileContents().writerUsedProlepticGregorian;
+  }
+
+  bool StripeStreamsImpl::useProlepticGregorian() const {
+    return reader.useProlepticGregorian();
+  }
+
   std::ostream* StripeStreamsImpl::getErrorStream() const {
     return reader.getFileContents().errorStream;
   }

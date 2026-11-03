@@ -172,6 +172,7 @@ set(SOURCE_FILES
   ColumnWriter.cc
   Common.cc
   Compression.cc
+  DateUtils.cc
   Exceptions.cc
   Int128.cc
   LzoDecompressor.cc

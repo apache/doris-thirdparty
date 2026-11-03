@@ -368,6 +368,18 @@ namespace orc {
     const std::string& getTimezoneName() const;
 
     /**
+     * Set whether date and timestamp values returned by this row reader should use the
+     * proleptic Gregorian calendar.
+     */
+    RowReaderOptions& setUseProlepticGregorian(bool useProlepticGregorian);
+
+    /**
+     * Get whether date and timestamp values returned by this row reader should use the
+     * proleptic Gregorian calendar.
+     */
+    bool getUseProlepticGregorian() const;
+
+    /**
      * Get the IdReadIntentMap map that was supplied by client.
      */
     const IdReadIntentMap getIdReadIntentMap() const;
@@ -475,6 +487,11 @@ namespace orc {
      * @return the integer value of the writer ID.
      */
     virtual uint32_t getWriterIdValue() const = 0;
+
+    /**
+     * Was this file written using the proleptic Gregorian calendar for date and timestamp values?
+     */
+    virtual bool writerUsedProlepticGregorian() const = 0;
 
     /**
      * Get the version of the writer.

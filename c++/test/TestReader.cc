@@ -18,6 +18,7 @@
 
 #include <cstring>
 
+#include "DateUtils.hh"
 #include "Reader.hh"
 #include "orc/Reader.hh"
 
@@ -33,6 +34,38 @@ namespace orc {
   using ::testing::ElementsAreArray;
 
   static const int DEFAULT_MEM_STREAM_SIZE = 1024 * 1024;  // 1M
+
+  std::string decodeBase64(const std::string& input) {
+    std::string output;
+    int value = 0;
+    int bits = -8;
+    for (const unsigned char c : input) {
+      if (c == '=') {
+        break;
+      }
+      int digit = -1;
+      if (c >= 'A' && c <= 'Z') {
+        digit = c - 'A';
+      } else if (c >= 'a' && c <= 'z') {
+        digit = c - 'a' + 26;
+      } else if (c >= '0' && c <= '9') {
+        digit = c - '0' + 52;
+      } else if (c == '+') {
+        digit = 62;
+      } else if (c == '/') {
+        digit = 63;
+      } else {
+        continue;
+      }
+      value = (value << 6) + digit;
+      bits += 6;
+      if (bits >= 0) {
+        output.push_back(static_cast<char>((value >> bits) & 0xff));
+        bits -= 8;
+      }
+    }
+    return output;
+  }
 
   TEST(TestReader, testWriterVersions) {
     EXPECT_EQ("original", writerVersionToString(WriterVersion_ORIGINAL));
@@ -51,6 +84,46 @@ namespace orc {
     EXPECT_EQ("lz4", compressionKindToString(CompressionKind_LZ4));
     EXPECT_EQ("zstd", compressionKindToString(CompressionKind_ZSTD));
     EXPECT_EQ("unknown - 99", compressionKindToString(static_cast<CompressionKind>(99)));
+  }
+
+  TEST(TestReader, testReadHiveLegacyDateAndTimestampWithProlepticCalendar) {
+    static const char* HIVE_LEGACY_ORC_BASE64 =
+        "T1JDEQAACgYSBAgFUAAvAAAKFQoDAAAAEg4IBToICJ3fVxCQrAFQAEAAAOOS52JjAAMhUQ5WL36Jzr"
+        "7DZ37Mk1H41rh91WbzAAYAIwAA7gSd31eQ5UIAdhMAABUCU2c7AAD4BP3Rv6XZA4Cwo5vgAgCbqgy"
+        "AAAAbr4ADEPRKfwcAAAoD3WgAAONi42ATYJDg5gLRjBJSYJpJQhlIMwL5ImCaSUIBSLMCaTYhJg4"
+        "GIGYCYSl215Jk/dAQZwBfAAAKLQoECAVQAAoOCAU6CAid31cQkKwBUAAKFQgFSg8YiY7DzPieHCD"
+        "2gbeqszdQAMEAAAgDELwBGgoIAxBIGDogNygFIhMIDBICAQIaCGRhdGVfY29sGgF0IgIIDyICCAk"
+        "wBToECAVQADoOCAU6CAid31cQkKwBUAA6FQgFSg8YiY7DzPieHCD2gbeqszdQAECQTghjEAEYgIA"
+        "QIgIADCgyMAaC9AMDT1JDFw==";
+    const std::string fileBytes = decodeBase64(HIVE_LEGACY_ORC_BASE64);
+    auto inStream = std::make_unique<MemoryInputStream>(fileBytes.data(), fileBytes.size());
+    ReaderOptions readerOptions;
+    std::unique_ptr<Reader> reader = createReader(std::move(inStream), readerOptions);
+
+    EXPECT_FALSE(reader->writerUsedProlepticGregorian());
+
+    RowReaderOptions rowReaderOptions;
+    rowReaderOptions.setTimezoneName("UTC").setUseProlepticGregorian(true);
+    std::unique_ptr<RowReader> rowReader = reader->createRowReader(rowReaderOptions);
+    std::unique_ptr<ColumnVectorBatch> batch = rowReader->createRowBatch(16);
+
+    ASSERT_TRUE(rowReader->next(*batch));
+    ASSERT_EQ(5, batch->numElements);
+    auto& root = dynamic_cast<StructVectorBatch&>(*batch);
+    auto& dates = dynamic_cast<LongVectorBatch&>(*root.fields[0]);
+    auto& timestamps = dynamic_cast<TimestampVectorBatch&>(*root.fields[1]);
+
+    const std::vector<std::string> expectedDates = {"0002-01-01", "1500-01-01", "1582-10-04",
+                                                    "1582-11-04", "2000-02-29"};
+    for (size_t i = 0; i < expectedDates.size(); ++i) {
+      const int32_t expectedDay = parseProlepticDate(expectedDates[i]);
+      EXPECT_EQ(expectedDay, dates.data[i]) << "date row " << i;
+      EXPECT_EQ(static_cast<int64_t>(expectedDay) * 24 * 60 * 60, timestamps.data[i])
+          << "timestamp row " << i;
+      EXPECT_EQ(123000000, timestamps.nanoseconds[i]) << "timestamp nanos row " << i;
+    }
+
+    EXPECT_FALSE(rowReader->next(*batch));
   }
 
   TEST(TestRowReader, computeBatchSize) {

@@ -75,6 +75,14 @@ namespace orc {
     const Timezone& getReaderTimezone() const override {
       return getTimezoneByName("GMT");
     }
+
+    bool writerUsedProlepticGregorian() const override {
+      return true;
+    }
+
+    bool useProlepticGregorian() const override {
+      return true;
+    }
   };
 
   MockStripeStreams::~MockStripeStreams() {
