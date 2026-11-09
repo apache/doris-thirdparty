@@ -1362,23 +1362,19 @@ public class RepNode extends StoppableThread {
     private void queryGroupForMembership()
         throws InterruptedException {
 
-        Set<InetSocketAddress> helperSockets = repImpl.getHelperSockets();
-
-        checkLoopbackAddresses(helperSockets);
-
-        /*
-         * Not in the rep group. Use the designated helpers and other members
-         * of the group to help us figure out how to get started.
-         */
-        final Set<InetSocketAddress> helpers = new HashSet<>(helperSockets);
-        helpers.addAll(group.getAllHelperSockets());
-        if (helpers.isEmpty()) {
-            throw EnvironmentFailureException.unexpectedState
-                ("Need a helper to add a new node into the group");
-        }
+        checkLoopbackAddresses(repImpl.getHelperSockets());
 
         NameIdPair groupMasterNameId;
         while (true) {
+            /* Resolve addresses again so retries can recover from DNS changes. */
+            final Set<InetSocketAddress> helpers =
+                new HashSet<>(repImpl.getHelperSockets());
+            helpers.addAll(group.getAllHelperSockets());
+            if (helpers.isEmpty()) {
+                throw EnvironmentFailureException.unexpectedState
+                    ("Need a helper to add a new node into the group");
+            }
+
             assert TestHookExecute.doHookIfSet(
                 queryGroupForMembershipBeforeQueryForMaster,
                 nameIdPair.getName());
