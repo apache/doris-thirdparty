@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+#include <thread>
 #include <tuple>
 
 #include "MemoryInputStream.hh"
@@ -27,6 +28,103 @@
 namespace orc {
 
   static const int DEFAULT_MEM_STREAM_SIZE = 10 * 1024 * 1024;  // 10M
+
+  TEST(TestPredicatePushdown, SharedStripeStatisticsKeepReaderLocalPredicates) {
+    constexpr uint64_t STRIPES = 8;
+    constexpr uint64_t ROWS = 3000;
+    MemoryOutputStream stream(DEFAULT_MEM_STREAM_SIZE);
+    auto type = std::unique_ptr<Type>(Type::buildTypeFromString("struct<id:bigint>"));
+    WriterOptions writeOptions;
+    writeOptions.setStripeSize(1).setCompression(CompressionKind_NONE).setRowIndexStride(1000);
+    auto writer = createWriter(*type, &stream, writeOptions);
+    auto batch = writer->createRowBatch(ROWS);
+    auto& root = dynamic_cast<StructVectorBatch&>(*batch);
+    auto& ids = dynamic_cast<LongVectorBatch&>(*root.fields[0]);
+    for (uint64_t stripe = 0; stripe < STRIPES; ++stripe) {
+      for (uint64_t row = 0; row < ROWS; ++row) {
+        ids.data[row] = static_cast<int64_t>(stripe * ROWS + row);
+      }
+      root.numElements = ids.numElements = ROWS;
+      writer->add(*batch);
+    }
+    writer->close();
+
+    for (bool warm : {false, true}) {
+      ReaderMetrics parentMetrics;
+      ReaderOptions parentOptions;
+      parentOptions.setReaderMetrics(&parentMetrics);
+      auto parent = createReader(
+          std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), parentOptions);
+      ASSERT_EQ(STRIPES, parent->getNumberOfStripes());
+      auto shared = parent->getSharedStripeStatistics();
+      const auto tail = parent->getSerializedFileTail();
+      EXPECT_EQ(0, parentMetrics.MetadataParseCount.load());
+      if (warm) {
+        RowReaderOptions options;
+        options.searchArgument(
+            SearchArgumentFactory::newBuilder()
+                ->lessThan("id", PredicateDataType::LONG, Literal(int64_t(1000000)))
+                .build());
+        EXPECT_EQ(std::vector<int>(STRIPES, 1), parent->getNeedReadStripes(options));
+      }
+      parent.reset();
+
+      std::atomic<uint64_t> parses{parentMetrics.MetadataParseCount.load()};
+      std::atomic<uint64_t> evaluations{parentMetrics.StripeStatisticsEvaluationCount.load()};
+      std::atomic<uint64_t> ready{0};
+      std::atomic<bool> start{false};
+      std::vector<std::thread> children;
+      for (uint64_t stripe = 0; stripe < STRIPES; ++stripe) {
+        children.emplace_back([&, stripe] {
+          ReaderMetrics metrics;
+          ReaderOptions options;
+          options.setSerializedFileTail(tail).setSharedStripeStatistics(shared).setReaderMetrics(
+              &metrics);
+          auto reader = createReader(
+              std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), options);
+          auto info = reader->getStripe(stripe);
+          RowReaderOptions rowOptions;
+          const uint64_t expectedRows = stripe % 2 == 0 ? 1000 : 2000;
+          rowOptions.range(info->getOffset(), info->getLength());
+          rowOptions.searchArgument(
+              SearchArgumentFactory::newBuilder()
+                  ->lessThan("id", PredicateDataType::LONG,
+                             Literal(static_cast<int64_t>(stripe * ROWS + expectedRows)))
+                  .build());
+          ready.fetch_add(1, std::memory_order_release);
+          while (!start.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+          }
+          EXPECT_EQ(std::vector<int>({1}), reader->getNeedReadStripes(rowOptions, stripe, 1));
+          auto rows = reader->createRowReader(rowOptions);
+          auto result = rows->createRowBatch(256);
+          uint64_t count = 0;
+          while (rows->next(*result)) {
+            EXPECT_EQ(stripe * ROWS + count, rows->getRowNumber());
+            auto& values = dynamic_cast<LongVectorBatch&>(
+                *dynamic_cast<StructVectorBatch&>(*result).fields[0]);
+            for (uint64_t row = 0; row < result->numElements; ++row) {
+              EXPECT_EQ(static_cast<int64_t>(stripe * ROWS + count++), values.data[row]);
+            }
+          }
+          EXPECT_EQ(expectedRows, count);
+          EXPECT_LT(metrics.SelectedRowGroupCount.load(), metrics.EvaluatedRowGroupCount.load());
+          EXPECT_THROW(reader->getNeedReadStripes(rowOptions, STRIPES, 1), std::out_of_range);
+          parses.fetch_add(metrics.MetadataParseCount.load());
+          evaluations.fetch_add(metrics.StripeStatisticsEvaluationCount.load());
+        });
+      }
+      while (ready.load(std::memory_order_acquire) != STRIPES) {
+        std::this_thread::yield();
+      }
+      start.store(true, std::memory_order_release);
+      for (auto& child : children) {
+        child.join();
+      }
+      EXPECT_EQ(1, parses.load());
+      EXPECT_EQ(STRIPES * (warm ? 2 : 1), evaluations.load());
+    }
+  }
 
   class SeekPastFilteredStripeTest
       : public testing::TestWithParam<std::tuple<uint64_t, uint64_t, bool, bool, bool>> {};

@@ -41,11 +41,16 @@ namespace orc {
   struct ReaderOptionsPrivate;
   struct RowReaderOptionsPrivate;
   class InputStream;
+  class SharedStripeStatistics;
   /**
    * Expose the reader metrics including the latency and
    * number of calls of the decompression/decoding/IO modules.
    */
   struct ReaderMetrics {
+    // Metadata protobuf parse attempts and getNeedReadStripes evaluations only.
+    // RowReader's range-local stripe/row-group PPD retains its existing metrics.
+    std::atomic<uint64_t> MetadataParseCount{0};
+    std::atomic<uint64_t> StripeStatisticsEvaluationCount{0};
     std::atomic<uint64_t> ReaderCall{0};
     // ReaderInclusiveLatencyUs contains the latency of
     // the decompression/decoding/IO modules.
@@ -95,6 +100,14 @@ namespace orc {
      * @param serialization the bytes of the serialized tail to use
      */
     ReaderOptions& setSerializedFileTail(const std::string& serialization);
+
+    /**
+     * Share lazily loaded, immutable stripe statistics between independent readers.
+     * The handle must come from the same immutable file version as this reader's tail.
+     * Streams, metrics and predicate appliers remain reader-local.
+     */
+    ReaderOptions& setSharedStripeStatistics(std::shared_ptr<SharedStripeStatistics> statistics);
+    std::shared_ptr<SharedStripeStatistics> getSharedStripeStatistics() const;
 
     /**
      * Set the memory allocator.
@@ -661,7 +674,15 @@ namespace orc {
 
     virtual std::vector<int> getNeedReadStripes(const RowReaderOptions& opts) = 0;
 
-    virtual void getSelectedColumns(const std::list<std::string>& names, std::vector<bool>& selectedColumns) = 0;
+    /** Return decisions for [firstStripe, firstStripe + stripeCount), indexed from zero. */
+    virtual std::vector<int> getNeedReadStripes(const RowReaderOptions& opts, uint64_t firstStripe,
+                                                uint64_t stripeCount) = 0;
+
+    /** Export a thread-safe lazy statistics handle without reading Metadata. */
+    virtual std::shared_ptr<SharedStripeStatistics> getSharedStripeStatistics() const = 0;
+
+    virtual void getSelectedColumns(const std::list<std::string>& names,
+                                    std::vector<bool>& selectedColumns) = 0;
   };
 
   /**

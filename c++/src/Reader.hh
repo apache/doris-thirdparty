@@ -19,6 +19,8 @@
 #ifndef ORC_READER_IMPL_HH
 #define ORC_READER_IMPL_HH
 
+#include <mutex>
+
 #include "orc/Exceptions.hh"
 #include "orc/Int128.hh"
 #include "orc/OrcFile.hh"
@@ -83,9 +85,15 @@ namespace orc {
     }
   };
 
-  /**
-   * State shared between Reader and Row Reader
-   */
+  // A successful call_once publishes immutable Metadata without retaining a reader,
+  // its stream or its predicate state. The handle can outlive the planning reader.
+  class SharedStripeStatistics {
+   public:
+    std::once_flag loaded;
+    std::shared_ptr<const proto::Metadata> metadata;
+  };
+
+  /** State shared between one Reader and its RowReaders. */
   struct FileContents {
     std::unique_ptr<InputStream> stream;
     std::unique_ptr<proto::PostScript> postscript;
@@ -98,7 +106,8 @@ namespace orc {
     /// Decimal64 in ORCv2 uses RLE to store values. This flag indicates whether
     /// this new encoding is used.
     bool isDecimalAsLong;
-    std::unique_ptr<proto::Metadata> metadata;
+    std::shared_ptr<const proto::Metadata> metadata;
+    std::shared_ptr<SharedStripeStatistics> stripeStatistics;
     ReaderMetrics* readerMetrics;
     std::unique_ptr<SargsApplier> sargsApplier;
   };
@@ -318,6 +327,9 @@ namespace orc {
     uint64_t numberOfStripes;
     std::unique_ptr<SargsApplier> sargsApplier;
     std::vector<int> getNeedReadStripes(const RowReaderOptions& opts) override;
+    std::vector<int> getNeedReadStripes(const RowReaderOptions& opts, uint64_t firstStripe,
+                                        uint64_t stripeCount) override;
+    std::shared_ptr<SharedStripeStatistics> getSharedStripeStatistics() const override;
     uint64_t getMemoryUse(int stripeIx, std::vector<bool>& selectedColumns);
 
     // internal methods
@@ -440,7 +452,8 @@ namespace orc {
     std::map<uint32_t, BloomFilterIndex> getBloomFilters(
         uint32_t stripeIndex, const std::set<uint32_t>& included) const override;
 
-    void getSelectedColumns(const std::list<std::string>& names, std::vector<bool>& selectedColumns) override;
+    void getSelectedColumns(const std::list<std::string>& names,
+                            std::vector<bool>& selectedColumns) override;
   };
 }  // namespace orc
 
