@@ -1015,7 +1015,10 @@ namespace orc {
                                                       metadataSize, *contents->pool),
             contents->blockSize, *contents->pool, contents->readerMetrics);
         auto metadata = std::make_shared<proto::Metadata>();
-        contents->readerMetrics->MetadataParseCount.fetch_add(1, std::memory_order_relaxed);
+        // Standalone readers may leave the optional metrics pointer unset.
+        if (contents->readerMetrics != nullptr) {
+          contents->readerMetrics->MetadataParseCount.fetch_add(1, std::memory_order_relaxed);
+        }
         if (!metadata->ParseFromZeroCopyStream(pbStream.get())) {
           throw ParseError("Failed to parse the metadata");
         }
@@ -1088,8 +1091,11 @@ namespace orc {
         const auto& currentStripeStats =
             contents->metadata->stripestats(static_cast<int>(currentStripeIndex));
         // Not need add mMetrics,so use 0.
-        contents->readerMetrics->StripeStatisticsEvaluationCount.fetch_add(
-            1, std::memory_order_relaxed);
+        // Default ReaderOptions leaves metrics disabled, including for SARG callers.
+        if (contents->readerMetrics != nullptr) {
+          contents->readerMetrics->StripeStatisticsEvaluationCount.fetch_add(
+              1, std::memory_order_relaxed);
+        }
         allStripesNeeded[currentStripeIndex - firstStripe] =
             sargsApplier->evaluateStripeStatistics(currentStripeStats, 0);
       }
