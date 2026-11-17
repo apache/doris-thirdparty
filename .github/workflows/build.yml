@@ -230,7 +230,7 @@ jobs:
     uses: ./.github/workflows/build-target.yml
     with:
       target: macOS-arm64
-      runs_on: macos-14
+      runs_on: macos-15
       thirdparty_commit_hash: ${{ needs.prerelease.outputs.thirdparty_commit_hash }}
 
   # Skipped while its published archive is still fresh enough - see the prerelease job.
