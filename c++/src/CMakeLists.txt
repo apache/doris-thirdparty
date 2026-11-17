@@ -200,6 +200,7 @@ endif(BUILD_LIBHDFSPP)
 add_library (orc STATIC ${SOURCE_FILES})
 
 target_link_libraries (orc
+  Threads::Threads
   orc::protobuf
   orc::zlib
   orc::snappy
