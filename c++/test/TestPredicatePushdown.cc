@@ -21,6 +21,7 @@
 
 #include "MemoryInputStream.hh"
 #include "MemoryOutputStream.hh"
+#include "orc/Exceptions.hh"
 #include "orc/OrcFile.hh"
 #include "orc/sargs/SearchArgument.hh"
 #include "wrap/gtest-wrapper.h"
@@ -28,6 +29,114 @@
 namespace orc {
 
   static const int DEFAULT_MEM_STREAM_SIZE = 10 * 1024 * 1024;  // 10M
+
+  class MetadataFailureInputStream : public MemoryInputStream {
+   public:
+    enum class Failure { NONE, READ, PARSE };
+
+    MetadataFailureInputStream(const char* buffer, size_t size, Failure failure)
+        : MemoryInputStream(buffer, size), failure_(failure) {}
+
+    void read(void* buf, uint64_t length, uint64_t offset) override {
+      ++reads_;
+      if (failure_ == Failure::READ) {
+        throw ParseError("injected metadata read failure");
+      }
+      MemoryInputStream::read(buf, length, offset);
+      if (failure_ == Failure::PARSE) {
+        // Wire type 7 is invalid, so the Metadata protobuf cannot parse this tag.
+        *static_cast<char*>(buf) = 0x0f;
+      }
+    }
+
+    uint64_t getReadCount() const {
+      return reads_;
+    }
+
+   private:
+    Failure failure_;
+    uint64_t reads_ = 0;
+  };
+
+  TEST(TestPredicatePushdown, SharedStripeStatisticsRetryAfterLoadFailure) {
+    constexpr uint64_t STRIPES = 2;
+    constexpr uint64_t ROWS = 1000;
+    MemoryOutputStream stream(DEFAULT_MEM_STREAM_SIZE);
+    auto type = std::unique_ptr<Type>(Type::buildTypeFromString("struct<id:bigint>"));
+    WriterOptions writeOptions;
+    writeOptions.setStripeSize(1).setCompression(CompressionKind_NONE).setRowIndexStride(1000);
+    auto writer = createWriter(*type, &stream, writeOptions);
+    auto batch = writer->createRowBatch(ROWS);
+    auto& root = dynamic_cast<StructVectorBatch&>(*batch);
+    auto& ids = dynamic_cast<LongVectorBatch&>(*root.fields[0]);
+    for (uint64_t stripe = 0; stripe < STRIPES; ++stripe) {
+      for (uint64_t row = 0; row < ROWS; ++row) {
+        ids.data[row] = static_cast<int64_t>(stripe * ROWS + row);
+      }
+      root.numElements = ids.numElements = ROWS;
+      writer->add(*batch);
+    }
+    writer->close();
+
+    using Failure = MetadataFailureInputStream::Failure;
+    for (auto failure : {Failure::READ, Failure::PARSE}) {
+      SCOPED_TRACE(failure == Failure::READ ? "read failure" : "parse failure");
+      auto parent =
+          createReader(std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()),
+                       ReaderOptions());
+      ASSERT_EQ(STRIPES, parent->getNumberOfStripes());
+      auto shared = parent->getSharedStripeStatistics();
+      const auto tail = parent->getSerializedFileTail();
+      parent.reset();
+
+      RowReaderOptions rowOptions;
+      rowOptions.searchArgument(
+          SearchArgumentFactory::newBuilder()
+              ->lessThan("id", PredicateDataType::LONG, Literal(static_cast<int64_t>(ROWS)))
+              .build());
+      ReaderMetrics failedMetrics;
+      ReaderOptions failedOptions;
+      failedOptions.setSerializedFileTail(tail).setSharedStripeStatistics(shared).setReaderMetrics(
+          &failedMetrics);
+      auto failedStream = std::make_unique<MetadataFailureInputStream>(stream.getData(),
+                                                                       stream.getLength(), failure);
+      auto* failedInput = failedStream.get();
+      auto failedReader = createReader(std::move(failedStream), failedOptions);
+      ASSERT_EQ(0, failedInput->getReadCount());
+      EXPECT_THROW(failedReader->getNeedReadStripes(rowOptions, 1, 1), ParseError);
+      EXPECT_EQ(1, failedInput->getReadCount());
+      EXPECT_EQ(1, failedMetrics.MetadataParseCount.load());
+
+      ReaderMetrics retryMetrics;
+      ReaderOptions retryOptions;
+      retryOptions.setSerializedFileTail(tail).setSharedStripeStatistics(shared).setReaderMetrics(
+          &retryMetrics);
+      auto retryStream = std::make_unique<MetadataFailureInputStream>(
+          stream.getData(), stream.getLength(), Failure::NONE);
+      auto* retryInput = retryStream.get();
+      auto retryReader = createReader(std::move(retryStream), retryOptions);
+      EXPECT_EQ(std::vector<int>({0}), retryReader->getNeedReadStripes(rowOptions, 1, 1));
+      EXPECT_EQ(STRIPES, retryReader->getNumberOfStripeStatistics());
+      EXPECT_EQ(1, retryInput->getReadCount());
+      EXPECT_EQ(1, retryMetrics.MetadataParseCount.load());
+      retryReader.reset();
+
+      // The failed reader must adopt the successful result without using its failing stream again.
+      EXPECT_EQ(std::vector<int>({1}), failedReader->getNeedReadStripes(rowOptions, 0, 1));
+      EXPECT_EQ(1, failedInput->getReadCount());
+      EXPECT_EQ(1, failedMetrics.MetadataParseCount.load());
+      failedReader.reset();
+
+      // A new sibling also needs no I/O, even after both earlier readers are destroyed.
+      auto warmStream = std::make_unique<MetadataFailureInputStream>(
+          stream.getData(), stream.getLength(), Failure::READ);
+      auto* warmInput = warmStream.get();
+      auto warmReader = createReader(std::move(warmStream), retryOptions);
+      EXPECT_EQ(std::vector<int>({1, 0}), warmReader->getNeedReadStripes(rowOptions));
+      EXPECT_EQ(0, warmInput->getReadCount());
+      EXPECT_EQ(1, retryMetrics.MetadataParseCount.load());
+    }
+  }
 
   TEST(TestPredicatePushdown, SharedStripeStatisticsKeepReaderLocalPredicates) {
     constexpr uint64_t STRIPES = 8;

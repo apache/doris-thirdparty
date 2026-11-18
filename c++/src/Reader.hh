@@ -85,11 +85,13 @@ namespace orc {
     }
   };
 
-  // A successful call_once publishes immutable Metadata without retaining a reader,
-  // its stream or its predicate state. The handle can outlive the planning reader.
+  // The mutex protects loaded and metadata. A successful load publishes immutable Metadata
+  // without retaining a reader, its stream or its predicate state.
   class SharedStripeStatistics {
    public:
-    std::once_flag loaded;
+    std::mutex mutex;
+    // A zero-length Metadata section is successfully loaded even though metadata stays null.
+    bool loaded = false;
     std::shared_ptr<const proto::Metadata> metadata;
   };
 

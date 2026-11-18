@@ -997,7 +997,10 @@ namespace orc {
     // Each reader keeps its own stream and metrics. Only the first successful loader
     // publishes parsed statistics; failed loads remain retryable by another reader.
     auto& shared = *contents->stripeStatistics;
-    std::call_once(shared.loaded, [&] {
+    // Keep exception unwinding within C++: pthread_once-backed call_once implementations
+    // do not all reset their flag when a loader throws.
+    std::lock_guard<std::mutex> lock(shared.mutex);
+    if (!shared.loaded) {
       uint64_t metadataSize = contents->postscript->metadatalength();
       uint64_t footerLength = contents->postscript->footerlength();
       if (fileLength < metadataSize + footerLength + postscriptLength + 1) {
@@ -1024,7 +1027,8 @@ namespace orc {
         }
         shared.metadata = std::move(metadata);
       }
-    });
+      shared.loaded = true;
+    }
     contents->metadata = shared.metadata;
     isMetadataLoaded = true;
   }
