@@ -37,7 +37,8 @@ namespace orc {
 
   TEST(TestReader, SharedFileTailKeepsIndependentRangeReaders) {
     constexpr uint64_t STRIPES = 8;
-    constexpr uint64_t ROWS = 200;
+    // Exceed the RLE encoder's buffer so every add() has encoded bytes to trigger a stripe flush.
+    constexpr uint64_t ROWS = 3000;
     MemoryOutputStream stream(DEFAULT_MEM_STREAM_SIZE);
     auto type = Type::buildTypeFromString("struct<id:bigint>");
     WriterOptions writeOptions;
@@ -72,7 +73,7 @@ namespace orc {
         offsets.push_back(parent->getStripe(stripe)->getOffset());
       }
       EXPECT_EQ(1, metrics.FileTailParseCount.load());
-      EXPECT_EQ(STRIPES, metrics.StripeDirectoryEntryCount.load());
+      EXPECT_EQ(0, metrics.StripeDirectoryEntryCount.load());
     }
     ASSERT_NE(nullptr, shared);
     offsets.push_back(stream.getLength());
@@ -81,6 +82,7 @@ namespace orc {
     for (uint64_t width : {uint64_t{1}, uint64_t{4}}) {
       std::atomic<uint64_t> ready{0};
       std::atomic<bool> start{false};
+      std::atomic<uint64_t> prefixEntries{0};
       std::vector<std::thread> children;
       for (uint64_t first = 0; first < STRIPES; first += width) {
         children.emplace_back([&, first] {
@@ -100,7 +102,6 @@ namespace orc {
               RowReaderOptions().range(offsets[first], offsets[first + width] - offsets[first]));
           EXPECT_EQ(width * ROWS, rows->getNumberOfRows());
           EXPECT_EQ(0, metrics.FileTailParseCount.load());
-          EXPECT_EQ(0, metrics.StripeDirectoryEntryCount.load());
           EXPECT_EQ(width, metrics.RowReaderStripeVisitCount.load());
           auto data = rows->createRowBatch(37);
           uint64_t expected = first * ROWS;
@@ -121,6 +122,8 @@ namespace orc {
           auto& values =
               dynamic_cast<LongVectorBatch&>(*dynamic_cast<StructVectorBatch&>(*data).fields[0]);
           EXPECT_EQ(static_cast<int64_t>(seekRow), values.data[0]);
+          prefixEntries.fetch_add(metrics.StripeDirectoryEntryCount.load(),
+                                  std::memory_order_relaxed);
         });
       }
       while (ready.load(std::memory_order_acquire) != STRIPES / width) {
@@ -130,6 +133,7 @@ namespace orc {
       for (auto& child : children) {
         child.join();
       }
+      EXPECT_EQ(width == 1 ? STRIPES : 0, prefixEntries.load());
     }
 
     // The existing serialized-tail API still builds an independent parsed context.
@@ -140,8 +144,11 @@ namespace orc {
         std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), options);
     EXPECT_NE(shared, reader->getSharedFileTail());
     EXPECT_EQ(1, metrics.FileTailParseCount.load());
-    EXPECT_EQ(STRIPES, metrics.StripeDirectoryEntryCount.load());
+    EXPECT_EQ(0, metrics.StripeDirectoryEntryCount.load());
+    EXPECT_EQ(STRIPES * ROWS, reader->getNumberOfRows());
+    EXPECT_EQ(0, metrics.StripeDirectoryEntryCount.load());
     auto empty = reader->createRowReader(RowReaderOptions().range(offsets[2], 0));
+    EXPECT_EQ(STRIPES, metrics.StripeDirectoryEntryCount.load());
     EXPECT_EQ(0, empty->getNumberOfRows());
     EXPECT_EQ(0, metrics.RowReaderStripeVisitCount.load());
     EXPECT_FALSE(empty->next(*empty->createRowBatch(1)));
@@ -151,10 +158,10 @@ namespace orc {
     corrupt.mutable_footer()->mutable_stripes(1)->set_offset(offsets[0] - 1);
     const ReaderOptions corruptOptions =
         ReaderOptions().setSerializedFileTail(corrupt.SerializeAsString());
-    EXPECT_THROW(
-        createReader(std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()),
-                     corruptOptions),
-        ParseError);
+    auto corruptReader = createReader(
+        std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), corruptOptions);
+    EXPECT_THROW(corruptReader->createRowReader(), ParseError);
+    EXPECT_THROW(corruptReader->createRowReader(), ParseError);
   }
 
   TEST(TestReader, SharedFileTailSupportsEmptyFiles) {

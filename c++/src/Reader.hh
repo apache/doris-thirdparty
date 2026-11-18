@@ -95,17 +95,24 @@ namespace orc {
     std::shared_ptr<const proto::Metadata> metadata;
   };
 
-  // Fully built before publication. The prefix uses the source allocator, which must outlive
-  // this handle, but no reader, stream, mutable schema or metrics are retained.
+  // The parsed tail is immutable after publication. Prefixes are built once on first RowReader
+  // use, so metadata-only readers do not allocate them. The source allocator must outlive this
+  // handle; no reader, stream, mutable schema or metrics are retained.
   class SharedFileTail {
    public:
-    explicit SharedFileTail(MemoryPool& pool) : firstRowOfStripe(pool, 0) {}
+    explicit SharedFileTail(MemoryPool& memoryPool) : pool(memoryPool) {}
+
+    const DataBuffer<uint64_t>& getFirstRowOfStripe(ReaderMetrics* metrics) const;
 
     std::shared_ptr<const proto::PostScript> postscript;
     std::shared_ptr<const proto::Footer> footer;
-    DataBuffer<uint64_t> firstRowOfStripe;
     uint64_t fileLength;
     uint64_t postscriptLength;
+
+   private:
+    MemoryPool& pool;
+    mutable std::once_flag prefixOnce;
+    mutable std::unique_ptr<DataBuffer<uint64_t>> firstRowOfStripe;
   };
 
   /** State shared between one Reader and its RowReaders. */

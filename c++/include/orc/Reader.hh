@@ -49,7 +49,7 @@ namespace orc {
    */
   struct ReaderMetrics {
     // Successful file-tail parses, prefix entries built, and entries visited to initialize
-    // RowReader ranges. Shared-tail children parse/build nothing and visit only their range.
+    // RowReader ranges. A shared tail builds its prefix at most once, when rows are needed.
     std::atomic<uint64_t> FileTailParseCount{0};
     std::atomic<uint64_t> StripeDirectoryEntryCount{0};
     std::atomic<uint64_t> RowReaderStripeVisitCount{0};

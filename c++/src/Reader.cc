@@ -261,6 +261,29 @@ namespace orc {
     buildTypeNameIdMap(contents->schema.get());
   }
 
+  const DataBuffer<uint64_t>& SharedFileTail::getFirstRowOfStripe(ReaderMetrics* metrics) const {
+    std::call_once(prefixOnce, [this, metrics] {
+      const auto stripeCount = static_cast<size_t>(footer->stripes_size());
+      auto prefixes = std::make_unique<DataBuffer<uint64_t>>(pool, stripeCount);
+      uint64_t rowTotal = 0;
+      for (size_t stripe = 0; stripe < stripeCount; ++stripe) {
+        (*prefixes)[stripe] = rowTotal;
+        const auto& info = footer->stripes(static_cast<int>(stripe));
+        // Range lookup uses ordered offsets. Reject a corrupt directory such as [100, 50]
+        // before a child could silently select the wrong stripes with binary search.
+        if (stripe > 0 && info.offset() < footer->stripes(static_cast<int>(stripe - 1)).offset()) {
+          throw ParseError("ORC stripe offsets are not ordered");
+        }
+        rowTotal += info.numberofrows();
+      }
+      firstRowOfStripe = std::move(prefixes);
+      if (metrics != nullptr) {
+        metrics->StripeDirectoryEntryCount.fetch_add(stripeCount, std::memory_order_relaxed);
+      }
+    });
+    return *firstRowOfStripe;
+  }
+
   RowReaderImpl::RowReaderImpl(std::shared_ptr<FileContents> _contents,
                                const RowReaderOptions& opts, const ORCFilter* _filter,
                                const StringDictFilter* _stringDictFilter)
@@ -269,7 +292,7 @@ namespace orc {
         throwOnHive11DecimalOverflow(opts.getThrowOnHive11DecimalOverflow()),
         forcedScaleOnHive11Decimal(opts.getForcedScaleOnHive11Decimal()),
         footer(contents->footer.get()),
-        firstRowOfStripe(contents->fileTail->firstRowOfStripe),
+        firstRowOfStripe(contents->fileTail->getFirstRowOfStripe(contents->readerMetrics)),
         enableEncodedBlock(opts.getEnableLazyDecoding()),
         readerTimezone(getTimezoneByName(opts.getTimezoneName())),
         filter(_filter),
@@ -1853,24 +1876,6 @@ namespace orc {
       tail->footer = contents->footer;
       tail->fileLength = fileLength;
       tail->postscriptLength = postscriptLength;
-      const auto stripeCount = static_cast<size_t>(contents->footer->stripes_size());
-      tail->firstRowOfStripe.resize(stripeCount);
-      uint64_t rowTotal = 0;
-      for (size_t stripe = 0; stripe < stripeCount; ++stripe) {
-        tail->firstRowOfStripe[stripe] = rowTotal;
-        const auto& info = contents->footer->stripes(static_cast<int>(stripe));
-        // Range lookup uses ordered offsets. Reject a corrupt directory such as [100, 50]
-        // before a child could silently select the wrong stripes with binary search.
-        if (stripe > 0 &&
-            info.offset() < contents->footer->stripes(static_cast<int>(stripe - 1)).offset()) {
-          throw ParseError("ORC stripe offsets are not ordered");
-        }
-        rowTotal += info.numberofrows();
-      }
-      if (contents->readerMetrics != nullptr) {
-        contents->readerMetrics->StripeDirectoryEntryCount.fetch_add(stripeCount,
-                                                                     std::memory_order_relaxed);
-      }
       contents->fileTail = std::move(tail);
     }
     contents->isDecimalAsLong = false;
