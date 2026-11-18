@@ -160,6 +160,7 @@ namespace orc {
     std::string readerTimezone;
     RowReaderOptions::IdReadIntentMap idReadIntentMap;
     bool useTightNumericVector;
+    bool useProlepticGregorian;
 
     RowReaderOptionsPrivate() {
       selection = ColumnSelection_NONE;
@@ -171,6 +172,7 @@ namespace orc {
       enableLazyDecoding = false;
       readerTimezone = "GMT";
       useTightNumericVector = false;
+      useProlepticGregorian = true;
     }
   };
 
@@ -346,6 +348,15 @@ namespace orc {
 
   const std::string& RowReaderOptions::getTimezoneName() const {
     return privateBits->readerTimezone;
+  }
+
+  RowReaderOptions& RowReaderOptions::setUseProlepticGregorian(bool useProlepticGregorian) {
+    privateBits->useProlepticGregorian = useProlepticGregorian;
+    return *this;
+  }
+
+  bool RowReaderOptions::getUseProlepticGregorian() const {
+    return privateBits->useProlepticGregorian;
   }
 
   const RowReaderOptions::IdReadIntentMap RowReaderOptions::getIdReadIntentMap() const {

@@ -39,12 +39,15 @@ namespace orc {
 
   SargsApplier::SargsApplier(const Type& type, const SearchArgument* searchArgument,
                              uint64_t rowIndexStride, WriterVersion writerVersion,
-                             ReaderMetrics* metrics, const SchemaEvolution* schemaEvolution)
+                             ReaderMetrics* metrics, const SchemaEvolution* schemaEvolution,
+                             bool writerUsedProlepticGregorian, bool useProlepticGregorian)
       : mType(type),
         mSearchArgument(searchArgument),
         mSchemaEvolution(schemaEvolution),
         mRowIndexStride(rowIndexStride),
         mWriterVersion(writerVersion),
+        mWriterUsedProlepticGregorian(writerUsedProlepticGregorian),
+        mUseProlepticGregorian(useProlepticGregorian),
         mHasEvaluatedFileStats(false),
         mFileStatsEvalResult(true),
         mMetrics(metrics) {
@@ -104,7 +107,9 @@ namespace orc {
             bloomFilter = iter->second.entries.at(rowGroup);
           }
 
-          leafValues[pred] = leaves[pred].evaluate(mWriterVersion, statistics, bloomFilter.get());
+          leafValues[pred] =
+              leaves[pred].evaluate(mWriterVersion, statistics, bloomFilter.get(),
+                                    mWriterUsedProlepticGregorian, mUseProlepticGregorian);
         }
       }
 
@@ -155,8 +160,9 @@ namespace orc {
     for (size_t pred = 0; pred != leaves.size(); ++pred) {
       uint64_t columnId = mFilterColumns[pred];
       if (columnId != INVALID_COLUMN_ID && colStats.size() > static_cast<int>(columnId)) {
-        leafValues[pred] = leaves[pred].evaluate(mWriterVersion,
-                                                 colStats.Get(static_cast<int>(columnId)), nullptr);
+        leafValues[pred] =
+            leaves[pred].evaluate(mWriterVersion, colStats.Get(static_cast<int>(columnId)),
+                                  nullptr, mWriterUsedProlepticGregorian, mUseProlepticGregorian);
       }
     }
 

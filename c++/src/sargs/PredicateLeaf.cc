@@ -17,6 +17,7 @@
  */
 
 #include "PredicateLeaf.hh"
+#include "DateUtils.hh"
 #include "orc/BloomFilter.hh"
 #include "orc/Common.hh"
 #include "orc/Type.hh"
@@ -510,7 +511,9 @@ namespace orc {
     return result;
   }
 
-  TruthValue PredicateLeaf::evaluatePredicateMinMax(const proto::ColumnStatistics& colStats) const {
+  TruthValue PredicateLeaf::evaluatePredicateMinMax(const proto::ColumnStatistics& colStats,
+                                                    bool writerUsedProlepticGregorian,
+                                                    bool useProlepticGregorian) const {
     TruthValue result = TruthValue::YES_NO_NULL;
     switch (mType) {
       case PredicateDataType::LONG: {
@@ -549,8 +552,12 @@ namespace orc {
         if (colStats.has_datestatistics() && colStats.datestatistics().has_minimum() &&
             colStats.datestatistics().has_maximum()) {
           const auto& stats = colStats.datestatistics();
-          result = evaluatePredicateRange(mOperator, literal2Date(mLiterals), stats.minimum(),
-                                          stats.maximum(), col_stats_hasnull(colStats));
+          const int32_t minimum =
+              convertDate(stats.minimum(), writerUsedProlepticGregorian, useProlepticGregorian);
+          const int32_t maximum =
+              convertDate(stats.maximum(), writerUsedProlepticGregorian, useProlepticGregorian);
+          result = evaluatePredicateRange(mOperator, literal2Date(mLiterals), minimum, maximum,
+                                          col_stats_hasnull(colStats));
         }
         break;
       }
@@ -562,11 +569,15 @@ namespace orc {
           constexpr int32_t DEFAULT_MAX_NANOS = 999999;
           int32_t minNano = stats.has_minimumnanos() ? stats.minimumnanos() - 1 : DEFAULT_MIN_NANOS;
           int32_t maxNano = stats.has_maximumnanos() ? stats.maximumnanos() - 1 : DEFAULT_MAX_NANOS;
+          const int64_t minimum =
+              convertTime(stats.minimumutc(), writerUsedProlepticGregorian, useProlepticGregorian);
+          const int64_t maximum =
+              convertTime(stats.maximumutc(), writerUsedProlepticGregorian, useProlepticGregorian);
           Literal::Timestamp minTimestamp(
-              stats.minimumutc() / 1000,
+              minimum / 1000,
               static_cast<int32_t>((stats.minimumutc() % 1000) * 1000000) + minNano);
           Literal::Timestamp maxTimestamp(
-              stats.maximumutc() / 1000,
+              maximum / 1000,
               static_cast<int32_t>((stats.maximumutc() % 1000) * 1000000) + maxNano);
           result = evaluatePredicateRange(mOperator, literal2Timestamp(mLiterals), minTimestamp,
                                           maxTimestamp, col_stats_hasnull(colStats));
@@ -694,7 +705,9 @@ namespace orc {
 
   TruthValue PredicateLeaf::evaluate(const WriterVersion writerVersion,
                                      const proto::ColumnStatistics& colStats,
-                                     const BloomFilter* bloomFilter) const {
+                                     const BloomFilter* bloomFilter,
+                                     bool writerUsedProlepticGregorian,
+                                     bool useProlepticGregorian) const {
     // files written before ORC-135 stores timestamp wrt to local timezone
     // causing issues with PPD. disable PPD for timestamp for all old files
     if (mType == PredicateDataType::TIMESTAMP) {
@@ -715,8 +728,12 @@ namespace orc {
       return TruthValue::IS_NULL;
     }
 
-    TruthValue result = evaluatePredicateMinMax(colStats);
-    if (shouldEvaluateBloomFilter(mOperator, result, bloomFilter)) {
+    TruthValue result =
+        evaluatePredicateMinMax(colStats, writerUsedProlepticGregorian, useProlepticGregorian);
+    const bool calendarRebasedPredicate =
+        writerUsedProlepticGregorian != useProlepticGregorian &&
+        (mType == PredicateDataType::DATE || mType == PredicateDataType::TIMESTAMP);
+    if (!calendarRebasedPredicate && shouldEvaluateBloomFilter(mOperator, result, bloomFilter)) {
       return evaluatePredicateBloomFiter(bloomFilter, col_stats_hasnull(colStats));
     } else {
       return result;

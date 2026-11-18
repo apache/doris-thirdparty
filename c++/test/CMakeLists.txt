@@ -35,6 +35,7 @@ add_executable (orc-test
   TestColumnPrinter.cc
   TestColumnReader.cc
   TestColumnStatistics.cc
+  TestDateUtils.cc
   TestCompression.cc
   TestDecompression.cc
   TestDecimal.cc

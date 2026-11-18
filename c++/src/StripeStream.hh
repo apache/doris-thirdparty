@@ -72,6 +72,10 @@ namespace orc {
 
     const Timezone& getReaderTimezone() const override;
 
+    bool writerUsedProlepticGregorian() const override;
+
+    bool useProlepticGregorian() const override;
+
     std::ostream* getErrorStream() const override;
 
     bool getThrowOnHive11DecimalOverflow() const override;

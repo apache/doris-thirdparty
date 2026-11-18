@@ -114,6 +114,7 @@ namespace orc {
     WriterId writerId = WriterId::ORC_CPP_WRITER;
     EXPECT_EQ(writerId, reader->getWriterId());
     EXPECT_EQ(1, reader->getWriterIdValue());
+    EXPECT_TRUE(reader->writerUsedProlepticGregorian());
 
     std::unique_ptr<ColumnVectorBatch> batch = rowReader->createRowBatch(1024);
     EXPECT_FALSE(rowReader->next(*batch));
