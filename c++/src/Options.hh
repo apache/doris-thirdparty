@@ -51,6 +51,7 @@ namespace orc {
     std::string serializedTail;
     ReaderMetrics* metrics;
     std::shared_ptr<SharedStripeStatistics> stripeStatistics;
+    std::shared_ptr<const SharedFileTail> fileTail;
 
     ReaderOptionsPrivate() {
       tailLocation = std::numeric_limits<uint64_t>::max();
@@ -93,6 +94,15 @@ namespace orc {
 
   std::shared_ptr<SharedStripeStatistics> ReaderOptions::getSharedStripeStatistics() const {
     return privateBits->stripeStatistics;
+  }
+
+  ReaderOptions& ReaderOptions::setSharedFileTail(std::shared_ptr<const SharedFileTail> tail) {
+    privateBits->fileTail = std::move(tail);
+    return *this;
+  }
+
+  std::shared_ptr<const SharedFileTail> ReaderOptions::getSharedFileTail() const {
+    return privateBits->fileTail;
   }
 
   ReaderOptions& ReaderOptions::setMemoryPool(MemoryPool& pool) {

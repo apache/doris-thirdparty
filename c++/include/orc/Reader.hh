@@ -42,11 +42,17 @@ namespace orc {
   struct RowReaderOptionsPrivate;
   class InputStream;
   class SharedStripeStatistics;
+  class SharedFileTail;
   /**
    * Expose the reader metrics including the latency and
    * number of calls of the decompression/decoding/IO modules.
    */
   struct ReaderMetrics {
+    // Successful file-tail parses, prefix entries built, and entries visited to initialize
+    // RowReader ranges. Shared-tail children parse/build nothing and visit only their range.
+    std::atomic<uint64_t> FileTailParseCount{0};
+    std::atomic<uint64_t> StripeDirectoryEntryCount{0};
+    std::atomic<uint64_t> RowReaderStripeVisitCount{0};
     // Metadata protobuf parse attempts and getNeedReadStripes evaluations only.
     // RowReader's range-local stripe/row-group PPD retains its existing metrics.
     std::atomic<uint64_t> MetadataParseCount{0};
@@ -108,6 +114,14 @@ namespace orc {
      */
     ReaderOptions& setSharedStripeStatistics(std::shared_ptr<SharedStripeStatistics> statistics);
     std::shared_ptr<SharedStripeStatistics> getSharedStripeStatistics() const;
+
+    /**
+     * Reuse the parsed tail and absolute stripe row prefixes of the same immutable file.
+     * This takes precedence over the serialized tail. Streams, metrics and mutable schemas
+     * remain reader-local. The source reader's memory pool must outlive the shared handle.
+     */
+    ReaderOptions& setSharedFileTail(std::shared_ptr<const SharedFileTail> tail);
+    std::shared_ptr<const SharedFileTail> getSharedFileTail() const;
 
     /**
      * Set the memory allocator.
@@ -589,6 +603,8 @@ namespace orc {
      * @return a string of bytes with the file tail
      */
     virtual std::string getSerializedFileTail() const = 0;
+
+    virtual std::shared_ptr<const SharedFileTail> getSharedFileTail() const = 0;
 
     /**
      * Get the type of the rows in the file. The top level is typically a
