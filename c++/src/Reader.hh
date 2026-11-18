@@ -95,11 +95,32 @@ namespace orc {
     std::shared_ptr<const proto::Metadata> metadata;
   };
 
+  // The parsed tail is immutable after publication. Prefixes are built once on first RowReader
+  // use, so metadata-only readers do not allocate them. The source allocator must outlive this
+  // handle; no reader, stream, mutable schema or metrics are retained.
+  class SharedFileTail {
+   public:
+    explicit SharedFileTail(MemoryPool& memoryPool) : pool(memoryPool) {}
+
+    const DataBuffer<uint64_t>& getFirstRowOfStripe(ReaderMetrics* metrics) const;
+
+    std::shared_ptr<const proto::PostScript> postscript;
+    std::shared_ptr<const proto::Footer> footer;
+    uint64_t fileLength;
+    uint64_t postscriptLength;
+
+   private:
+    MemoryPool& pool;
+    mutable std::once_flag prefixOnce;
+    mutable std::unique_ptr<DataBuffer<uint64_t>> firstRowOfStripe;
+  };
+
   /** State shared between one Reader and its RowReaders. */
   struct FileContents {
     std::unique_ptr<InputStream> stream;
-    std::unique_ptr<proto::PostScript> postscript;
-    std::unique_ptr<proto::Footer> footer;
+    std::shared_ptr<const proto::PostScript> postscript;
+    std::shared_ptr<const proto::Footer> footer;
+    std::shared_ptr<const SharedFileTail> fileTail;
     std::unique_ptr<Type> schema;
     uint64_t blockSize;
     CompressionKind compression;
@@ -181,8 +202,8 @@ namespace orc {
     std::vector<bool> selectedColumns;
 
     // footer
-    proto::Footer* footer;
-    DataBuffer<uint64_t> firstRowOfStripe;
+    const proto::Footer* footer;
+    const DataBuffer<uint64_t>& firstRowOfStripe;
     mutable std::unique_ptr<Type> selectedSchema;
     bool skipBloomFilters;
 
@@ -325,7 +346,7 @@ namespace orc {
     const uint64_t postscriptLength;
 
     // footer
-    proto::Footer* footer;
+    const proto::Footer* footer;
     uint64_t numberOfStripes;
     std::unique_ptr<SargsApplier> sargsApplier;
     std::vector<int> getNeedReadStripes(const RowReaderOptions& opts) override;
@@ -410,6 +431,10 @@ namespace orc {
     std::unique_ptr<ColumnStatistics> getColumnStatistics(uint32_t columnId) const override;
 
     std::string getSerializedFileTail() const override;
+
+    std::shared_ptr<const SharedFileTail> getSharedFileTail() const override {
+      return contents->fileTail;
+    }
 
     const Type& getType() const override;
 

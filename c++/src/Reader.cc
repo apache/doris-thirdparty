@@ -261,6 +261,29 @@ namespace orc {
     buildTypeNameIdMap(contents->schema.get());
   }
 
+  const DataBuffer<uint64_t>& SharedFileTail::getFirstRowOfStripe(ReaderMetrics* metrics) const {
+    std::call_once(prefixOnce, [this, metrics] {
+      const auto stripeCount = static_cast<size_t>(footer->stripes_size());
+      auto prefixes = std::make_unique<DataBuffer<uint64_t>>(pool, stripeCount);
+      uint64_t rowTotal = 0;
+      for (size_t stripe = 0; stripe < stripeCount; ++stripe) {
+        (*prefixes)[stripe] = rowTotal;
+        const auto& info = footer->stripes(static_cast<int>(stripe));
+        // Range lookup uses ordered offsets. Reject a corrupt directory such as [100, 50]
+        // before a child could silently select the wrong stripes with binary search.
+        if (stripe > 0 && info.offset() < footer->stripes(static_cast<int>(stripe - 1)).offset()) {
+          throw ParseError("ORC stripe offsets are not ordered");
+        }
+        rowTotal += info.numberofrows();
+      }
+      firstRowOfStripe = std::move(prefixes);
+      if (metrics != nullptr) {
+        metrics->StripeDirectoryEntryCount.fetch_add(stripeCount, std::memory_order_relaxed);
+      }
+    });
+    return *firstRowOfStripe;
+  }
+
   RowReaderImpl::RowReaderImpl(std::shared_ptr<FileContents> _contents,
                                const RowReaderOptions& opts, const ORCFilter* _filter,
                                const StringDictFilter* _stringDictFilter)
@@ -269,7 +292,7 @@ namespace orc {
         throwOnHive11DecimalOverflow(opts.getThrowOnHive11DecimalOverflow()),
         forcedScaleOnHive11Decimal(opts.getForcedScaleOnHive11Decimal()),
         footer(contents->footer.get()),
-        firstRowOfStripe(*contents->pool, 0),
+        firstRowOfStripe(contents->fileTail->getFirstRowOfStripe(contents->readerMetrics)),
         enableEncodedBlock(opts.getEnableLazyDecoding()),
         readerTimezone(getTimezoneByName(opts.getTimezoneName())),
         filter(_filter),
@@ -282,28 +305,31 @@ namespace orc {
     rowsInCurrentStripe = 0;
     numRowGroupsInStripeRange = 0;
     useTightNumericVector = opts.getUseTightNumericVector();
-    uint64_t rowTotal = 0;
     rowTotalInRange = 0;
 
-    firstRowOfStripe.resize(numberOfStripes);
-    for (size_t i = 0; i < numberOfStripes; ++i) {
-      firstRowOfStripe[i] = rowTotal;
-      proto::StripeInformation stripeInfo = footer->stripes(static_cast<int>(i));
-      rowTotal += stripeInfo.numberofrows();
-      bool isStripeInRange = stripeInfo.offset() >= opts.getOffset() &&
-                             stripeInfo.offset() < opts.getOffset() + opts.getLength();
-      if (isStripeInRange) {
-        rowTotalInRange += stripeInfo.numberofrows();
-        if (i < currentStripe) {
-          currentStripe = i;
-        }
-        if (i >= lastStripe) {
-          lastStripe = i + 1;
-        }
-        if (footer->rowindexstride() > 0) {
-          numRowGroupsInStripeRange +=
-              (stripeInfo.numberofrows() + footer->rowindexstride() - 1) / footer->rowindexstride();
-        }
+    // Stripe offsets are ordered. For example, a one-stripe child of an eight-stripe
+    // source reuses the eight absolute prefixes and visits only its own directory entry.
+    const auto& stripes = footer->stripes();
+    const auto offsetLess = [](const proto::StripeInformation& stripe, uint64_t offset) {
+      return stripe.offset() < offset;
+    };
+    const auto begin =
+        std::lower_bound(stripes.begin(), stripes.end(), opts.getOffset(), offsetLess);
+    const auto end =
+        std::lower_bound(begin, stripes.end(), opts.getOffset() + opts.getLength(), offsetLess);
+    if (begin != end) {
+      currentStripe = static_cast<uint64_t>(begin - stripes.begin());
+      lastStripe = static_cast<uint64_t>(end - stripes.begin());
+    }
+    if (contents->readerMetrics != nullptr) {
+      contents->readerMetrics->RowReaderStripeVisitCount.fetch_add(
+          static_cast<uint64_t>(end - begin), std::memory_order_relaxed);
+    }
+    for (auto stripe = begin; stripe != end; ++stripe) {
+      rowTotalInRange += stripe->numberofrows();
+      if (footer->rowindexstride() > 0) {
+        numRowGroupsInStripeRange +=
+            (stripe->numberofrows() + footer->rowindexstride() - 1) / footer->rowindexstride();
       }
     }
     firstStripe = currentStripe;
@@ -556,10 +582,11 @@ namespace orc {
       return;
     }
 
-    uint64_t seekToStripe = 0;
-    while (seekToStripe + 1 < lastStripe && firstRowOfStripe[seekToStripe + 1] <= rowNumber) {
-      seekToStripe++;
-    }
+    // Absolute prefixes are shared with all physical children. A seek in a late child
+    // must not walk every preceding sibling's prefix again.
+    uint64_t seekToStripe = static_cast<uint64_t>(
+        std::upper_bound(firstRowOfStripe.data(), firstRowOfStripe.data() + lastStripe, rowNumber) -
+        firstRowOfStripe.data() - 1);
 
     // seeking before the first stripe
     if (seekToStripe < firstStripe) {
@@ -1783,52 +1810,73 @@ namespace orc {
     contents->pool = options.getMemoryPool();
     contents->errorStream = options.getErrorStream();
     contents->readerMetrics = options.getReaderMetrics();
-    std::string serializedFooter = options.getSerializedFileTail();
     uint64_t fileLength;
     uint64_t postscriptLength;
-    if (serializedFooter.length() != 0) {
-      // Parse the file tail from the serialized one.
-      proto::FileTail tail;
-      if (!tail.ParseFromString(serializedFooter)) {
-        throw ParseError("Failed to parse the file tail from string");
-      }
-      contents->postscript = std::make_unique<proto::PostScript>(tail.postscript());
-      contents->footer = std::make_unique<proto::Footer>(tail.footer());
-      fileLength = tail.filelength();
-      postscriptLength = tail.postscriptlength();
+    contents->fileTail = options.getSharedFileTail();
+    // Physical siblings already have a parsed tail. Re-parsing its serialization would
+    // repeat file-wide protobuf allocation and prefix construction for every child.
+    if (contents->fileTail) {
+      contents->postscript = contents->fileTail->postscript;
+      contents->footer = contents->fileTail->footer;
+      fileLength = contents->fileTail->fileLength;
+      postscriptLength = contents->fileTail->postscriptLength;
     } else {
-      // figure out the size of the file using the option or filesystem
-      fileLength = std::min(options.getTailLocation(), static_cast<uint64_t>(stream->getLength()));
-
-      // read last bytes into buffer to get PostScript
-      uint64_t readSize = std::min(fileLength, DIRECTORY_SIZE_GUESS);
-      if (readSize < 4) {
-        throw ParseError("File size too small");
-      }
-      auto buffer = std::make_unique<DataBuffer<char>>(*contents->pool, readSize);
-      stream->read(buffer->data(), readSize, fileLength - readSize);
-
-      postscriptLength = buffer->data()[readSize - 1] & 0xff;
-      contents->postscript = readPostscript(stream.get(), buffer.get(), postscriptLength);
-      uint64_t footerSize = contents->postscript->footerlength();
-      uint64_t tailSize = 1 + postscriptLength + footerSize;
-      if (tailSize >= fileLength) {
-        std::stringstream msg;
-        msg << "Invalid ORC tailSize=" << tailSize << ", fileLength=" << fileLength;
-        throw ParseError(msg.str());
-      }
-      uint64_t footerOffset;
-
-      if (tailSize > readSize) {
-        buffer->resize(footerSize);
-        stream->read(buffer->data(), footerSize, fileLength - tailSize);
-        footerOffset = 0;
+      std::string serializedFooter = options.getSerializedFileTail();
+      if (serializedFooter.length() != 0) {
+        // Parse the file tail from the serialized one.
+        proto::FileTail tail;
+        if (!tail.ParseFromString(serializedFooter)) {
+          throw ParseError("Failed to parse the file tail from string");
+        }
+        contents->postscript = std::make_unique<proto::PostScript>(tail.postscript());
+        contents->footer = std::make_unique<proto::Footer>(tail.footer());
+        fileLength = tail.filelength();
+        postscriptLength = tail.postscriptlength();
       } else {
-        footerOffset = readSize - tailSize;
-      }
+        // figure out the size of the file using the option or filesystem
+        fileLength =
+            std::min(options.getTailLocation(), static_cast<uint64_t>(stream->getLength()));
 
-      contents->footer = readFooter(stream.get(), buffer.get(), footerOffset, *contents->postscript,
-                                    *contents->pool, contents->readerMetrics);
+        // read last bytes into buffer to get PostScript
+        uint64_t readSize = std::min(fileLength, DIRECTORY_SIZE_GUESS);
+        if (readSize < 4) {
+          throw ParseError("File size too small");
+        }
+        auto buffer = std::make_unique<DataBuffer<char>>(*contents->pool, readSize);
+        stream->read(buffer->data(), readSize, fileLength - readSize);
+
+        postscriptLength = buffer->data()[readSize - 1] & 0xff;
+        contents->postscript = readPostscript(stream.get(), buffer.get(), postscriptLength);
+        uint64_t footerSize = contents->postscript->footerlength();
+        uint64_t tailSize = 1 + postscriptLength + footerSize;
+        if (tailSize >= fileLength) {
+          std::stringstream msg;
+          msg << "Invalid ORC tailSize=" << tailSize << ", fileLength=" << fileLength;
+          throw ParseError(msg.str());
+        }
+        uint64_t footerOffset;
+
+        if (tailSize > readSize) {
+          buffer->resize(footerSize);
+          stream->read(buffer->data(), footerSize, fileLength - tailSize);
+          footerOffset = 0;
+        } else {
+          footerOffset = readSize - tailSize;
+        }
+
+        contents->footer =
+            readFooter(stream.get(), buffer.get(), footerOffset, *contents->postscript,
+                       *contents->pool, contents->readerMetrics);
+      }
+      if (contents->readerMetrics != nullptr) {
+        contents->readerMetrics->FileTailParseCount.fetch_add(1, std::memory_order_relaxed);
+      }
+      auto tail = std::make_shared<SharedFileTail>(*contents->pool);
+      tail->postscript = contents->postscript;
+      tail->footer = contents->footer;
+      tail->fileLength = fileLength;
+      tail->postscriptLength = postscriptLength;
+      contents->fileTail = std::move(tail);
     }
     contents->isDecimalAsLong = false;
     if (contents->postscript->version_size() == 2) {

@@ -17,6 +17,7 @@
  */
 
 #include <cstring>
+#include <thread>
 
 #include "Reader.hh"
 #include "orc/Reader.hh"
@@ -33,6 +34,154 @@ namespace orc {
   using ::testing::ElementsAreArray;
 
   static const int DEFAULT_MEM_STREAM_SIZE = 1024 * 1024;  // 1M
+
+  TEST(TestReader, SharedFileTailKeepsIndependentRangeReaders) {
+    constexpr uint64_t STRIPES = 8;
+    // Exceed the RLE encoder's buffer so every add() has encoded bytes to trigger a stripe flush.
+    constexpr uint64_t ROWS = 3000;
+    MemoryOutputStream stream(DEFAULT_MEM_STREAM_SIZE);
+    auto type = Type::buildTypeFromString("struct<id:bigint>");
+    WriterOptions writeOptions;
+    writeOptions.setStripeSize(1).setCompression(CompressionKind_NONE).setRowIndexStride(0);
+    auto writer = createWriter(*type, &stream, writeOptions);
+    auto batch = writer->createRowBatch(ROWS);
+    auto& root = dynamic_cast<StructVectorBatch&>(*batch);
+    auto& ids = dynamic_cast<LongVectorBatch&>(*root.fields[0]);
+    for (uint64_t stripe = 0; stripe < STRIPES; ++stripe) {
+      for (uint64_t row = 0; row < ROWS; ++row) {
+        ids.data[row] = static_cast<int64_t>(stripe * ROWS + row);
+      }
+      root.numElements = ids.numElements = ROWS;
+      writer->add(*batch);
+    }
+    writer->close();
+
+    std::shared_ptr<const SharedFileTail> shared;
+    std::vector<uint64_t> offsets;
+    std::string serialized;
+    // No parent stream, metrics or schema survives this scope.
+    {
+      ReaderMetrics metrics;
+      ReaderOptions options;
+      options.setReaderMetrics(&metrics);
+      auto parent = createReader(
+          std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), options);
+      ASSERT_EQ(STRIPES, parent->getNumberOfStripes());
+      shared = parent->getSharedFileTail();
+      serialized = parent->getSerializedFileTail();
+      for (uint64_t stripe = 0; stripe < STRIPES; ++stripe) {
+        offsets.push_back(parent->getStripe(stripe)->getOffset());
+      }
+      EXPECT_EQ(1, metrics.FileTailParseCount.load());
+      EXPECT_EQ(0, metrics.StripeDirectoryEntryCount.load());
+    }
+    ASSERT_NE(nullptr, shared);
+    offsets.push_back(stream.getLength());
+
+    // Independent children race on immutable metadata, first individually and then coalesced.
+    for (uint64_t width : {uint64_t{1}, uint64_t{4}}) {
+      std::atomic<uint64_t> ready{0};
+      std::atomic<bool> start{false};
+      std::atomic<uint64_t> prefixEntries{0};
+      std::vector<std::thread> children;
+      for (uint64_t first = 0; first < STRIPES; first += width) {
+        children.emplace_back([&, first] {
+          ready.fetch_add(1, std::memory_order_release);
+          while (!start.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+          }
+          ReaderMetrics metrics;
+          const ReaderOptions options = ReaderOptions()
+                                            .setSharedFileTail(shared)
+                                            .setReaderMetrics(&metrics)
+                                            .setSerializedFileTail("not a serialized tail");
+          auto reader = createReader(
+              std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), options);
+          EXPECT_EQ(shared, reader->getSharedFileTail());
+          auto rows = reader->createRowReader(
+              RowReaderOptions().range(offsets[first], offsets[first + width] - offsets[first]));
+          EXPECT_EQ(width * ROWS, rows->getNumberOfRows());
+          EXPECT_EQ(0, metrics.FileTailParseCount.load());
+          EXPECT_EQ(width, metrics.RowReaderStripeVisitCount.load());
+          auto data = rows->createRowBatch(37);
+          uint64_t expected = first * ROWS;
+          while (rows->next(*data)) {
+            EXPECT_EQ(expected, rows->getRowNumber());
+            auto& values =
+                dynamic_cast<LongVectorBatch&>(*dynamic_cast<StructVectorBatch&>(*data).fields[0]);
+            for (uint64_t row = 0; row < data->numElements; ++row) {
+              EXPECT_EQ(static_cast<int64_t>(expected++), values.data[row]);
+            }
+          }
+          EXPECT_EQ((first + width) * ROWS, expected);
+          const auto seekRow = (first + width) * ROWS - 1;
+          rows->seekToRow(seekRow);
+          ASSERT_TRUE(rows->next(*data));
+          EXPECT_EQ(seekRow, rows->getRowNumber());
+          EXPECT_EQ(1, data->numElements);
+          auto& values =
+              dynamic_cast<LongVectorBatch&>(*dynamic_cast<StructVectorBatch&>(*data).fields[0]);
+          EXPECT_EQ(static_cast<int64_t>(seekRow), values.data[0]);
+          prefixEntries.fetch_add(metrics.StripeDirectoryEntryCount.load(),
+                                  std::memory_order_relaxed);
+        });
+      }
+      while (ready.load(std::memory_order_acquire) != STRIPES / width) {
+        std::this_thread::yield();
+      }
+      start.store(true, std::memory_order_release);
+      for (auto& child : children) {
+        child.join();
+      }
+      EXPECT_EQ(width == 1 ? STRIPES : 0, prefixEntries.load());
+    }
+
+    // The existing serialized-tail API still builds an independent parsed context.
+    ReaderMetrics metrics;
+    const ReaderOptions options =
+        ReaderOptions().setSerializedFileTail(serialized).setReaderMetrics(&metrics);
+    auto reader = createReader(
+        std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), options);
+    EXPECT_NE(shared, reader->getSharedFileTail());
+    EXPECT_EQ(1, metrics.FileTailParseCount.load());
+    EXPECT_EQ(0, metrics.StripeDirectoryEntryCount.load());
+    EXPECT_EQ(STRIPES * ROWS, reader->getNumberOfRows());
+    EXPECT_EQ(0, metrics.StripeDirectoryEntryCount.load());
+    auto empty = reader->createRowReader(RowReaderOptions().range(offsets[2], 0));
+    EXPECT_EQ(STRIPES, metrics.StripeDirectoryEntryCount.load());
+    EXPECT_EQ(0, empty->getNumberOfRows());
+    EXPECT_EQ(0, metrics.RowReaderStripeVisitCount.load());
+    EXPECT_FALSE(empty->next(*empty->createRowBatch(1)));
+
+    proto::FileTail corrupt;
+    ASSERT_TRUE(corrupt.ParseFromString(serialized));
+    corrupt.mutable_footer()->mutable_stripes(1)->set_offset(offsets[0] - 1);
+    const ReaderOptions corruptOptions =
+        ReaderOptions().setSerializedFileTail(corrupt.SerializeAsString());
+    auto corruptReader = createReader(
+        std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), corruptOptions);
+    EXPECT_THROW(corruptReader->createRowReader(), ParseError);
+    EXPECT_THROW(corruptReader->createRowReader(), ParseError);
+  }
+
+  TEST(TestReader, SharedFileTailSupportsEmptyFiles) {
+    MemoryOutputStream stream(DEFAULT_MEM_STREAM_SIZE);
+    auto type = Type::buildTypeFromString("struct<id:bigint>");
+    auto writer = createWriter(*type, &stream, WriterOptions());
+    writer->close();
+    auto parent = createReader(
+        std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), ReaderOptions());
+    const ReaderOptions options = ReaderOptions().setSharedFileTail(parent->getSharedFileTail());
+    parent.reset();
+    auto reader = createReader(
+        std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), options);
+    auto rows = reader->createRowReader();
+    EXPECT_EQ(0, rows->getNumberOfRows());
+    auto batch = rows->createRowBatch(1);
+    EXPECT_FALSE(rows->next(*batch));
+    rows->seekToRow(0);
+    EXPECT_FALSE(rows->next(*batch));
+  }
 
   TEST(TestReader, testWriterVersions) {
     EXPECT_EQ("original", writerVersionToString(WriterVersion_ORIGINAL));
