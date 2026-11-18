@@ -16,10 +16,12 @@
  * limitations under the License.
  */
 
+#include <thread>
 #include <tuple>
 
 #include "MemoryInputStream.hh"
 #include "MemoryOutputStream.hh"
+#include "orc/Exceptions.hh"
 #include "orc/OrcFile.hh"
 #include "orc/sargs/SearchArgument.hh"
 #include "wrap/gtest-wrapper.h"
@@ -27,6 +29,211 @@
 namespace orc {
 
   static const int DEFAULT_MEM_STREAM_SIZE = 10 * 1024 * 1024;  // 10M
+
+  class MetadataFailureInputStream : public MemoryInputStream {
+   public:
+    enum class Failure { NONE, READ, PARSE };
+
+    MetadataFailureInputStream(const char* buffer, size_t size, Failure failure)
+        : MemoryInputStream(buffer, size), failure_(failure) {}
+
+    void read(void* buf, uint64_t length, uint64_t offset) override {
+      ++reads_;
+      if (failure_ == Failure::READ) {
+        throw ParseError("injected metadata read failure");
+      }
+      MemoryInputStream::read(buf, length, offset);
+      if (failure_ == Failure::PARSE) {
+        // Wire type 7 is invalid, so the Metadata protobuf cannot parse this tag.
+        *static_cast<char*>(buf) = 0x0f;
+      }
+    }
+
+    uint64_t getReadCount() const {
+      return reads_;
+    }
+
+   private:
+    Failure failure_;
+    uint64_t reads_ = 0;
+  };
+
+  TEST(TestPredicatePushdown, SharedStripeStatisticsRetryAfterLoadFailure) {
+    constexpr uint64_t STRIPES = 2;
+    constexpr uint64_t ROWS = 1000;
+    MemoryOutputStream stream(DEFAULT_MEM_STREAM_SIZE);
+    auto type = std::unique_ptr<Type>(Type::buildTypeFromString("struct<id:bigint>"));
+    WriterOptions writeOptions;
+    writeOptions.setStripeSize(1).setCompression(CompressionKind_NONE).setRowIndexStride(1000);
+    auto writer = createWriter(*type, &stream, writeOptions);
+    auto batch = writer->createRowBatch(ROWS);
+    auto& root = dynamic_cast<StructVectorBatch&>(*batch);
+    auto& ids = dynamic_cast<LongVectorBatch&>(*root.fields[0]);
+    for (uint64_t stripe = 0; stripe < STRIPES; ++stripe) {
+      for (uint64_t row = 0; row < ROWS; ++row) {
+        ids.data[row] = static_cast<int64_t>(stripe * ROWS + row);
+      }
+      root.numElements = ids.numElements = ROWS;
+      writer->add(*batch);
+    }
+    writer->close();
+
+    using Failure = MetadataFailureInputStream::Failure;
+    for (auto failure : {Failure::READ, Failure::PARSE}) {
+      SCOPED_TRACE(failure == Failure::READ ? "read failure" : "parse failure");
+      auto parent =
+          createReader(std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()),
+                       ReaderOptions());
+      ASSERT_EQ(STRIPES, parent->getNumberOfStripes());
+      auto shared = parent->getSharedStripeStatistics();
+      const auto tail = parent->getSerializedFileTail();
+      parent.reset();
+
+      RowReaderOptions rowOptions;
+      rowOptions.searchArgument(
+          SearchArgumentFactory::newBuilder()
+              ->lessThan("id", PredicateDataType::LONG, Literal(static_cast<int64_t>(ROWS)))
+              .build());
+      ReaderMetrics failedMetrics;
+      ReaderOptions failedOptions;
+      failedOptions.setSerializedFileTail(tail).setSharedStripeStatistics(shared).setReaderMetrics(
+          &failedMetrics);
+      auto failedStream = std::make_unique<MetadataFailureInputStream>(stream.getData(),
+                                                                       stream.getLength(), failure);
+      auto* failedInput = failedStream.get();
+      auto failedReader = createReader(std::move(failedStream), failedOptions);
+      ASSERT_EQ(0, failedInput->getReadCount());
+      EXPECT_THROW(failedReader->getNeedReadStripes(rowOptions, 1, 1), ParseError);
+      EXPECT_EQ(1, failedInput->getReadCount());
+      EXPECT_EQ(1, failedMetrics.MetadataParseCount.load());
+
+      ReaderMetrics retryMetrics;
+      ReaderOptions retryOptions;
+      retryOptions.setSerializedFileTail(tail).setSharedStripeStatistics(shared).setReaderMetrics(
+          &retryMetrics);
+      auto retryStream = std::make_unique<MetadataFailureInputStream>(
+          stream.getData(), stream.getLength(), Failure::NONE);
+      auto* retryInput = retryStream.get();
+      auto retryReader = createReader(std::move(retryStream), retryOptions);
+      EXPECT_EQ(std::vector<int>({0}), retryReader->getNeedReadStripes(rowOptions, 1, 1));
+      EXPECT_EQ(STRIPES, retryReader->getNumberOfStripeStatistics());
+      EXPECT_EQ(1, retryInput->getReadCount());
+      EXPECT_EQ(1, retryMetrics.MetadataParseCount.load());
+      retryReader.reset();
+
+      // The failed reader must adopt the successful result without using its failing stream again.
+      EXPECT_EQ(std::vector<int>({1}), failedReader->getNeedReadStripes(rowOptions, 0, 1));
+      EXPECT_EQ(1, failedInput->getReadCount());
+      EXPECT_EQ(1, failedMetrics.MetadataParseCount.load());
+      failedReader.reset();
+
+      // A new sibling also needs no I/O, even after both earlier readers are destroyed.
+      auto warmStream = std::make_unique<MetadataFailureInputStream>(
+          stream.getData(), stream.getLength(), Failure::READ);
+      auto* warmInput = warmStream.get();
+      auto warmReader = createReader(std::move(warmStream), retryOptions);
+      EXPECT_EQ(std::vector<int>({1, 0}), warmReader->getNeedReadStripes(rowOptions));
+      EXPECT_EQ(0, warmInput->getReadCount());
+      EXPECT_EQ(1, retryMetrics.MetadataParseCount.load());
+    }
+  }
+
+  TEST(TestPredicatePushdown, SharedStripeStatisticsKeepReaderLocalPredicates) {
+    constexpr uint64_t STRIPES = 8;
+    constexpr uint64_t ROWS = 3000;
+    MemoryOutputStream stream(DEFAULT_MEM_STREAM_SIZE);
+    auto type = std::unique_ptr<Type>(Type::buildTypeFromString("struct<id:bigint>"));
+    WriterOptions writeOptions;
+    writeOptions.setStripeSize(1).setCompression(CompressionKind_NONE).setRowIndexStride(1000);
+    auto writer = createWriter(*type, &stream, writeOptions);
+    auto batch = writer->createRowBatch(ROWS);
+    auto& root = dynamic_cast<StructVectorBatch&>(*batch);
+    auto& ids = dynamic_cast<LongVectorBatch&>(*root.fields[0]);
+    for (uint64_t stripe = 0; stripe < STRIPES; ++stripe) {
+      for (uint64_t row = 0; row < ROWS; ++row) {
+        ids.data[row] = static_cast<int64_t>(stripe * ROWS + row);
+      }
+      root.numElements = ids.numElements = ROWS;
+      writer->add(*batch);
+    }
+    writer->close();
+
+    for (bool warm : {false, true}) {
+      ReaderMetrics parentMetrics;
+      ReaderOptions parentOptions;
+      parentOptions.setReaderMetrics(&parentMetrics);
+      auto parent = createReader(
+          std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), parentOptions);
+      ASSERT_EQ(STRIPES, parent->getNumberOfStripes());
+      auto shared = parent->getSharedStripeStatistics();
+      const auto tail = parent->getSerializedFileTail();
+      EXPECT_EQ(0, parentMetrics.MetadataParseCount.load());
+      if (warm) {
+        RowReaderOptions options;
+        options.searchArgument(
+            SearchArgumentFactory::newBuilder()
+                ->lessThan("id", PredicateDataType::LONG, Literal(int64_t(1000000)))
+                .build());
+        EXPECT_EQ(std::vector<int>(STRIPES, 1), parent->getNeedReadStripes(options));
+      }
+      parent.reset();
+
+      std::atomic<uint64_t> parses{parentMetrics.MetadataParseCount.load()};
+      std::atomic<uint64_t> evaluations{parentMetrics.StripeStatisticsEvaluationCount.load()};
+      std::atomic<uint64_t> ready{0};
+      std::atomic<bool> start{false};
+      std::vector<std::thread> children;
+      for (uint64_t stripe = 0; stripe < STRIPES; ++stripe) {
+        children.emplace_back([&, stripe] {
+          ReaderMetrics metrics;
+          ReaderOptions options;
+          options.setSerializedFileTail(tail).setSharedStripeStatistics(shared).setReaderMetrics(
+              &metrics);
+          auto reader = createReader(
+              std::make_unique<MemoryInputStream>(stream.getData(), stream.getLength()), options);
+          auto info = reader->getStripe(stripe);
+          RowReaderOptions rowOptions;
+          const uint64_t expectedRows = stripe % 2 == 0 ? 1000 : 2000;
+          rowOptions.range(info->getOffset(), info->getLength());
+          rowOptions.searchArgument(
+              SearchArgumentFactory::newBuilder()
+                  ->lessThan("id", PredicateDataType::LONG,
+                             Literal(static_cast<int64_t>(stripe * ROWS + expectedRows)))
+                  .build());
+          ready.fetch_add(1, std::memory_order_release);
+          while (!start.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+          }
+          EXPECT_EQ(std::vector<int>({1}), reader->getNeedReadStripes(rowOptions, stripe, 1));
+          auto rows = reader->createRowReader(rowOptions);
+          auto result = rows->createRowBatch(256);
+          uint64_t count = 0;
+          while (rows->next(*result)) {
+            EXPECT_EQ(stripe * ROWS + count, rows->getRowNumber());
+            auto& values = dynamic_cast<LongVectorBatch&>(
+                *dynamic_cast<StructVectorBatch&>(*result).fields[0]);
+            for (uint64_t row = 0; row < result->numElements; ++row) {
+              EXPECT_EQ(static_cast<int64_t>(stripe * ROWS + count++), values.data[row]);
+            }
+          }
+          EXPECT_EQ(expectedRows, count);
+          EXPECT_LT(metrics.SelectedRowGroupCount.load(), metrics.EvaluatedRowGroupCount.load());
+          EXPECT_THROW(reader->getNeedReadStripes(rowOptions, STRIPES, 1), std::out_of_range);
+          parses.fetch_add(metrics.MetadataParseCount.load());
+          evaluations.fetch_add(metrics.StripeStatisticsEvaluationCount.load());
+        });
+      }
+      while (ready.load(std::memory_order_acquire) != STRIPES) {
+        std::this_thread::yield();
+      }
+      start.store(true, std::memory_order_release);
+      for (auto& child : children) {
+        child.join();
+      }
+      EXPECT_EQ(1, parses.load());
+      EXPECT_EQ(STRIPES * (warm ? 2 : 1), evaluations.load());
+    }
+  }
 
   class SeekPastFilteredStripeTest
       : public testing::TestWithParam<std::tuple<uint64_t, uint64_t, bool, bool, bool>> {};

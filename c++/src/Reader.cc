@@ -741,6 +741,12 @@ namespace orc {
         postscriptLength(_postscriptLength),
         footer(contents->footer.get()) {
     isMetadataLoaded = false;
+    contents->stripeStatistics = options.getSharedStripeStatistics();
+    // Standalone readers need a private lazy loader; physical siblings supply one
+    // handle for the same immutable file, even before any predicate needs it.
+    if (!contents->stripeStatistics) {
+      contents->stripeStatistics = std::make_shared<SharedStripeStatistics>();
+    }
     checkOrcVersion();
     numberOfStripes = static_cast<uint64_t>(footer->stripes_size());
     contents->schema = convertType(footer->types(0), *footer);
@@ -983,28 +989,47 @@ namespace orc {
     return std::unique_ptr<ColumnStatistics>(convertColumnStatistics(col, statContext));
   }
 
+  std::shared_ptr<SharedStripeStatistics> ReaderImpl::getSharedStripeStatistics() const {
+    return contents->stripeStatistics;
+  }
+
   void ReaderImpl::readMetadata() const {
-    uint64_t metadataSize = contents->postscript->metadatalength();
-    uint64_t footerLength = contents->postscript->footerlength();
-    if (fileLength < metadataSize + footerLength + postscriptLength + 1) {
-      std::stringstream msg;
-      msg << "Invalid Metadata length: fileLength=" << fileLength
-          << ", metadataLength=" << metadataSize << ", footerLength=" << footerLength
-          << ", postscriptLength=" << postscriptLength;
-      throw ParseError(msg.str());
-    }
-    uint64_t metadataStart = fileLength - metadataSize - footerLength - postscriptLength - 1;
-    if (metadataSize != 0) {
-      std::unique_ptr<SeekableInputStream> pbStream = createDecompressor(
-          contents->compression,
-          std::make_unique<SeekableFileInputStream>(contents->stream.get(), metadataStart,
-                                                    metadataSize, *contents->pool),
-          contents->blockSize, *contents->pool, contents->readerMetrics);
-      contents->metadata.reset(new proto::Metadata());
-      if (!contents->metadata->ParseFromZeroCopyStream(pbStream.get())) {
-        throw ParseError("Failed to parse the metadata");
+    // Each reader keeps its own stream and metrics. Only the first successful loader
+    // publishes parsed statistics; failed loads remain retryable by another reader.
+    auto& shared = *contents->stripeStatistics;
+    // Keep exception unwinding within C++: pthread_once-backed call_once implementations
+    // do not all reset their flag when a loader throws.
+    std::lock_guard<std::mutex> lock(shared.mutex);
+    if (!shared.loaded) {
+      uint64_t metadataSize = contents->postscript->metadatalength();
+      uint64_t footerLength = contents->postscript->footerlength();
+      if (fileLength < metadataSize + footerLength + postscriptLength + 1) {
+        std::stringstream msg;
+        msg << "Invalid Metadata length: fileLength=" << fileLength
+            << ", metadataLength=" << metadataSize << ", footerLength=" << footerLength
+            << ", postscriptLength=" << postscriptLength;
+        throw ParseError(msg.str());
       }
+      uint64_t metadataStart = fileLength - metadataSize - footerLength - postscriptLength - 1;
+      if (metadataSize != 0) {
+        std::unique_ptr<SeekableInputStream> pbStream = createDecompressor(
+            contents->compression,
+            std::make_unique<SeekableFileInputStream>(contents->stream.get(), metadataStart,
+                                                      metadataSize, *contents->pool),
+            contents->blockSize, *contents->pool, contents->readerMetrics);
+        auto metadata = std::make_shared<proto::Metadata>();
+        // Standalone readers may leave the optional metrics pointer unset.
+        if (contents->readerMetrics != nullptr) {
+          contents->readerMetrics->MetadataParseCount.fetch_add(1, std::memory_order_relaxed);
+        }
+        if (!metadata->ParseFromZeroCopyStream(pbStream.get())) {
+          throw ParseError("Failed to parse the metadata");
+        }
+        shared.metadata = std::move(metadata);
+      }
+      shared.loaded = true;
     }
+    contents->metadata = shared.metadata;
     isMetadataLoaded = true;
   }
 
@@ -1038,12 +1063,22 @@ namespace orc {
   }
 
   std::vector<int> ReaderImpl::getNeedReadStripes(const RowReaderOptions& opts) {
+    return getNeedReadStripes(opts, 0, numberOfStripes);
+  }
+
+  std::vector<int> ReaderImpl::getNeedReadStripes(const RowReaderOptions& opts,
+                                                  uint64_t firstStripe, uint64_t stripeCount) {
+    // Reject invalid intervals before subtracting or indexing the statistics array.
+    // In particular, [numberOfStripes, numberOfStripes + 1) is not a valid child.
+    if (firstStripe > numberOfStripes || stripeCount > numberOfStripes - firstStripe) {
+      throw std::out_of_range("Invalid stripe statistics range");
+    }
     if (opts.getSearchArgument() && !isMetadataLoaded) {
       // load stripe statistics for PPD
       readMetadata();
     }
 
-    std::vector<int> allStripesNeeded(numberOfStripes, 1);
+    std::vector<int> allStripesNeeded(stripeCount, 1);
 
     if (opts.getSearchArgument() && footer->rowindexstride() > 0) {
       auto sargs = opts.getSearchArgument();
@@ -1055,14 +1090,18 @@ namespace orc {
         return allStripesNeeded;
       }
 
-      for (uint64_t currentStripeIndex = 0; currentStripeIndex < numberOfStripes;
-           currentStripeIndex++) {
+      for (uint64_t currentStripeIndex = firstStripe;
+           currentStripeIndex < firstStripe + stripeCount; currentStripeIndex++) {
         const auto& currentStripeStats =
             contents->metadata->stripestats(static_cast<int>(currentStripeIndex));
         // Not need add mMetrics,so use 0.
-        allStripesNeeded[currentStripeIndex] =
+        // Default ReaderOptions leaves metrics disabled, including for SARG callers.
+        if (contents->readerMetrics != nullptr) {
+          contents->readerMetrics->StripeStatisticsEvaluationCount.fetch_add(
+              1, std::memory_order_relaxed);
+        }
+        allStripesNeeded[currentStripeIndex - firstStripe] =
             sargsApplier->evaluateStripeStatistics(currentStripeStats, 0);
-        ;
       }
       contents->sargsApplier = std::move(sargsApplier);
     }
