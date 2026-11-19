@@ -17,6 +17,7 @@
  */
 
 #include <cstring>
+#include <new>
 #include <thread>
 
 #include "Reader.hh"
@@ -34,6 +35,60 @@ namespace orc {
   using ::testing::ElementsAreArray;
 
   static const int DEFAULT_MEM_STREAM_SIZE = 1024 * 1024;  // 1M
+
+  TEST(TestReader, SharedFileTailRetriesPrefixAllocationFailure) {
+    class FailOnceMemoryPool : public MemoryPool {
+     public:
+      char* malloc(uint64_t size) override {
+        if (attempts++ == 0) {
+          throw std::bad_alloc();
+        }
+        return getDefaultPool()->malloc(size);
+      }
+
+      void free(char* data) override {
+        getDefaultPool()->free(data);
+      }
+
+      uint64_t attempts = 0;
+    } pool;
+    auto footer = std::make_shared<proto::Footer>();
+    for (uint64_t stripe = 0; stripe < 3; ++stripe) {
+      auto* info = footer->add_stripes();
+      info->set_offset(100 * stripe);
+      info->set_numberofrows(stripe + 1);
+    }
+    SharedFileTail tail(pool);
+    tail.footer = footer;
+    ReaderMetrics metrics;
+    EXPECT_THROW(tail.getFirstRowOfStripe(&metrics), std::bad_alloc);
+    EXPECT_EQ(0, metrics.StripeDirectoryEntryCount.load());
+
+    // A failed first caller must leave initialization available to another thread.
+    std::thread retry([&] {
+      const auto& prefixes = tail.getFirstRowOfStripe(&metrics);
+      EXPECT_EQ(0, prefixes[0]);
+      EXPECT_EQ(1, prefixes[1]);
+      EXPECT_EQ(3, prefixes[2]);
+      EXPECT_EQ(&prefixes, &tail.getFirstRowOfStripe(nullptr));
+    });
+    retry.join();
+    EXPECT_EQ(2, pool.attempts);
+    EXPECT_EQ(3, metrics.StripeDirectoryEntryCount.load());
+  }
+
+  TEST(TestReader, SharedFileTailRetriesInvalidStripeDirectory) {
+    auto footer = std::make_shared<proto::Footer>();
+    footer->add_stripes()->set_offset(100);
+    footer->add_stripes()->set_offset(50);
+    SharedFileTail tail(*getDefaultPool());
+    tail.footer = footer;
+    ReaderMetrics metrics;
+    // Both attempts must report the corrupt [100, 50] directory without publishing it.
+    EXPECT_THROW(tail.getFirstRowOfStripe(&metrics), ParseError);
+    EXPECT_THROW(tail.getFirstRowOfStripe(&metrics), ParseError);
+    EXPECT_EQ(0, metrics.StripeDirectoryEntryCount.load());
+  }
 
   TEST(TestReader, SharedFileTailKeepsIndependentRangeReaders) {
     constexpr uint64_t STRIPES = 8;
