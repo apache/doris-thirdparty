@@ -111,7 +111,7 @@ namespace orc {
 
    private:
     MemoryPool& pool;
-    mutable std::once_flag prefixOnce;
+    mutable std::mutex prefixMutex;
     mutable std::unique_ptr<DataBuffer<uint64_t>> firstRowOfStripe;
   };
 

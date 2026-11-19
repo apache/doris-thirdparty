@@ -262,7 +262,10 @@ namespace orc {
   }
 
   const DataBuffer<uint64_t>& SharedFileTail::getFirstRowOfStripe(ReaderMetrics* metrics) const {
-    std::call_once(prefixOnce, [this, metrics] {
+    // Keep exceptions inside C++ as in readMetadata(). A corrupt [100, 50] stripe
+    // directory must throw again on retry, not leave a pthread_once flag in progress.
+    std::lock_guard<std::mutex> lock(prefixMutex);
+    if (firstRowOfStripe == nullptr) {
       const auto stripeCount = static_cast<size_t>(footer->stripes_size());
       auto prefixes = std::make_unique<DataBuffer<uint64_t>>(pool, stripeCount);
       uint64_t rowTotal = 0;
@@ -280,7 +283,7 @@ namespace orc {
       if (metrics != nullptr) {
         metrics->StripeDirectoryEntryCount.fetch_add(stripeCount, std::memory_order_relaxed);
       }
-    });
+    }
     return *firstRowOfStripe;
   }
 
