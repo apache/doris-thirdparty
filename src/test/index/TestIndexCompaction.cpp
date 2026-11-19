@@ -15,18 +15,22 @@
 // specific language governing permissions and limitations
 // under the License
 
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
+#include <sstream>
 #include <utility>
 #include <vector>
-#include "CLucene/debug/mem.h"
-#include "test.h"
-#include "store/MockRAMDirectory.h"
+
+#include "CLucene.h"
 #include "CLucene/debug/error.h"
+#include "CLucene/debug/mem.h"
 #include "CLucene/index/IndexWriter.h"
 #include "CLucene/store/IndexInput.h"
 #include "CLucene/store/IndexOutput.h"
 #include "roaring/roaring.hh"
+#include "store/MockRAMDirectory.h"
+#include "test.h"
 
 void _setupSourceNullBitmapValues(std::vector<std::vector<uint32_t>> &srcNullBitmapValues) {
     srcNullBitmapValues.push_back(std::vector<uint32_t>{1, 2, 3});
@@ -478,6 +482,154 @@ void TestCompactionWithoutFrequencies(CuTest* tc) {
     }
 }
 
+namespace {
+using DenseMapping = std::vector<std::vector<DocIdMapping::Destination>>;
+
+class BorrowedTestMapping final : public DocIdMapping {
+public:
+    explicit BorrowedTestMapping(const DenseMapping& values, bool fail = false)
+            : values_(values), last_(values.size(), UINT32_MAX), fail_(fail) {}
+    size_t sourceCount() const override { return values_.size(); }
+    Destination get(uint32_t source, uint32_t doc) const override {
+        if (fail_) _CLTHROWA(CL_ERR_IO, "injected document mapping failure");
+        if (last_[source] != UINT32_MAX && doc < last_[source]) revisited = true;
+        last_[source] = doc;
+        ++lookups;
+        return values_[source][doc];
+    }
+    mutable size_t lookups = 0;
+    mutable bool revisited = false;
+
+private:
+    const DenseMapping& values_;
+    mutable std::vector<uint32_t> last_;
+    bool fail_;
+};
+
+using PostingSnapshot = std::map<std::wstring, std::vector<int32_t>>;
+PostingSnapshot readPostings(IndexReader* reader) {
+    PostingSnapshot result;
+    auto* terms = reader->terms();
+    while (terms->next()) {
+        auto* term = terms->term();
+        auto* postings = reader->termPositions(term);
+        auto& values = result[std::wstring(term->field()) + L":" + term->text()];
+        while (postings->next()) {
+            values.push_back(postings->doc());
+            const int32_t freq = postings->freq();
+            values.push_back(freq);
+            for (int32_t i = 0; i < freq; ++i) values.push_back(postings->nextPosition());
+        }
+        postings->close();
+        _CLDELETE(postings);
+        _CLDECDELETE(term);
+    }
+    terms->close();
+    _CLDELETE(terms);
+    return result;
+}
+
+void writeNulls(RAMDirectory& dir, std::initializer_list<uint32_t> rows) {
+    roaring::Roaring bitmap;
+    for (auto row : rows) bitmap.add(row);
+    std::vector<char> bytes(bitmap.getSizeInBytes(false));
+    bitmap.write(bytes.data(), false);
+    auto* output = dir.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
+    output->writeBytes(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+    output->close();
+    _CLDELETE(output);
+}
+
+roaring::Roaring readNulls(RAMDirectory& dir) {
+    auto* input = static_cast<lucene::store::Directory&>(dir).openInput(IndexWriter::NULL_BITMAP_FILE_NAME);
+    std::vector<uint8_t> bytes(input->length());
+    input->readBytes(bytes.data(), bytes.size());
+    auto bitmap = roaring::Roaring::read(reinterpret_cast<const char*>(bytes.data()), false);
+    input->close();
+    _CLDELETE(input);
+    return bitmap;
+}
+} // namespace
+
+void TestBorrowedCompactionMapping(CuTest* tc) {
+    RAMDirectory source0;
+    RAMDirectory source1;
+    writeNormsIndex(source0, {{"alpha alpha", "one"}, {"deleted", "gone"}, {"omega", "two"}});
+    writeNormsIndex(source1,
+                    {{"alpha omega", "one two"}, {"omega omega", "three"}, {"deleted", "gone"}});
+    writeNulls(source0, {0, 1, 2});
+    writeNulls(source1, {1, 2});
+    DenseMapping values {{{0, 0}, {UINT32_MAX, UINT32_MAX}, {1, 0}},
+                         {{0, 1}, {1, 1}, {UINT32_MAX, UINT32_MAX}}};
+    BorrowedTestMapping mapping(values);
+    MockRAMDirectory dense0, dense1, borrowed0, borrowed1;
+    for (auto* dir : {&dense0, &dense1, &borrowed0, &borrowed1})
+        dir->setRandomIOExceptionRate(0.0, 0);
+    std::vector<lucene::store::Directory*> sources {&source0, &source1};
+    lucene::analysis::SimpleAnalyzer<char> analyzer;
+    RAMDirectory denseScratch;
+    IndexWriter dense(&denseScratch, &analyzer, true);
+    dense.indexCompaction(sources, {&dense0, &dense1}, values, {2, 2});
+    dense.close();
+    RAMDirectory borrowedScratch;
+    std::ostringstream trace;
+    IndexWriter borrowed(&borrowedScratch, &analyzer, true);
+    borrowed.setInfoStream(&trace);
+    borrowed.indexCompaction(sources, {&borrowed0, &borrowed1}, mapping, {2, 2});
+    borrowed.close();
+    for (auto pair : {std::make_pair(&dense0, &borrowed0), std::make_pair(&dense1, &borrowed1)}) {
+        auto* expected = IndexReader::open(pair.first);
+        auto* actual = IndexReader::open(pair.second);
+        CuAssertIntEquals(tc, _T("destination documents"), expected->maxDoc(), actual->maxDoc());
+        CuAssert(tc, _T("postings and positions match dense"),
+                 readPostings(expected) == readPostings(actual));
+        for (const auto* field : {_T("body"), _T("title")}) {
+            const auto* a = expected->norms(field);
+            const auto* b = actual->norms(field);
+            CuAssert(tc, _T("norm bytes match dense"), std::equal(a, a + expected->maxDoc(), b));
+            CuAssert(tc, _T("token totals match dense"),
+                     expected->sumTotalTermFreq(field) == actual->sumTotalTermFreq(field));
+        }
+        expected->close();
+        actual->close();
+        _CLDELETE(expected);
+        _CLDELETE(actual);
+        CuAssert(tc, _T("null row IDs match dense"),
+                 readNulls(*pair.first) == readNulls(*pair.second));
+    }
+    CuAssert(tc, _T("provider was used"), mapping.lookups > 0);
+    CuAssert(tc, _T("term/field changes can rewind a source"), mapping.revisited);
+    CuAssert(tc, _T("diagnostic source IDs do not need a reverse map"),
+             trace.str().find("Found pair at srcIdxId:") != std::string::npos);
+}
+
+void TestBorrowedCompactionMappingFailure(CuTest* tc) {
+    // Fail separately in norm remapping, postings and the null-bitmap-only path.
+    for (int phase : {0, 1, 2}) {
+        RAMDirectory source;
+        const std::string text = phase == 2 ? "" : "alpha";
+        writeNormsIndex(source, {{text, text}}, phase == 0, true);
+        if (phase == 2) writeNulls(source, {0});
+        MockRAMDirectory destination;
+        destination.setRandomIOExceptionRate(0.0, 0);
+        DenseMapping values {{{0, 0}}};
+        BorrowedTestMapping mapping(values, true);
+        RAMDirectory scratch;
+        lucene::analysis::SimpleAnalyzer<char> analyzer;
+        IndexWriter writer(&scratch, &analyzer, true);
+        std::vector<lucene::store::Directory*> sources {&source};
+        bool rejected = false;
+        try {
+            writer.indexCompaction(sources, {&destination}, mapping, {1});
+        } catch (CLuceneError& error) {
+            CuAssertIntEquals(tc, _T("mapping failure is propagated"), CL_ERR_IO, error.number());
+            rejected = true;
+        }
+        writer.close();
+        CuAssert(tc, _T("failed lookup is not a deleted document"), rejected);
+    }
+}
+
 CuSuite* testIndexCompaction() {
     CuSuite* suite = CuSuiteNew(_T("CLucene Index Compaction Test"));
 
@@ -485,6 +637,8 @@ CuSuite* testIndexCompaction() {
     SUITE_ADD_TEST(suite, TestMergeNullBitmapEmptySrc);
     SUITE_ADD_TEST(suite, TestMergeNullBitmapEmptyIndexSrcBitmapValues);
     SUITE_ADD_TEST(suite, TestMergeNullBitmapIgnoreDoc);
+    SUITE_ADD_TEST(suite, TestBorrowedCompactionMapping);
+    SUITE_ADD_TEST(suite, TestBorrowedCompactionMappingFailure);
     SUITE_ADD_TEST(suite, TestCompactionTokenCounts);
     SUITE_ADD_TEST(suite, TestCompactionDeletedDocumentsSingleDestination);
     SUITE_ADD_TEST(suite, TestCompactionWithoutFrequencies);

@@ -114,7 +114,6 @@ void IndexWriter::deinit(bool releaseWriteLock) throw() {
 IndexWriter::~IndexWriter() {
     deinit();
 
-    _trans_vec.clear();
     readers.clear();
     if (fieldInfos != nullptr) {
         _CLDELETE(fieldInfos);
@@ -1209,13 +1208,59 @@ void IndexWriter::resetMergeExceptions() {
     mergeGen++;
 }
 
-void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_dirs,
-                                  std::vector<lucene::store::Directory *> dest_dirs,
+namespace {
+struct CompactionDeleter {
+    template <typename T>
+    void operator()(T* value) const {
+        _CLDELETE(value);
+    }
+};
+
+class DenseDocIdMapping final : public DocIdMapping {
+public:
+    explicit DenseDocIdMapping(std::vector<std::vector<Destination>> values)
+            : _values(std::move(values)) {}
+    size_t sourceCount() const override { return _values.size(); }
+    Destination get(uint32_t source, uint32_t doc) const override { return _values[source][doc]; }
+
+private:
+    std::vector<std::vector<Destination>> _values;
+};
+} // namespace
+
+void IndexWriter::setTransVec(std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec) {
+    _ownedDocIdMapping = std::make_unique<DenseDocIdMapping>(std::move(trans_vec));
+    _docIdMapping = _ownedDocIdMapping.get();
+}
+
+void IndexWriter::indexCompaction(std::vector<lucene::store::Directory*>& src_dirs,
+                                  std::vector<lucene::store::Directory*> dest_dirs,
                                   std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec,
                                   std::vector<uint32_t> dest_index_docs) {
+    setTransVec(std::move(trans_vec));
+    indexCompactionImpl(src_dirs, dest_dirs, dest_index_docs);
+}
+
+void IndexWriter::indexCompaction(std::vector<lucene::store::Directory*>& src_dirs,
+                                  std::vector<lucene::store::Directory*> dest_dirs,
+                                  const DocIdMapping& mapping,
+                                  std::vector<uint32_t> dest_index_docs) {
+    _ownedDocIdMapping.reset();
+    _docIdMapping = &mapping;
+    struct ResetBorrowedMapping {
+        const DocIdMapping*& value;
+        ~ResetBorrowedMapping() { value = nullptr; }
+    } reset {_docIdMapping};
+    indexCompactionImpl(src_dirs, dest_dirs, dest_index_docs);
+}
+
+void IndexWriter::indexCompactionImpl(std::vector<lucene::store::Directory*>& src_dirs,
+                                      const std::vector<lucene::store::Directory*>& dest_dirs,
+                                      const std::vector<uint32_t>& dest_index_docs) {
     CND_CONDITION(src_dirs.size() > 0, "Source directory not found.");
     CND_CONDITION(dest_dirs.size() > 0, "Destination directory not found.");
-    this->_trans_vec = std::move(trans_vec);
+    CND_CONDITION(src_dirs.size() == _docIdMapping->sourceCount(),
+                  "Document mapping source count differs from source directories.");
 
     // create segment readers
     int numIndices = src_dirs.size();
@@ -1272,12 +1317,11 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
     }
 
     // init new segment infos
-    std::vector<SegmentInfo *> newSegmentInfos;
-    SegmentInfo *newSegment = nullptr;
+    std::vector<std::unique_ptr<SegmentInfo, CompactionDeleter>> newSegmentInfos;
     std::string docStoreSegment;
     docStoreSegment.clear();
 
-    std::vector<lucene::index::IndexWriter *> destIndexWriterList;
+    std::vector<std::unique_ptr<IndexWriter, CompactionDeleter>> destIndexWriterList;
     std::vector<lucene::store::IndexOutput *> nullBitmapIndexOutputList;
     std::vector<lucene::store::IndexOutput *> normsOutputList;
 
@@ -1338,7 +1382,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
             }
         }
 
-        // Build destFieldNormsMapValues from srcFieldNormsMapValues using _trans_vec
+        // Build destFieldNormsMapValues from srcFieldNormsMapValues using the document mapping
         std::vector<std::map<std::wstring, std::vector<uint8_t>>> destFieldNormsMapValues(
                 numDestIndexes);
         if (hasNorms) {
@@ -1373,7 +1417,7 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
             for (int srcIdx = 0; srcIdx < numIndices; srcIdx++) {
                 for (const auto& [fieldName, srcNorms] : srcFieldNormsMapValues[srcIdx]) {
                     for (size_t srcDocId = 0; srcDocId < srcNorms.size(); srcDocId++) {
-                        auto [destIdx, destDocId] = _trans_vec[srcIdx][srcDocId];
+                        auto [destIdx, destDocId] = _docIdMapping->get(srcIdx, srcDocId);
                         if (destIdx != UINT32_MAX && destDocId != UINT32_MAX) {
                             destFieldNormsMapValues[destIdx][fieldName][destDocId] =
                                     srcNorms[srcDocId];
@@ -1387,17 +1431,18 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
         for (int j = 0; j < numDestIndexes; j++) {
             auto dest_dir = dest_dirs[j];
             /// create dest index writers
-            auto index_writer = _CLNEW IndexWriter(dest_dir, analyzer, true, true);
-            destIndexWriterList.push_back(index_writer);
+            std::unique_ptr<IndexWriter, CompactionDeleter> writer(
+                    _CLNEW IndexWriter(dest_dir, analyzer, true, true));
+            auto* index_writer = writer.get();
+            destIndexWriterList.push_back(std::move(writer));
 
             std::string segment = index_writer->newSegmentName();
             // create segment info
-            newSegment = _CLNEW SegmentInfo(segment.c_str(),
-                                            (int) dest_index_docs[j],
-                                            dest_dir, false, true,
-                                            0, docStoreSegment.c_str(),
-                                            false);
-            newSegmentInfos.push_back(newSegment);
+            std::unique_ptr<SegmentInfo, CompactionDeleter> new_segment(
+                    _CLNEW SegmentInfo(segment.c_str(), (int)dest_index_docs[j], dest_dir, false,
+                                       true, 0, docStoreSegment.c_str(), false));
+            auto* newSegment = new_segment.get();
+            newSegmentInfos.push_back(std::move(new_segment));
 
             /// write fields
             writeFields(dest_dir, segment);
@@ -1480,30 +1525,31 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory *> &src_d
                     r->close();
                     _CLDELETE(r);
                 }
-                 } readers.clear(););
+            } readers.clear();
             for (auto* norms_out
                  : normsOutputList) {
                 if (norms_out != nullptr) {
                     norms_out->close();
                     _CLDELETE(norms_out);
                 }
-         } normsOutputList.clear();
+            } normsOutputList.clear();
             for (auto* null_bitmap_out
                  : nullBitmapIndexOutputList) {
                 if (null_bitmap_out != nullptr) {
                     null_bitmap_out->close();
                     _CLDELETE(null_bitmap_out);
                 }
-            } nullBitmapIndexOutputList.clear();
+            } nullBitmapIndexOutputList.clear(););
 
     // update segment infos of dest index_writer in memory
     // close dest index writer
     for (int i = 0; i < numDestIndexes; i++) {
-        auto index_writer = destIndexWriterList[i];
-        index_writer->getSegmentInfos()->setElementAt(newSegmentInfos[i], 0);
+        auto* index_writer = destIndexWriterList[i].get();
+        index_writer->getSegmentInfos()->setElementAt(newSegmentInfos[i].get(), 0);
+        newSegmentInfos[i].release();
         // close
         index_writer->close();
-        _CLDELETE(index_writer);
+        destIndexWriterList[i].reset();
     }
     destIndexWriterList.clear();
 
@@ -1676,7 +1722,11 @@ protected:
 void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVersion,
         const std::vector<std::map<std::wstring, std::vector<uint8_t>>>& destFieldNormsMapValues,
         std::vector<std::map<std::wstring, uint64_t>>& destFieldTokenCounts) {
-    auto queue = _CLNEW SegmentMergeQueue(readers.size());
+    // Mapping failures can unwind from any posting. Keep queued and active
+    // source iterators owned until they are explicitly transferred back.
+    std::unique_ptr<SegmentMergeQueue, CompactionDeleter> queue(
+            _CLNEW SegmentMergeQueue(readers.size()));
+    using SourcePtr = std::unique_ptr<SegmentMergeInfo, CompactionDeleter>;
     auto numSrcIndexes = readers.size();
     //std::vector<TermPositions *> postingsList(numSrcIndexes);
 
@@ -1688,23 +1738,21 @@ void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVers
     for (int i = 0; i < numSrcIndexes; ++i) {
         reader = readers[i];
 
-        TermEnum *termEnum = reader->terms();
-        smi = _CLNEW SegmentMergeInfo(base, termEnum, reader, i);
-
+        std::unique_ptr<TermEnum, CompactionDeleter> terms(reader->terms());
+        SourcePtr source(_CLNEW SegmentMergeInfo(base, terms.get(), reader, i));
+        terms.release();
         base += reader->numDocs();
-        if (smi->next()) {
-            queue->put(smi);
-        } else {
-            smi->close();
-            _CLDELETE(smi);
+        if (source->next()) {
+            queue->put(source.get());
+            source.release();
         }
     }
-    auto **match = _CL_NEWARRAY(SegmentMergeInfo *, readers.size());
+    std::vector<SourcePtr> match(readers.size());
 
     while (queue->size() > 0) {
         int32_t matchSize = 0;
 
-        match[matchSize++] = queue->pop();
+        match[matchSize++].reset(queue->pop());
         Term *smallestTerm = match[0]->term;
         SegmentMergeInfo *top = queue->top();
         if (infoStream != nullptr) {
@@ -1722,20 +1770,21 @@ void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVers
             }
         }
         while (top != nullptr && smallestTerm->equals(top->term)) {
-            match[matchSize++] = queue->pop();
+            match[matchSize++].reset(queue->pop());
             top = queue->top();
         }
 
         std::vector<std::vector<uint32_t>> docDeltaBuffers(numDestIndexes);
         std::vector<std::vector<uint32_t>> freqBuffers(numDestIndexes);
         std::vector<std::vector<uint32_t>> posBuffers(numDestIndexes);
-        auto destPostingQueues = _CLNEW postingQueue(matchSize);
         std::vector<DestDoc> destDocs(matchSize);
+        std::unique_ptr<postingQueue, CompactionDeleter> destPostingQueues(
+                _CLNEW postingQueue(matchSize));
 
         auto processPostings = [&](TermPositions* postings, DestDoc* destDoc, int srcIdx) {
             while (postings->next()) {
                 int srcDoc = postings->doc();
-                std::pair<int32_t, uint32_t> p = _trans_vec[smi->readerIndex][srcDoc];
+                auto p = _docIdMapping->get(smi->readerIndex, srcDoc);
                 destDoc->destIdx = p.first;
                 destDoc->destDocId = p.second;
                 destDoc->srcIdx = srcIdx;
@@ -1768,7 +1817,7 @@ void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVers
         };
 
         for (int i = 0; i < matchSize; ++i) {
-            smi = match[i];
+            smi = match[i].get();
             auto* postings = smi->getPositions();
             postings->seek(smi->termEnum);
             processPostings(postings, &destDocs[i], i);
@@ -1792,23 +1841,15 @@ void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVers
                     termTokenCounts[destIdx] += destFreq;
                 }
                 if (infoStream != nullptr) {
-                    for (int i = 0; i < _trans_vec.size(); ++i) {
-                        // find pair < destIdx, destDocId > in _trans_vec[i] to get the index of the pair
-                        auto it = std::find_if(_trans_vec[i].begin(), _trans_vec[i].end(),
-                                               [destIdx, destDocId](const std::pair<uint32_t, uint32_t>& pair) {
-                                                   return pair.first == destIdx && pair.second == destDocId;
-                                               });
-
-                        // Check if the pair was found
-                        if (it != _trans_vec[i].end()) {
-                            // Calculate the index of the pair
-                            size_t index = std::distance(_trans_vec[i].begin(), it);
-                            std::stringstream ss;
-                            ss << "Found pair at srcIdxId:" << i << ", srcDocId: " << index << ", destIdxId: " << destIdx
-                               << ", destDocId: " << destDocId << ", destFreq: " << destDoc->destFreq;
-                            message(ss.str());
-                        }
-                    }
+                    // The queued posting already identifies its source. Avoid a
+                    // full reverse scan of the mapping just to print a debug line.
+                    auto* source = match[destDoc->srcIdx].get();
+                    std::stringstream ss;
+                    ss << "Found pair at srcIdxId:" << source->readerIndex
+                       << ", srcDocId: " << source->getPositions()->doc()
+                       << ", destIdxId: " << destIdx << ", destDocId: " << destDocId
+                       << ", destFreq: " << destDoc->destFreq;
+                    message(ss.str());
                 }
 
                 auto freqOut = freqOutputList[destIdx];
@@ -1882,15 +1923,12 @@ void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVers
                     freqBuffer.push_back(destFreq);
                 }
 
-                smi = match[destDoc->srcIdx];
+                smi = match[destDoc->srcIdx].get();
                 processPostings(smi->getPositions(), destDoc, destDoc->srcIdx);
             }
         }
-        if (destPostingQueues != nullptr) {
-            destPostingQueues->close();
-            _CLDELETE(destPostingQueues);
-        }
-        
+        destPostingQueues.reset();
+
         if (infoStream != nullptr) {
             std::stringstream ss;
             for (const auto& df : dfs) {
@@ -1966,26 +2004,15 @@ void IndexWriter::mergeTerms(bool hasProx, bool hasNorms, IndexVersion indexVers
         }
 
         while (matchSize > 0) {
-            smi = match[--matchSize];
-
-            // Move to the next term in the enumeration of SegmentMergeInfo smi
-            if (smi->next()) {
-                // There still are some terms so restore smi in the queue
-                queue->put(smi);
-
+            auto& source = match[matchSize - 1];
+            if (source->next()) {
+                queue->put(source.get());
+                source.release();
             } else {
-                // Done with a segment
-                // No terms anymore so close this SegmentMergeInfo instance
-                smi->close();
-                _CLDELETE(smi);
+                source.reset();
             }
+            --matchSize;
         }
-    }
-
-    _CLDELETE_ARRAY(match);
-    if (queue != NULL) {
-        queue->close();
-        _CLDELETE(queue);
     }
 }
 
@@ -2016,8 +2043,7 @@ void IndexWriter::mergeNorms(std::vector<uint32_t> dest_index_docs,
                 auto& srcFieldNorms = srcFieldNormsMap[fieldName];
                 // construct srcFieldNorms to destFieldNorms
                 for (int srcDocId = 0; srcDocId < srcFieldNorms.size(); srcDocId++) {
-                    auto destIdx = _trans_vec[srcIndex][srcDocId].first;
-                    auto destDocId = _trans_vec[srcIndex][srcDocId].second;
+                    auto [destIdx, destDocId] = _docIdMapping->get(srcIndex, srcDocId);
                     if (destIdx == UINT32_MAX || destDocId == UINT32_MAX) {
                         continue;
                     }
@@ -2070,8 +2096,7 @@ void IndexWriter::mergeNullBitmap(std::vector<std::vector<uint32_t>> srcNullBitm
             continue;
         }
         for (const auto& srcDocId : indexSrcBitmapValues) {
-            auto destIdx = _trans_vec[i][srcDocId].first;
-            auto destDocId = _trans_vec[i][srcDocId].second;
+            auto [destIdx, destDocId] = _docIdMapping->get(i, srcDocId);
             // <UINT32_MAX, UINT32_MAX> indicates current row not exist in Doris dest segment.
             // So we ignore this doc here.
             if (destIdx == UINT32_MAX || destDocId == UINT32_MAX) {
