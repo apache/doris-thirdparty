@@ -7,10 +7,13 @@
 #ifndef _lucene_index_IndexWriter_
 #define _lucene_index_IndexWriter_
 
+#include <memory>
+
 #include "CLucene/clucene-config.h"
+#include "CLucene/index/DocIdMapping.h"
 #include "CLucene/index/IndexVersion.h"
-#include "CLucene/util/VoidList.h"
 #include "CLucene/util/Array.h"
+#include "CLucene/util/VoidList.h"
 
 CL_CLASS_DEF(search,Similarity)
 CL_CLASS_DEF(store,Lock)
@@ -282,7 +285,9 @@ class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
   mutable bool hitOOM;
 
   // index compaction params
-  std::vector<std::vector<std::pair<uint32_t, uint32_t>>> _trans_vec;
+  // Owns only the test-helper view; the translation rows remain caller-owned.
+  std::unique_ptr<DocIdMapping> _testDocIdMapping;
+  const DocIdMapping* _docIdMapping = nullptr;
   // dest indexes numbers
   int32_t numDestIndexes;
   std::vector<IndexReader*> readers;
@@ -308,7 +313,7 @@ public:
      * Compact src indices to dest indices, depend on doc id translation vector
      * @param src_dirs source indices directories to read data
      * @param dest_dirs destination indices directories to write new indices
-     * @param trans_vec translation vector
+     * @param trans_vec translation vector, borrowed until this synchronous call returns
      * the first level vector:
      *     index indicates index of source index, which is same order of src_dirs
      * the second level vector:
@@ -320,9 +325,21 @@ public:
      */
     void indexCompaction(std::vector<lucene::store::Directory*>& src_dirs,
                             std::vector<lucene::store::Directory*> dest_dirs,
-                            std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec,
+                            const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>& trans_vec,
                             std::vector<uint32_t> dest_index_docs);
 
+    // The mapping is borrowed and must outlive this synchronous call. No dense
+    // matrix is materialized or copied by this overload.
+    void indexCompaction(std::vector<lucene::store::Directory*>& src_dirs,
+                         std::vector<lucene::store::Directory*> dest_dirs,
+                         const DocIdMapping& mapping, std::vector<uint32_t> dest_index_docs);
+
+private:
+    void indexCompactionImpl(std::vector<lucene::store::Directory*>& src_dirs,
+                             const std::vector<lucene::store::Directory*>& dest_dirs,
+                             const std::vector<uint32_t>& dest_index_docs);
+
+public:
     // create new fields info
     void mergeFields(bool hasProx, IndexVersion indexVersion);
     // write fields info file
@@ -347,10 +364,9 @@ public:
     void setNumDestIndexes(int32_t num_dest_indexes) {
         numDestIndexes = num_dest_indexes;
     }
-    // only for tests
-    void setTransVec(std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec) {
-      _trans_vec = std::move(trans_vec);
-    }
+    // Only for tests. Borrows trans_vec through subsequent helper lookups.
+    void setTransVec(const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>& trans_vec);
+    void setTransVec(std::vector<std::vector<std::pair<uint32_t, uint32_t>>>&&) = delete;
 
 	// Release the write lock, if needed.
 	SegmentInfos* segmentInfos;
