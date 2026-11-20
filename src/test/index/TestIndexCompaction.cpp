@@ -551,6 +551,76 @@ roaring::Roaring readNulls(RAMDirectory& dir) {
 }
 } // namespace
 
+void TestDenseMappingBorrowsTranslationVector(CuTest* tc) {
+    RAMDirectory scratch;
+    RAMDirectory destination;
+    lucene::analysis::SimpleAnalyzer<char> analyzer;
+    IndexWriter writer(&scratch, &analyzer, true);
+    DenseMapping values {{{0, 0}}};
+    writer.setNumDestIndexes(1);
+    writer.setTransVec(values);
+    // Changing the caller's storage before a lookup must be visible through the view.
+    values[0][0] = {0, 1};
+    auto* output = destination.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
+    writer.mergeNullBitmap({{0}}, {output});
+    output->close();
+    _CLDELETE(output);
+    writer.close();
+    const auto nulls = readNulls(destination);
+    CuAssert(tc, _T("dense mapping borrows the caller's rows"),
+             nulls.cardinality() == 1 && nulls.contains(1));
+}
+
+void TestDenseCompactionMappingLifetime(CuTest* tc) {
+    // Requiring this signature also catches an accidental return to pass-by-value.
+    using DenseCompaction = void (IndexWriter::*)(std::vector<lucene::store::Directory*>&,
+                                                  std::vector<lucene::store::Directory*>,
+                                                  const DenseMapping&, std::vector<uint32_t>);
+    const auto compact = static_cast<DenseCompaction>(&IndexWriter::indexCompaction);
+    for (bool frequencies : {false, true}) {
+        for (bool temporary : {false, true}) {
+            RAMDirectory source;
+            writeNormsIndex(source, {{"alpha alpha", "title"}}, true, frequencies);
+            writeNulls(source, {0});
+            MockRAMDirectory destination;
+            destination.setRandomIOExceptionRate(0.0, 0);
+            RAMDirectory scratch;
+            lucene::analysis::SimpleAnalyzer<char> analyzer;
+            IndexWriter writer(&scratch, &analyzer, true);
+            std::vector<lucene::store::Directory*> sources {&source};
+            bool rejected = false;
+            try {
+                if (temporary) {
+                    (writer.*compact)(sources, {&destination}, DenseMapping {{{0, 0}}}, {1});
+                } else {
+                    DenseMapping values {{{0, 0}}};
+                    (writer.*compact)(sources, {&destination}, values, {1});
+                }
+            } catch (CLuceneError& error) {
+                CuAssertIntEquals(tc, _T("unsupported norms retain their error"),
+                                  CL_ERR_UnsupportedOperation, error.number());
+                rejected = true;
+            }
+            // Both temporary and scoped lvalue rows are gone before close/destruction.
+            // ASAN checks that neither successful nor failed compaction retains them.
+            writer.close();
+            CuAssertIntEquals(tc, _T("norms need frequencies"), !frequencies, rejected);
+            if (!rejected) {
+                auto* reader = IndexReader::open(&destination);
+                const auto tokens = reader->sumTotalTermFreq(_T("body"));
+                const auto postings = readPostings(reader);
+                reader->close();
+                _CLDELETE(reader);
+                CuAssert(tc, _T("dense compaction preserves tokens"), tokens == 2);
+                CuAssert(tc, _T("dense compaction preserves positions"),
+                         postings.at(L"body:alpha") == std::vector<int32_t>({0, 2, 0, 1}));
+                CuAssert(tc, _T("dense compaction preserves null rows"),
+                         readNulls(destination).contains(0));
+            }
+        }
+    }
+}
+
 void TestBorrowedCompactionMapping(CuTest* tc) {
     RAMDirectory source0;
     RAMDirectory source1;
@@ -637,6 +707,8 @@ CuSuite* testIndexCompaction() {
     SUITE_ADD_TEST(suite, TestMergeNullBitmapEmptySrc);
     SUITE_ADD_TEST(suite, TestMergeNullBitmapEmptyIndexSrcBitmapValues);
     SUITE_ADD_TEST(suite, TestMergeNullBitmapIgnoreDoc);
+    SUITE_ADD_TEST(suite, TestDenseMappingBorrowsTranslationVector);
+    SUITE_ADD_TEST(suite, TestDenseCompactionMappingLifetime);
     SUITE_ADD_TEST(suite, TestBorrowedCompactionMapping);
     SUITE_ADD_TEST(suite, TestBorrowedCompactionMappingFailure);
     SUITE_ADD_TEST(suite, TestCompactionTokenCounts);

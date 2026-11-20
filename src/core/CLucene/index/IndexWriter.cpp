@@ -1218,34 +1218,36 @@ struct CompactionDeleter {
 
 class DenseDocIdMapping final : public DocIdMapping {
 public:
-    explicit DenseDocIdMapping(std::vector<std::vector<Destination>> values)
-            : _values(std::move(values)) {}
+    explicit DenseDocIdMapping(const std::vector<std::vector<Destination>>& values)
+            : _values(values) {}
     size_t sourceCount() const override { return _values.size(); }
     Destination get(uint32_t source, uint32_t doc) const override { return _values[source][doc]; }
 
 private:
-    std::vector<std::vector<Destination>> _values;
+    const std::vector<std::vector<Destination>>& _values;
 };
 } // namespace
 
-void IndexWriter::setTransVec(std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec) {
-    _ownedDocIdMapping = std::make_unique<DenseDocIdMapping>(std::move(trans_vec));
-    _docIdMapping = _ownedDocIdMapping.get();
+void IndexWriter::setTransVec(
+        const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>& trans_vec) {
+    _testDocIdMapping = std::make_unique<DenseDocIdMapping>(trans_vec);
+    _docIdMapping = _testDocIdMapping.get();
 }
 
-void IndexWriter::indexCompaction(std::vector<lucene::store::Directory*>& src_dirs,
-                                  std::vector<lucene::store::Directory*> dest_dirs,
-                                  std::vector<std::vector<std::pair<uint32_t, uint32_t>>> trans_vec,
-                                  std::vector<uint32_t> dest_index_docs) {
-    setTransVec(std::move(trans_vec));
-    indexCompactionImpl(src_dirs, dest_dirs, dest_index_docs);
+void IndexWriter::indexCompaction(
+        std::vector<lucene::store::Directory*>& src_dirs,
+        std::vector<lucene::store::Directory*> dest_dirs,
+        const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>& trans_vec,
+        std::vector<uint32_t> dest_index_docs) {
+    DenseDocIdMapping mapping(trans_vec);
+    indexCompaction(src_dirs, std::move(dest_dirs), mapping, std::move(dest_index_docs));
 }
 
 void IndexWriter::indexCompaction(std::vector<lucene::store::Directory*>& src_dirs,
                                   std::vector<lucene::store::Directory*> dest_dirs,
                                   const DocIdMapping& mapping,
                                   std::vector<uint32_t> dest_index_docs) {
-    _ownedDocIdMapping.reset();
+    _testDocIdMapping.reset();
     _docIdMapping = &mapping;
     struct ResetBorrowedMapping {
         const DocIdMapping*& value;
