@@ -1242,11 +1242,10 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory*>& src_di
                                   const DocIdMapping& mapping,
                                   std::vector<uint32_t> dest_index_docs) {
     _docIdMapping = &mapping;
-    struct ResetBorrowedMapping {
-        const DocIdMapping*& value;
-        ~ResetBorrowedMapping() { value = nullptr; }
-    } reset {_docIdMapping};
-    indexCompactionImpl(src_dirs, dest_dirs, dest_index_docs);
+    try {
+        indexCompactionImpl(src_dirs, dest_dirs, dest_index_docs);
+    }
+    _CLFINALLY(_docIdMapping = nullptr;);
 }
 
 void IndexWriter::indexCompactionImpl(std::vector<lucene::store::Directory*>& src_dirs,
