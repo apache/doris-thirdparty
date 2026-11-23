@@ -1228,12 +1228,6 @@ private:
 };
 } // namespace
 
-void IndexWriter::setTransVec(
-        const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>& trans_vec) {
-    _testDocIdMapping = std::make_unique<DenseDocIdMapping>(trans_vec);
-    _docIdMapping = _testDocIdMapping.get();
-}
-
 void IndexWriter::indexCompaction(
         std::vector<lucene::store::Directory*>& src_dirs,
         std::vector<lucene::store::Directory*> dest_dirs,
@@ -1247,7 +1241,6 @@ void IndexWriter::indexCompaction(std::vector<lucene::store::Directory*>& src_di
                                   std::vector<lucene::store::Directory*> dest_dirs,
                                   const DocIdMapping& mapping,
                                   std::vector<uint32_t> dest_index_docs) {
-    _testDocIdMapping.reset();
     _docIdMapping = &mapping;
     struct ResetBorrowedMapping {
         const DocIdMapping*& value;

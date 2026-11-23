@@ -32,6 +32,31 @@
 #include "store/MockRAMDirectory.h"
 #include "test.h"
 
+namespace {
+using DenseMapping = std::vector<std::vector<DocIdMapping::Destination>>;
+
+class BorrowedTestMapping final : public DocIdMapping {
+public:
+    explicit BorrowedTestMapping(const DenseMapping& values, bool fail = false)
+            : values_(values), last_(values.size(), UINT32_MAX), fail_(fail) {}
+    size_t sourceCount() const override { return values_.size(); }
+    Destination get(uint32_t source, uint32_t doc) const override {
+        if (fail_) _CLTHROWA(CL_ERR_IO, "injected document mapping failure");
+        if (last_[source] != UINT32_MAX && doc < last_[source]) revisited = true;
+        last_[source] = doc;
+        ++lookups;
+        return values_[source][doc];
+    }
+    mutable size_t lookups = 0;
+    mutable bool revisited = false;
+
+private:
+    const DenseMapping& values_;
+    mutable std::vector<uint32_t> last_;
+    bool fail_;
+};
+} // namespace
+
 void _setupSourceNullBitmapValues(std::vector<std::vector<uint32_t>> &srcNullBitmapValues) {
     srcNullBitmapValues.push_back(std::vector<uint32_t>{1, 2, 3});
     srcNullBitmapValues.push_back(std::vector<uint32_t>{2, 3, 4});
@@ -123,9 +148,10 @@ void TestMergeNullBitmapWriteNullBitmap(CuTest *tc) {
     nullBitmapIndexOutputList.push_back(dest_output_index1);
     nullBitmapIndexOutputList.push_back(dest_output_index2);
 
+    BorrowedTestMapping mapping(trans_vec);
     try {
         index_writer->setNumDestIndexes(2);
-        index_writer->setTransVec(trans_vec);
+        index_writer->setDocIdMapping(mapping);
         index_writer->mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
     } catch (const std::exception& ex) {
         std::cout << "Caught exception: " << ex.what() << std::endl;
@@ -177,9 +203,10 @@ void TestMergeNullBitmapEmptySrc(CuTest *tc) {
     nullBitmapIndexOutputList.push_back(dest_output_index1);
     nullBitmapIndexOutputList.push_back(dest_output_index2);
 
+    BorrowedTestMapping mapping(trans_vec);
     try {
         index_writer->setNumDestIndexes(2);
-        index_writer->setTransVec(trans_vec);
+        index_writer->setDocIdMapping(mapping);
         index_writer->mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
     } catch (const std::exception& ex) {
         std::cout << "Caught exception: " << ex.what() << std::endl;
@@ -235,9 +262,10 @@ void TestMergeNullBitmapEmptyIndexSrcBitmapValues(CuTest *tc) {
     nullBitmapIndexOutputList.push_back(dest_output_index1);
     nullBitmapIndexOutputList.push_back(dest_output_index2);
 
+    BorrowedTestMapping mapping(trans_vec);
     try {
         index_writer->setNumDestIndexes(2);
-        index_writer->setTransVec(trans_vec);
+        index_writer->setDocIdMapping(mapping);
         index_writer->mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
     } catch (const std::exception& ex) {
         std::cout << "Caught exception: " << ex.what() << std::endl;
@@ -299,9 +327,10 @@ void TestMergeNullBitmapIgnoreDoc(CuTest *tc) {
     nullBitmapIndexOutputList.push_back(dest_output_index1);
     nullBitmapIndexOutputList.push_back(dest_output_index2);
 
+    BorrowedTestMapping mapping(trans_vec);
     try {
         index_writer->setNumDestIndexes(2);
-        index_writer->setTransVec(trans_vec);
+        index_writer->setDocIdMapping(mapping);
         index_writer->mergeNullBitmap(srcNullBitmapValues, nullBitmapIndexOutputList);
     } catch (const std::exception& ex) {
         std::cout << "Caught exception: " << ex.what() << std::endl;
@@ -483,29 +512,6 @@ void TestCompactionWithoutFrequencies(CuTest* tc) {
 }
 
 namespace {
-using DenseMapping = std::vector<std::vector<DocIdMapping::Destination>>;
-
-class BorrowedTestMapping final : public DocIdMapping {
-public:
-    explicit BorrowedTestMapping(const DenseMapping& values, bool fail = false)
-            : values_(values), last_(values.size(), UINT32_MAX), fail_(fail) {}
-    size_t sourceCount() const override { return values_.size(); }
-    Destination get(uint32_t source, uint32_t doc) const override {
-        if (fail_) _CLTHROWA(CL_ERR_IO, "injected document mapping failure");
-        if (last_[source] != UINT32_MAX && doc < last_[source]) revisited = true;
-        last_[source] = doc;
-        ++lookups;
-        return values_[source][doc];
-    }
-    mutable size_t lookups = 0;
-    mutable bool revisited = false;
-
-private:
-    const DenseMapping& values_;
-    mutable std::vector<uint32_t> last_;
-    bool fail_;
-};
-
 using PostingSnapshot = std::map<std::wstring, std::vector<int32_t>>;
 PostingSnapshot readPostings(IndexReader* reader) {
     PostingSnapshot result;
@@ -551,14 +557,15 @@ roaring::Roaring readNulls(RAMDirectory& dir) {
 }
 } // namespace
 
-void TestDenseMappingBorrowsTranslationVector(CuTest* tc) {
+void TestHelperBorrowsMapping(CuTest* tc) {
     RAMDirectory scratch;
     RAMDirectory destination;
     lucene::analysis::SimpleAnalyzer<char> analyzer;
-    IndexWriter writer(&scratch, &analyzer, true);
     DenseMapping values {{{0, 0}}};
+    BorrowedTestMapping mapping(values);
+    IndexWriter writer(&scratch, &analyzer, true);
     writer.setNumDestIndexes(1);
-    writer.setTransVec(values);
+    writer.setDocIdMapping(mapping);
     // Changing the caller's storage before a lookup must be visible through the view.
     values[0][0] = {0, 1};
     auto* output = destination.createOutput(IndexWriter::NULL_BITMAP_FILE_NAME);
@@ -567,7 +574,8 @@ void TestDenseMappingBorrowsTranslationVector(CuTest* tc) {
     _CLDELETE(output);
     writer.close();
     const auto nulls = readNulls(destination);
-    CuAssert(tc, _T("dense mapping borrows the caller's rows"),
+    CuAssert(tc, _T("helper uses the caller-owned mapping"), mapping.lookups == 1);
+    CuAssert(tc, _T("mapping borrows the caller's rows"),
              nulls.cardinality() == 1 && nulls.contains(1));
 }
 
@@ -707,7 +715,7 @@ CuSuite* testIndexCompaction() {
     SUITE_ADD_TEST(suite, TestMergeNullBitmapEmptySrc);
     SUITE_ADD_TEST(suite, TestMergeNullBitmapEmptyIndexSrcBitmapValues);
     SUITE_ADD_TEST(suite, TestMergeNullBitmapIgnoreDoc);
-    SUITE_ADD_TEST(suite, TestDenseMappingBorrowsTranslationVector);
+    SUITE_ADD_TEST(suite, TestHelperBorrowsMapping);
     SUITE_ADD_TEST(suite, TestDenseCompactionMappingLifetime);
     SUITE_ADD_TEST(suite, TestBorrowedCompactionMapping);
     SUITE_ADD_TEST(suite, TestBorrowedCompactionMappingFailure);

@@ -7,8 +7,6 @@
 #ifndef _lucene_index_IndexWriter_
 #define _lucene_index_IndexWriter_
 
-#include <memory>
-
 #include "CLucene/clucene-config.h"
 #include "CLucene/index/DocIdMapping.h"
 #include "CLucene/index/IndexVersion.h"
@@ -285,8 +283,6 @@ class CLUCENE_EXPORT IndexWriter:LUCENE_BASE {
   mutable bool hitOOM;
 
   // index compaction params
-  // Owns only the test-helper view; the translation rows remain caller-owned.
-  std::unique_ptr<DocIdMapping> _testDocIdMapping;
   const DocIdMapping* _docIdMapping = nullptr;
   // dest indexes numbers
   int32_t numDestIndexes;
@@ -364,9 +360,9 @@ public:
     void setNumDestIndexes(int32_t num_dest_indexes) {
         numDestIndexes = num_dest_indexes;
     }
-    // Only for tests. Borrows trans_vec through subsequent helper lookups.
-    void setTransVec(const std::vector<std::vector<std::pair<uint32_t, uint32_t>>>& trans_vec);
-    void setTransVec(std::vector<std::vector<std::pair<uint32_t, uint32_t>>>&&) = delete;
+    // Only for tests. The caller owns mapping through subsequent helper lookups.
+    void setDocIdMapping(const DocIdMapping& mapping) { _docIdMapping = &mapping; }
+    void setDocIdMapping(const DocIdMapping&&) = delete;
 
 	// Release the write lock, if needed.
 	SegmentInfos* segmentInfos;
