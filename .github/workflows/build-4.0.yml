@@ -303,8 +303,8 @@ jobs:
           gh release delete-asset "${tag_name}" "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz" --yes || true
           gh release upload --clobber "${tag_name}" "doris-thirdparty-prebuilt-${kernel}-${arch}.tar.xz"
 
-  update-docker:
-    name: Update Docker Image
+  build-docker:
+    name: Build Docker Images
     needs: [prerelease, build]
     if: |
       always() && (
@@ -312,9 +312,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && needs.build.result != 'failure')
       )
     runs-on: ubuntu-latest
-    env:
-      GH_REPO: ${{ github.repository }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions: {}
     steps:
       - name: Checkout docker/setup-buildx-action
         run: |
@@ -323,15 +321,6 @@ jobs:
 
           pushd .github/actions/setup-buildx-action &>/dev/null
           git checkout 8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-          popd &>/dev/null
-
-      - name: Checkout docker/login-action
-        run: |
-          rm -rf ./.github/actions/login-action
-          git clone https://github.com/docker/login-action .github/actions/login-action
-
-          pushd .github/actions/login-action &>/dev/null
-          git checkout c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
           popd &>/dev/null
 
       - name: Checkout docker/build-push-action
@@ -345,12 +334,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: ./.github/actions/setup-buildx-action
-
-      - name: Login to Docker Hub
-        uses: ./.github/actions/login-action
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Prepare Dockerfiles
         run: |
@@ -424,31 +407,54 @@ jobs:
                   print(line, end='')
           PYEOF
 
-      - name: Build and Push Docker Image (normal)
+      - name: Export Docker Image (normal)
         uses: ./.github/actions/build-push-action
         with:
           context: .
           file: Dockerfile.patched
           build-args: |
             GITHUB_REPOSITORY=${{ github.repository }}
-          push: true
+          outputs: type=docker,dest=${{ runner.temp }}/docker-image-4.0-amd64.tar
           tags: ${{ vars.DOCKER_TAGS_4_0 || 'apache/doris:build-env-ldb-toolchain-4.0-latest' }}
           platforms: linux/amd64
 
-      - name: Build and Push Docker Image (no-avx2)
+      - name: Upload Docker Image (normal)
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-4.0-amd64
+          path: ${{ runner.temp }}/docker-image-4.0-amd64.tar
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 7
+          overwrite: true
+
+      - name: Remove uploaded image archive
+        run: rm -f "${RUNNER_TEMP}/docker-image-4.0-amd64.tar"
+
+      - name: Export Docker Image (no-avx2)
         uses: ./.github/actions/build-push-action
         with:
           context: .
           file: Dockerfile.patched-noavx2
           build-args: |
             GITHUB_REPOSITORY=${{ github.repository }}
-          push: true
+          outputs: type=docker,dest=${{ runner.temp }}/docker-image-4.0-amd64-no-avx2.tar
           tags: ${{ vars.DOCKER_TAGS_NOAVX2_4_0 || 'apache/doris:build-env-ldb-toolchain-4.0-no-avx2-latest' }}
           platforms: linux/amd64
 
+      - name: Upload Docker Image (no-avx2)
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-4.0-amd64-no-avx2
+          path: ${{ runner.temp }}/docker-image-4.0-amd64-no-avx2.tar
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 7
+          overwrite: true
+
   success:
     name: Success
-    needs: [prerelease, build, update-docker]
+    needs: [prerelease, build, build-docker]
     if: needs.prerelease.outputs.should_release == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true')
     runs-on: ubuntu-latest
     env:
@@ -472,7 +478,7 @@ jobs:
 
   failure:
     name: Failure
-    needs: [prerelease, build, update-docker]
+    needs: [prerelease, build, build-docker]
     # Only report on a build that actually ran. If prerelease itself failed there
     # is no version to record, and writing an empty one is exactly what used to
     # make the next scheduled run rebuild from scratch, forever.

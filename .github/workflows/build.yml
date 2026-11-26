@@ -25,7 +25,7 @@ on:
         required: false
         default: "true"
       docker_only:
-        description: "Only rebuild and push Docker images"
+        description: "Only build Docker image artifacts"
         required: false
         default: "false"
   schedule:
@@ -53,7 +53,7 @@ jobs:
       contents: write
     outputs:
       should_release: ${{ steps.check_diff.outputs.should_release }}
-      should_update_docker: ${{ steps.check_diff.outputs.should_update_docker }}
+      should_build_docker: ${{ steps.check_diff.outputs.should_build_docker }}
       should_build_macos_x86: ${{ steps.check_diff.outputs.should_build_macos_x86 }}
       thirdparty_commit_hash: ${{ steps.check_diff.outputs.thirdparty_commit_hash }}
       doris_version: ${{ steps.check_diff.outputs.doris_version }}
@@ -96,21 +96,21 @@ jobs:
           echo "Thirdparty Commit: ${thirdparty_commit_hash}"
 
           should_release=false
-          should_update_docker=false
+          should_build_docker=false
           attempt=1
           if [[ -z "${last_version}" ]]; then
             echo "The first release was detected."
             should_release=true
-            should_update_docker=true
+            should_build_docker=true
           elif [[ "${last_version}" != "${current_version}" ]]; then
             changed_files="$(git diff --name-only "${last_version}" "${current_version}")"
             echo -e "Changed files:\n${changed_files}"
             if grep -qE '^thirdparty/' <<<"${changed_files}"; then
               should_release=true
-              should_update_docker=true
+              should_build_docker=true
             fi
             if grep -qx 'docker/compilation/Dockerfile' <<<"${changed_files}"; then
-              should_update_docker=true
+              should_build_docker=true
             fi
           elif [[ "${last_status}" == 'FAILURE' ]] && [[ "${last_attempt}" -lt "${max_attempts}" ]]; then
             # Downloads from third party mirrors fail often enough that a single
@@ -119,7 +119,7 @@ jobs:
             attempt=$((last_attempt + 1))
             echo "Previous build failed, retrying (attempt ${attempt}/${max_attempts})."
             should_release=true
-            should_update_docker=true
+            should_build_docker=true
           fi
 
           # docker_only takes precedence over force_build because force_build
@@ -127,16 +127,16 @@ jobs:
           if [[ "${MANUAL_DOCKER_ONLY}" == 'true' ]]; then
             echo 'Manual Docker-only build requested.'
             should_release=false
-            should_update_docker=true
+            should_build_docker=true
           elif [[ "${MANUAL_FORCE_BUILD}" == 'true' ]]; then
             echo 'Manual full build requested.'
             should_release=true
-            should_update_docker=true
+            should_build_docker=true
           fi
 
           # Docker-only failures are deterministic image/workflow failures. Do
           # not turn their scheduled retry into an expensive full thirdparty build.
-          if [[ "${should_release}" == 'false' ]] && [[ "${should_update_docker}" == 'true' ]]; then
+          if [[ "${should_release}" == 'false' ]] && [[ "${should_build_docker}" == 'true' ]]; then
             attempt="${max_attempts}"
           fi
 
@@ -160,7 +160,7 @@ jobs:
             fi
           fi
 
-          if "${should_release}" || "${should_update_docker}"; then
+          if "${should_release}" || "${should_build_docker}"; then
             echo -ne "Update Time: *$(date)*\nDoris Version: *${current_version}*\nStatus: *BUILDING*\nAttempts: *${attempt}*" >release_note.md
           else
             gh release view automation | sed -n '/--/,$p' | awk '{ if (NR > 1) print $0 }' | sed "{
@@ -172,7 +172,7 @@ jobs:
 
           {
             echo "should_release=${should_release}"
-            echo "should_update_docker=${should_update_docker}"
+            echo "should_build_docker=${should_build_docker}"
             echo "should_build_macos_x86=${should_build_macos_x86}"
             echo "thirdparty_commit_hash=${thirdparty_commit_hash}"
             echo "doris_version=${current_version}"
@@ -193,7 +193,7 @@ jobs:
           gh release delete-asset automation doris-thirdparty-source.tgz --yes || true
           gh release upload --clobber automation doris-thirdparty-source.tgz
 
-  # One job per platform instead of one matrix job, so that `update-docker` can depend
+  # One job per platform instead of one matrix job, so that `build-docker` can depend
   # on the Linux x86_64 archive alone. As a matrix it had to wait for all four: in run
   # 31988123966 the archive it consumes was published at 05:19 and the Docker job did
   # not start until 06:58, held up by macOS x86_64.
@@ -247,15 +247,17 @@ jobs:
       tolerate_failure: true
       thirdparty_commit_hash: ${{ needs.prerelease.outputs.thirdparty_commit_hash }}
 
-  update-docker:
-    name: Update Docker Image
+  build-docker:
+    name: Build Docker Images
     needs: [prerelease, build-linux-x86_64]
     # Only the Linux x86_64 archive goes into the image, so nothing else is waited for.
     if: |
       always() &&
       needs.build-linux-x86_64.result != 'cancelled' &&
-      needs.prerelease.outputs.should_update_docker == 'true'
+      needs.prerelease.outputs.should_build_docker == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -288,15 +290,6 @@ jobs:
           git checkout 8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
           popd &>/dev/null
 
-      - name: Checkout docker/login-action
-        run: |
-          rm -rf ./.github/actions/login-action
-          git clone https://github.com/docker/login-action .github/actions/login-action
-
-          pushd .github/actions/login-action &>/dev/null
-          git checkout c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-          popd &>/dev/null
-
       - name: Checkout docker/build-push-action
         run: |
           rm -rf ./.github/actions/build-push-action
@@ -308,12 +301,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: ./.github/actions/setup-buildx-action
-
-      - name: Login to Docker Hub
-        uses: ./.github/actions/login-action
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Prepare Dockerfiles
         run: |
@@ -371,37 +358,60 @@ jobs:
                   print(line, end='')
           PYEOF
 
-      - name: Build and Push Docker Image (normal)
+      - name: Export Docker Image (normal)
         uses: ./.github/actions/build-push-action
         with:
           context: .
           file: Dockerfile.patched
           build-args: |
             GITHUB_REPOSITORY=${{ github.repository }}
-          push: true
+          outputs: type=docker,dest=${{ runner.temp }}/docker-image-amd64.tar
           tags: ${{ vars.DOCKER_TAGS || 'apache/doris:build-env-ldb-toolchain-latest' }}
           platforms: linux/amd64
 
-      - name: Build and Push Docker Image (no-avx2)
+      - name: Upload Docker Image (normal)
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-amd64
+          path: ${{ runner.temp }}/docker-image-amd64.tar
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 7
+          overwrite: true
+
+      - name: Remove uploaded image archive
+        run: rm -f "${RUNNER_TEMP}/docker-image-amd64.tar"
+
+      - name: Export Docker Image (no-avx2)
         uses: ./.github/actions/build-push-action
         with:
           context: .
           file: Dockerfile.patched-noavx2
           build-args: |
             GITHUB_REPOSITORY=${{ github.repository }}
-          push: true
+          outputs: type=docker,dest=${{ runner.temp }}/docker-image-amd64-no-avx2.tar
           tags: ${{ vars.DOCKER_TAGS_NOAVX2 || 'apache/doris:build-env-ldb-toolchain-no-avx2-latest' }}
           platforms: linux/amd64
 
+      - name: Upload Docker Image (no-avx2)
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-amd64-no-avx2
+          path: ${{ runner.temp }}/docker-image-amd64-no-avx2.tar
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 7
+          overwrite: true
+
   success:
     name: Success
-    needs: [prerelease, build-linux-x86_64, build-linux-arm64, build-macos-arm64, build-macos-x86_64, update-docker]
+    needs: [prerelease, build-linux-x86_64, build-linux-arm64, build-macos-arm64, build-macos-x86_64, build-docker]
     # `!cancelled() && !failure()` rather than the default: build-macos-x86_64 is
     # skipped on most runs, and a skipped dependency would otherwise skip this job and
     # leave the release note stuck at BUILDING forever.
     if: |
       !cancelled() && !failure() &&
-      (needs.prerelease.outputs.should_release == 'true' || needs.prerelease.outputs.should_update_docker == 'true')
+      (needs.prerelease.outputs.should_release == 'true' || needs.prerelease.outputs.should_build_docker == 'true')
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
@@ -422,7 +432,7 @@ jobs:
 
   failure:
     name: Failure
-    needs: [prerelease, build-linux-x86_64, build-linux-arm64, build-macos-arm64, build-macos-x86_64, update-docker]
+    needs: [prerelease, build-linux-x86_64, build-linux-arm64, build-macos-arm64, build-macos-x86_64, build-docker]
     # Only report on a build that actually ran. If prerelease itself failed there
     # is no version to record, and writing an empty one is exactly what used to
     # make the next scheduled run rebuild from scratch, forever.
