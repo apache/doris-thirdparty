@@ -42,6 +42,9 @@ github:
     squash:  true
     merge:   false
     rebase:  false
+
+  # Keep the existing protections active during the ruleset rollout.
+  # GitHub Actions (app 15368) provides the required CLucene checks.
   protected_branches:
     main:
       required_pull_request_reviews:
@@ -58,41 +61,88 @@ github:
     clucene:
       required_status_checks:
         strict: false
-        contexts:
-          - Build (Linux)
-          - Build (macOS)
-          - CLucene UT (Linux)
+        checks:
+          - context: Build (Linux)
+            app_id: 15368
+          - context: Build (macOS)
+            app_id: 15368
+          - context: CLucene UT (Linux)
+            app_id: 15368
     clucene-2.0:
       required_status_checks:
         strict: false
-        contexts:
-          - Build (Linux)
-          - Build (macOS)
-          - CLucene UT (Linux)
+        checks:
+          - context: Build (Linux)
+            app_id: 15368
+          - context: Build (macOS)
+            app_id: 15368
+          - context: CLucene UT (Linux)
+            app_id: 15368
     clucene-2.1:
       required_status_checks:
         strict: false
-        contexts:
-          - Build (Linux)
-          - Build (macOS)
-          - CLucene UT (Linux)
+        checks:
+          - context: Build (Linux)
+            app_id: 15368
+          - context: Build (macOS)
+            app_id: 15368
+          - context: CLucene UT (Linux)
+            app_id: 15368
     clucene-3.0:
       required_status_checks:
         strict: false
-        contexts:
-          - Build (Linux)
-          - Build (macOS)
-          - CLucene UT (Linux)
+        checks:
+          - context: Build (Linux)
+            app_id: 15368
+          - context: Build (macOS)
+            app_id: 15368
+          - context: CLucene UT (Linux)
+            app_id: 15368
     clucene-3.1:
       required_status_checks:
         strict: false
-        contexts:
-          - Build (Linux)
-          - Build (macOS)
-          - CLucene UT (Linux)
+        checks:
+          - context: Build (Linux)
+            app_id: 15368
+          - context: Build (macOS)
+            app_id: 15368
+          - context: CLucene UT (Linux)
+            app_id: 15368
 
-  collaborators:
-    - zzzxl1993
-    
+  rulesets:
+    - name: Maintained branch protection
+      type: branch
+      branches:
+        includes:
+          - "~DEFAULT_BRANCH"
+          - bdbje
+          - clucene
+          - clucene-2.0
+          - clucene-2.1
+          - clucene-3.0
+          - clucene-3.1
+          - datatables
+          - faiss
+          - hadoop-3.3.4
+          - hadoop-3.3.6
+          - hadoop-3.4.0
+          - hadoop-3.4.2
+          - hadoop-libs
+          - libevent-2.1.12-stable
+          - libhdfs3
+          - openblas
+          - orc
+          - orc-2.1
+          - orc-for-doris-21
+          - orc-selectdb-doris-3.1
+          - paimon-cpp
+          - release-branch-2.1
+          - trino-435
+      restrict_deletion: true
+      restrict_force_push: true
+      required_pull_request_reviews:
+        dismiss_stale_reviews: true
+        required_approving_review_count: 1
+
 notifications:
   pullrequests_status:  commits@doris.apache.org
