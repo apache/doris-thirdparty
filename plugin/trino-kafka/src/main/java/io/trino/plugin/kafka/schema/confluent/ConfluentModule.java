@@ -55,12 +55,12 @@ import io.trino.plugin.kafka.schema.ContentSchemaProvider;
 import io.trino.plugin.kafka.schema.KafkaSchemaRegistryClientPropertiesProvider;
 import io.trino.plugin.kafka.schema.ProtobufAnySupportConfig;
 import io.trino.plugin.kafka.schema.TableDescriptionSupplier;
-import io.trino.spi.HostAddress;
 import io.trino.spi.TrinoException;
 import io.trino.spi.type.TypeManager;
 import jakarta.annotation.PreDestroy;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -70,7 +70,6 @@ import java.util.function.Supplier;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.ImmutableList.toImmutableList;
-import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.inject.Scopes.SINGLETON;
 import static com.google.inject.multibindings.MapBinder.newMapBinder;
 import static com.google.inject.multibindings.Multibinder.newSetBinder;
@@ -112,15 +111,16 @@ public class ConfluentModule
         newMapBinder(binder, String.class, SchemaParser.class).addBinding("AVRO").to(AvroSchemaParser.class).in(Scopes.SINGLETON);
         newMapBinder(binder, String.class, SchemaParser.class).addBinding("PROTOBUF").to(LazyLoadedProtobufSchemaParser.class).in(Scopes.SINGLETON);
 
-        // Bind the appropriate ConfluentSchemaRegistryAuth implementation based on configuration
-        ConfluentSchemaRegistryConfig schemaRegistryConfig = buildConfigObject(ConfluentSchemaRegistryConfig.class);
-        if (schemaRegistryConfig.getConfluentSchemaRegistryAuthType() == BASIC_AUTH) {
-            configBinder(binder).bindConfig(BasicAuthConfig.class);
-            binder.bind(SchemaRegistryClientPropertiesProvider.class).to(ConfluentSchemaRegistryBasicAuth.class).in(Scopes.SINGLETON);
-        }
-        else {
-            binder.bind(SchemaRegistryClientPropertiesProvider.class).to(ConfluentSchemaRegistryNoAuth.class).in(Scopes.SINGLETON);
-        }
+        configBinder(binder).bindConfig(BasicAuthConfig.class);
+        install(conditionalModule(
+                ConfluentSchemaRegistryConfig.class,
+                schemaRegistryConfig -> schemaRegistryConfig.getConfluentSchemaRegistryAuthType() == BASIC_AUTH,
+                authBinder -> authBinder.bind(SchemaRegistryClientPropertiesProvider.class)
+                        .to(ConfluentSchemaRegistryBasicAuth.class)
+                        .in(Scopes.SINGLETON),
+                authBinder -> authBinder.bind(SchemaRegistryClientPropertiesProvider.class)
+                        .to(ConfluentSchemaRegistryNoAuth.class)
+                        .in(Scopes.SINGLETON)));
     }
 
     @Provides
@@ -135,21 +135,40 @@ public class ConfluentModule
         requireNonNull(propertiesProviders, "propertiesProviders is null");
 
         List<String> baseUrl = confluentConfig.getConfluentSchemaRegistryUrls().stream()
-                .map(HostAddress::getHostText)
                 .collect(toImmutableList());
-
-        Map<String, ?> schemaRegistryClientProperties = propertiesProviders.stream()
-                .map(SchemaRegistryClientPropertiesProvider::getSchemaRegistryClientProperties)
-                .flatMap(properties -> properties.entrySet().stream())
-                .collect(toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
 
         return new ClassLoaderSafeSchemaRegistryClient(
                 new CachedSchemaRegistryClient(
                         baseUrl,
                         confluentConfig.getConfluentSchemaRegistryClientCacheSize(),
                         ImmutableList.copyOf(schemaProviders),
-                        schemaRegistryClientProperties),
+                        buildSchemaRegistryClientProperties(confluentConfig, propertiesProviders)),
                 classLoader);
+    }
+
+    static Map<String, Object> buildSchemaRegistryClientProperties(
+            ConfluentSchemaRegistryConfig confluentConfig,
+            Set<SchemaRegistryClientPropertiesProvider> propertiesProviders)
+    {
+        Map<String, Object> schemaRegistryClientProperties = propertiesProviders.stream()
+                .map(SchemaRegistryClientPropertiesProvider::getSchemaRegistryClientProperties)
+                .flatMap(properties -> properties.entrySet().stream())
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> (Object) entry.getValue(),
+                        (left, right) -> right,
+                        HashMap::new));
+
+        if (confluentConfig.getConfluentSchemaRegistryAuthType() == BASIC_AUTH) {
+            Object userInfo = schemaRegistryClientProperties.get("basic.auth.user.info");
+            if (userInfo instanceof String) {
+                schemaRegistryClientProperties.putIfAbsent("basic.auth.credentials.source", "USER_INFO");
+                schemaRegistryClientProperties.putIfAbsent("schema.registry.basic.auth.credentials.source", "USER_INFO");
+                schemaRegistryClientProperties.putIfAbsent("schema.registry.basic.auth.user.info", userInfo);
+            }
+        }
+
+        return schemaRegistryClientProperties;
     }
 
     @PreDestroy
