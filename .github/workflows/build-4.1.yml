@@ -1,0 +1,47 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: Build (4.1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Force run build job when manually triggered"
+        required: false
+        default: "true"
+  schedule:
+    - cron: '*/30 * * * *'
+
+# A full third party build runs for hours while the schedule fires every 30
+# minutes. Without a concurrency group the runs stack up and race each other on
+# the same release tag.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-4.x.yml
+    with:
+      version: '4.1'
+      force_build: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force_build == 'true' }}
+      image_tags: ${{ vars.DOCKER_TAGS_4_1 }}
+      image_tags_no_avx2: ${{ vars.DOCKER_TAGS_NOAVX2_4_1 }}

@@ -21,6 +21,8 @@ under the License.
 
 This repository is used to manage third-party libraries used in Apache Doris. Some libraries have not been maintained for a long time, so fork into this repository for bug fixes and feature development. Each third-party library is in a separate branch.
 
+[Download and publish Docker build environment images](README-docker-images.md)
+
 # Current Libs
 
 | Lib Name | Branch   | Description                                                  | Base version | Source URL                                                   | Latest Tag | CHANGELOG|
